@@ -19,6 +19,8 @@ import { useLanguage } from "@/context/LanguageContext";
 const C = { blue: "#3b82f6", emerald: "#10b981", amber: "#f59e0b", rose: "#ef4444", violet: "#8b5cf6", cyan: "#06b6d4", slate: "#94a3b8" };
 const PIE = [C.blue, C.emerald, C.amber, C.rose, C.violet, C.cyan, "#ec4899", "#f97316"];
 const SIDECAR_TTL = 300_000;
+/** Recharts default animations are heavy on large dashboards; disable for snappier UI. */
+const CHART_NO_ANIM = { isAnimationActive: false as const };
 
 /* ── Theme classes ── */
 const tw = {
@@ -544,7 +546,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <ChartFrame className="h-28 w-28 shrink-0">
               <PieChart>
-                <Pie data={[{ name: "Cash", value: cash }, { name: "Credit", value: credit }]} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={48} strokeWidth={0}>
+                <Pie {...CHART_NO_ANIM} data={[{ name: "Cash", value: cash }, { name: "Credit", value: credit }]} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={48} strokeWidth={0}>
                   <Cell fill={C.emerald} />
                   <Cell fill={C.amber} />
                 </Pie>
@@ -612,12 +614,12 @@ export default function Dashboard() {
       <>
         <div className="grid gap-4 lg:grid-cols-3">
           <Card title={t("section.buRevenue")}>
-            <ChartFrame className="h-44"><PieChart><Pie data={localBuPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+            <ChartFrame className="h-44"><PieChart><Pie {...CHART_NO_ANIM} data={localBuPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
               {localBuPie.map((_: any, i: number) => <Cell key={i} fill={PIE[i % PIE.length]} />)}
             </Pie></PieChart></ChartFrame>
           </Card>
           <Card title={t("section.groupProfit")}>
-            <ChartFrame className="h-44"><PieChart><Pie data={localGpPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${(name||"").slice(0,8)} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+            <ChartFrame className="h-44"><PieChart><Pie {...CHART_NO_ANIM} data={localGpPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${(name||"").slice(0,8)} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
               {localGpPie.map((_: any, i: number) => <Cell key={i} fill={PIE[i % PIE.length]} />)}
             </Pie></PieChart></ChartFrame>
           </Card>
@@ -846,7 +848,7 @@ export default function Dashboard() {
         <div className="flex gap-1 border-t border-slate-100 px-5 lg:px-6 dark:border-slate-800">
           {([
             { key: "overview" as const, label: `📊 ${t("dash.tab.overview")}` },
-            { key: "lastMonth" as const, label: `📅 ${t("dash.tab.lastMonth")} (${trend[kpi.last_month_actual ? new Date().getMonth() : 0]?.name || "Prev"})` },
+            { key: "lastMonth" as const, label: `📅 ${t("dash.tab.lastMonth")} (${trend[prevMonthIdx]?.name || "Prev"})` },
             { key: "thisMonth" as const, label: `🔥 ${t("dash.tab.thisMonth")} (${trend[new Date().getMonth()]?.name || "Now"})` },
           ]).map(tb => (
             <button key={tb.key} onClick={() => setTab(tb.key)} className={`border-b-2 px-4 py-2.5 text-xs font-medium transition-colors ${tab === tb.key ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400" : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"}`}>
@@ -855,6 +857,13 @@ export default function Dashboard() {
           ))}
         </div>
       </header>
+
+      {(d.loading || d.refreshing) && data && (
+        <div className="fixed inset-x-0 top-0 z-50 h-1 overflow-hidden bg-blue-100 dark:bg-blue-900/30">
+          <div className="h-full w-2/5 animate-[loading-bar_1.2s_ease-in-out_infinite] bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400 rounded-full" style={{ animation: "loading-bar 1.2s ease-in-out infinite" }} />
+          <style>{`@keyframes loading-bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
+        </div>
+      )}
 
       <main className="mx-auto max-w-[1480px] space-y-5 px-5 py-5 lg:px-6">
 
@@ -900,7 +909,7 @@ export default function Dashboard() {
           <Card title={t("section.achievement")}><Progress label="YTD" v={ytdAch} /><Progress label={t("kpi.thisMonth")} v={thisMonthAch} /><Progress label={t("kpi.lastMonth")} v={lastMonthAch} /></Card>
           <Card title={t("section.payment")}>
             <div className="flex items-center gap-4">
-              <ChartFrame className="h-28 w-28 shrink-0"><PieChart><Pie data={[{ name: "Cash", value: cashVal }, { name: "Credit", value: creditVal }]} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={48} strokeWidth={0}><Cell fill={C.emerald} /><Cell fill={C.amber} /></Pie></PieChart></ChartFrame>
+              <ChartFrame className="h-28 w-28 shrink-0"><PieChart><Pie {...CHART_NO_ANIM} data={[{ name: "Cash", value: cashVal }, { name: "Credit", value: creditVal }]} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={48} strokeWidth={0}><Cell fill={C.emerald} /><Cell fill={C.amber} /></Pie></PieChart></ChartFrame>
               <div className="space-y-2"><div><p className={`text-xs ${tw.sub}`}>{t("dash.cash")}</p><p className={`text-lg font-bold ${tw.green}`}>{fmt(cashVal)}</p></div><div><p className={`text-xs ${tw.sub}`}>{t("dash.credit")}</p><p className={`text-lg font-bold ${tw.amber}`}>{fmt(creditVal)}</p></div></div>
             </div>
           </Card>
@@ -929,10 +938,10 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
-              <Tooltip content={<Tip />} />
-              <Area type="monotone" dataKey="target" name={t("kpi.target")} stroke="#cbd5e1" strokeWidth={1.5} fill="#f8fafc" fillOpacity={isDark ? 0.05 : 0.3} />
-              <Area type="monotone" dataKey="actual" name={t("label.actual")} stroke={C.blue} strokeWidth={2.5} fill="url(#gA)" />
-              <Area type="monotone" dataKey="lastYear" name={t("kpi.lastYear")} stroke={C.emerald} strokeWidth={1.5} fill="none" strokeDasharray="5 5" />
+              <Tooltip {...CHART_NO_ANIM} content={<Tip />} />
+              <Area {...CHART_NO_ANIM} type="monotone" dataKey="target" name={t("kpi.target")} stroke="#cbd5e1" strokeWidth={1.5} fill="#f8fafc" fillOpacity={isDark ? 0.05 : 0.3} />
+              <Area {...CHART_NO_ANIM} type="monotone" dataKey="actual" name={t("label.actual")} stroke={C.blue} strokeWidth={2.5} fill="url(#gA)" />
+              <Area {...CHART_NO_ANIM} type="monotone" dataKey="lastYear" name={t("kpi.lastYear")} stroke={C.emerald} strokeWidth={1.5} fill="none" strokeDasharray="5 5" />
             </AreaChart>
           </ChartFrame>
         </Card>
@@ -947,7 +956,7 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
                 <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: string) => { const dt = new Date(v); return `${dt.getDate()}/${dt.getMonth()+1}`; }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
-                <Tooltip content={<Tip />} /><Bar dataKey="amount" name={t("label.actual")} fill={C.blue} radius={[3, 3, 0, 0]} />
+                <Tooltip {...CHART_NO_ANIM} content={<Tip />} /><Bar {...CHART_NO_ANIM} dataKey="amount" name={t("label.actual")} fill={C.blue} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ChartFrame>
           </Card>
@@ -958,7 +967,7 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
-              <Tooltip content={<Tip />} /><Bar dataKey="cash" name={t("momentum.cash")} fill={C.emerald} radius={[4, 4, 0, 0]} /><Bar dataKey="credit" name={t("momentum.credit")} fill={C.amber} radius={[4, 4, 0, 0]} />
+              <Tooltip {...CHART_NO_ANIM} content={<Tip />} /><Bar {...CHART_NO_ANIM} dataKey="cash" name={t("momentum.cash")} fill={C.emerald} radius={[4, 4, 0, 0]} /><Bar {...CHART_NO_ANIM} dataKey="credit" name={t("momentum.credit")} fill={C.amber} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ChartFrame>
         </Card>
@@ -994,12 +1003,12 @@ export default function Dashboard() {
         ═══════════════════════════════════════════════════════════ */}
         <div className="grid gap-4 lg:grid-cols-3">
           <Card title={t("section.buRevenue")}>
-            <ChartFrame className="h-44"><PieChart><Pie data={buPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+            <ChartFrame className="h-44"><PieChart><Pie {...CHART_NO_ANIM} data={buPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
               {buPie.map((_: any, i: number) => <Cell key={i} fill={PIE[i % PIE.length]} />)}
             </Pie></PieChart></ChartFrame>
           </Card>
           <Card title={t("section.groupProfit")}>
-            <ChartFrame className="h-44"><PieChart><Pie data={gpPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${(name||"").slice(0,8)} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+            <ChartFrame className="h-44"><PieChart><Pie {...CHART_NO_ANIM} data={gpPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${(name||"").slice(0,8)} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
               {gpPie.map((_: any, i: number) => <Cell key={i} fill={PIE[i % PIE.length]} />)}
             </Pie></PieChart></ChartFrame>
           </Card>
@@ -1277,7 +1286,7 @@ export default function Dashboard() {
             <Card title={t("dash.newVsReturn")}>
               <div className="flex items-center gap-4">
                 <ChartFrame className="h-32 w-32 shrink-0"><PieChart>
-                  <Pie data={[{ name: "ເກົ່າ", value: Number(analytics.newVsReturn?.returningRevenue || 0) }, { name: "ໃໝ່", value: Number(analytics.newVsReturn?.newRevenue || 0) }]} dataKey="value" cx="50%" cy="50%" innerRadius={30} outerRadius={52} strokeWidth={0}>
+                  <Pie {...CHART_NO_ANIM} data={[{ name: "ເກົ່າ", value: Number(analytics.newVsReturn?.returningRevenue || 0) }, { name: "ໃໝ່", value: Number(analytics.newVsReturn?.newRevenue || 0) }]} dataKey="value" cx="50%" cy="50%" innerRadius={30} outerRadius={52} strokeWidth={0}>
                     <Cell fill={C.blue} /><Cell fill={C.emerald} />
                   </Pie>
                 </PieChart></ChartFrame>
@@ -1305,8 +1314,8 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(m: number) => ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m] || ""} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
-                  <Tooltip content={<Tip />} />
-                  <Bar dataKey="aov" name="AOV" fill={C.violet} radius={[3, 3, 0, 0]} />
+                  <Tooltip {...CHART_NO_ANIM} content={<Tip />} />
+                  <Bar {...CHART_NO_ANIM} dataKey="aov" name="AOV" fill={C.violet} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ChartFrame>
             </Card>
@@ -1782,10 +1791,10 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
-                <Tooltip content={<Tip />} />
-                <Bar dataKey="actual" name={`${d.year}`} fill="#cbd5e1" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="highlight" name={prevTrend.name || "Focus"} fill={C.blue} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="lastYear" name={`${Number(d.year) - 1}`} fill={C.amber} radius={[3, 3, 0, 0]} />
+                <Tooltip {...CHART_NO_ANIM} content={<Tip />} />
+                <Bar {...CHART_NO_ANIM} dataKey="actual" name={`${d.year}`} fill="#cbd5e1" radius={[3, 3, 0, 0]} />
+                <Bar {...CHART_NO_ANIM} dataKey="highlight" name={prevTrend.name || "Focus"} fill={C.blue} radius={[3, 3, 0, 0]} />
+                <Bar {...CHART_NO_ANIM} dataKey="lastYear" name={`${Number(d.year) - 1}`} fill={C.amber} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ChartFrame>
           </Card>
@@ -1893,7 +1902,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: string) => { const dt = new Date(v); return `${dt.getDate()}/${dt.getMonth()+1}`; }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
-                  <Tooltip content={<Tip />} /><Bar dataKey="amount" name={t("label.actual")} fill={C.blue} radius={[3, 3, 0, 0]} />
+                  <Tooltip {...CHART_NO_ANIM} content={<Tip />} /><Bar {...CHART_NO_ANIM} dataKey="amount" name={t("label.actual")} fill={C.blue} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ChartFrame>
             </Card>
@@ -1906,10 +1915,10 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
-                <Tooltip content={<Tip />} />
-                <Bar dataKey="actual" name={`${d.year}`} fill="#cbd5e1" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="highlight" name={curTrend.name || "Focus"} fill={C.blue} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="lastYear" name={`${Number(d.year) - 1}`} fill={C.amber} radius={[3, 3, 0, 0]} />
+                <Tooltip {...CHART_NO_ANIM} content={<Tip />} />
+                <Bar {...CHART_NO_ANIM} dataKey="actual" name={`${d.year}`} fill="#cbd5e1" radius={[3, 3, 0, 0]} />
+                <Bar {...CHART_NO_ANIM} dataKey="highlight" name={curTrend.name || "Focus"} fill={C.blue} radius={[3, 3, 0, 0]} />
+                <Bar {...CHART_NO_ANIM} dataKey="lastYear" name={`${Number(d.year) - 1}`} fill={C.amber} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ChartFrame>
           </Card>

@@ -186,7 +186,10 @@ export function useDashboard() {
         setLoading(false);
         setRefreshing(false);
       });
-  }, [initialDashboardCache]);
+    // Mount-only bootstrap. Do not depend on sessionStorage parse results — a fresh object
+    // reference each render would re-run this effect every time and waste work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot init
+  }, []);
 
   // Reload only dashboard data when filters change (skip first mount)
   const isFirstRender = useRef(true);
