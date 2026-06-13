@@ -12,19 +12,60 @@ const MONTHS = [
 ];
 const fmt = (v: number) => v > 0 ? v.toLocaleString("en-US") : "–";
 
+interface Assignment {
+  bu_code: string | number;
+  sale_id: string | number;
+  province_code: string | number;
+  district_code?: string | null;
+  month: number;
+  target_amount?: number | null;
+  sale_name?: string;
+}
+interface SalesUser { id: string | number; name?: string; code?: string }
+interface Province { code: string | number; name_1?: string; name?: string }
+interface District { code: string | number; name_1?: string; name?: string }
+interface BusinessUnit { code: string | number; name_1?: string; name?: string }
+interface Channel { code: string | number; name_1?: string; name?: string }
+
+interface BuildNode {
+  key: string;
+  name: string;
+  total: number;
+  months: number[];
+  children: Record<string, BuildNode> | null;
+}
+interface TreeNode {
+  key: string;
+  name: string;
+  total: number;
+  months: number[];
+  children: TreeNode[] | null;
+}
+
+interface LevelStyle { bg?: string; text?: string; badge?: string }
+interface TreeRowsProps {
+  node: TreeNode;
+  level: number;
+  expanded: Set<string>;
+  toggle: (key: string) => void;
+  lvl: LevelStyle[];
+  letters: string[];
+  indents: string[];
+}
+
 export default function SalesAssignment() {
   const { t } = useLanguage();
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [provinces, setProvinces] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [buList, setBuList] = useState<any[]>([]);
-  const [channels, setChannels] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [users, setUsers] = useState<SalesUser[]>([]);
+  const [provinces, setProvinces] = useState<Province[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [buList, setBuList] = useState<BusinessUnit[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [expanded, setExpanded] = useState(new Set<string>());
   const [drawer, setDrawer] = useState(false);
-  const [form, setForm] = useState({ saleId: "", saleName: "", buCode: "", provinceCodes: [] as string[], districtCode: "ALL", channelCodes: [] as string[], months: [] as number[] });
+  const [form, setForm] = useState({ saleId: "", saleName: "", buCode: "", provinceCodes: [] as string[], districtCode: "ALL" as string | string[], channelCodes: [] as string[], months: [] as number[] });
 
   const loadAll = async () => {
     setLoading(true);
@@ -36,33 +77,34 @@ export default function SalesAssignment() {
   };
   useEffect(() => { loadAll(); }, []);
 
-  const provMap = useMemo(() => new Map(provinces.map((p: any) => [String(p.code), p.name_1 || p.name])), [provinces]);
-  const buMap = useMemo(() => new Map(buList.map((b: any) => [String(b.code), b.name_1 || b.name])), [buList]);
+  const provMap = useMemo(() => new Map(provinces.map((p: Province) => [String(p.code), p.name_1 || p.name])), [provinces]);
+  const buMap = useMemo(() => new Map(buList.map((b: BusinessUnit) => [String(b.code), b.name_1 || b.name])), [buList]);
 
   // Build pivot tree: BU → Sale → Province → District (with monthly columns)
   const tree = useMemo(() => {
-    const root: any = {};
+    const root: Record<string, BuildNode> = {};
     for (const item of assignments) {
       const bk = String(item.bu_code), sk = String(item.sale_id), pk = String(item.province_code), dk = item.district_code || "ALL";
       const m = Number(item.month), val = Number(item.target_amount || 0);
       if (!root[bk]) root[bk] = { key: bk, name: buMap.get(bk) || bk, total: 0, months: new Array(13).fill(0), children: {} };
       root[bk].total += val; root[bk].months[m] += val;
       const bu = root[bk];
-      if (!bu.children[sk]) bu.children[sk] = { key: `${bk}-${sk}`, name: item.sale_name || "Unknown", total: 0, months: new Array(13).fill(0), children: {} };
-      bu.children[sk].total += val; bu.children[sk].months[m] += val;
-      const sale = bu.children[sk];
-      if (!sale.children[pk]) sale.children[pk] = { key: `${bk}-${sk}-${pk}`, name: provMap.get(pk) || pk, total: 0, months: new Array(13).fill(0), children: {} };
-      sale.children[pk].total += val; sale.children[pk].months[m] += val;
-      const prov = sale.children[pk];
-      if (!prov.children[dk]) prov.children[dk] = { key: `${bk}-${sk}-${pk}-${dk}`, name: dk === "ALL" ? t("app.all") : dk, total: 0, months: new Array(13).fill(0), children: null };
-      prov.children[dk].total += val; prov.children[dk].months[m] += val;
+      if (!bu.children![sk]) bu.children![sk] = { key: `${bk}-${sk}`, name: item.sale_name || "Unknown", total: 0, months: new Array(13).fill(0), children: {} };
+      bu.children![sk].total += val; bu.children![sk].months[m] += val;
+      const sale = bu.children![sk];
+      if (!sale.children![pk]) sale.children![pk] = { key: `${bk}-${sk}-${pk}`, name: provMap.get(pk) || pk, total: 0, months: new Array(13).fill(0), children: {} };
+      sale.children![pk].total += val; sale.children![pk].months[m] += val;
+      const prov = sale.children![pk];
+      if (!prov.children![dk]) prov.children![dk] = { key: `${bk}-${sk}-${pk}-${dk}`, name: dk === "ALL" ? t("app.all") : dk, total: 0, months: new Array(13).fill(0), children: null };
+      prov.children![dk].total += val; prov.children![dk].months[m] += val;
     }
-    const toArr = (o: any) => Object.values(o).sort((a: any, b: any) => b.total - a.total);
-    return toArr(root).map((bu: any) => ({ ...bu, children: toArr(bu.children).map((s: any) => ({ ...s, children: toArr(s.children).map((p: any) => ({ ...p, children: toArr(p.children) })) })) }));
+    const toArr = (o: Record<string, BuildNode>): BuildNode[] =>
+      Object.values(o).sort((a, b) => b.total - a.total);
+    return toArr(root).map((bu) => ({ ...bu, children: toArr(bu.children!).map((s) => ({ ...s, children: toArr(s.children!).map((p) => ({ ...p, children: toArr(p.children!) })) })) })) as unknown as TreeNode[];
   }, [assignments, buMap, provMap, t]);
 
-  const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  const expandAll = () => { if (expanded.size > 0) { setExpanded(new Set()); } else { const all = new Set<string>(); tree.forEach((bu: any) => { all.add(bu.key); bu.children.forEach((s: any) => { all.add(s.key); s.children.forEach((p: any) => all.add(p.key)); }); }); setExpanded(all); } };
+  const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(key)) { n.delete(key); } else { n.add(key); } return n; });
+  const expandAll = () => { if (expanded.size > 0) { setExpanded(new Set()); } else { const all = new Set<string>(); tree.forEach((bu) => { all.add(bu.key); bu.children!.forEach((s) => { all.add(s.key); s.children!.forEach((p) => all.add(p.key)); }); }); setExpanded(all); } };
 
   const isCapital = (codes: string[]) => codes.length === 1 && (codes[0] === "01" || (provMap.get(codes[0]) || "").includes("Capital"));
   const onProvChange = async (vals: string[]) => {
@@ -88,7 +130,7 @@ export default function SalesAssignment() {
     finally { setSubmitting(false); }
   };
 
-  const grandTotal = tree.reduce((s: number, b: any) => s + b.total, 0);
+  const grandTotal = tree.reduce((s: number, b) => s + b.total, 0);
 
   // Level styles
   const lvl = [
@@ -158,7 +200,7 @@ export default function SalesAssignment() {
                   <tr><td colSpan={14} className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-blue-500" /></td></tr>
                 ) : tree.length === 0 ? (
                   <tr><td colSpan={14} className="py-16 text-center text-slate-400">{t("label.noData")}</td></tr>
-                ) : tree.map((bu: any) => (
+                ) : tree.map((bu) => (
                   <TreeRows key={bu.key} node={bu} level={1} expanded={expanded} toggle={toggle} lvl={lvl} letters={letters} indents={indents} />
                 ))}
               </tbody>
@@ -167,7 +209,7 @@ export default function SalesAssignment() {
                   <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-800">
                     <td className="sticky left-0 z-10 bg-slate-50 px-4 py-3 text-sm text-slate-900 dark:bg-slate-800 dark:text-white">Grand Total</td>
                     <td className="border-l border-slate-200 px-2 py-3 text-right text-sm font-bold text-blue-600 dark:border-slate-700 dark:text-blue-400">{fmt(grandTotal)}</td>
-                    {MONTHS.map(m => <td key={m.v} className="px-2 py-3 text-right tabular-nums text-slate-500">{fmt(tree.reduce((s: number, b: any) => s + b.months[m.v], 0))}</td>)}
+                    {MONTHS.map(m => <td key={m.v} className="px-2 py-3 text-right tabular-nums text-slate-500">{fmt(tree.reduce((s: number, b) => s + b.months[m.v], 0))}</td>)}
                   </tr>
                 </tfoot>
               )}
@@ -200,14 +242,14 @@ export default function SalesAssignment() {
                     <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Business Unit *</label>
                     <select value={form.buCode} onChange={e => setForm(f => ({ ...f, buCode: e.target.value }))} className={sel}>
                       <option value="">Select...</option>
-                      {buList.map((b: any) => <option key={b.code} value={b.code}>{b.name_1 || b.name}</option>)}
+                      {buList.map((b) => <option key={b.code} value={b.code}>{b.name_1 || b.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Sales Person *</label>
-                    <select value={form.saleId} onChange={e => { const u = users.find((u: any) => String(u.id) === e.target.value); setForm(f => ({ ...f, saleId: e.target.value, saleName: u?.name || u?.code || "" })); }} className={sel}>
+                    <select value={form.saleId} onChange={e => { const u = users.find((u) => String(u.id) === e.target.value); setForm(f => ({ ...f, saleId: e.target.value, saleName: u?.name || u?.code || "" })); }} className={sel}>
                       <option value="">Select...</option>
-                      {users.map((u: any) => <option key={u.id} value={u.id}>{u.name || u.code}</option>)}
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.name || u.code}</option>)}
                     </select>
                   </div>
                 </div>
@@ -220,15 +262,15 @@ export default function SalesAssignment() {
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Province * <span className="text-slate-400">(Ctrl/Cmd to multi-select)</span></label>
                     <select multiple value={form.provinceCodes} onChange={e => onProvChange(Array.from(e.target.selectedOptions, o => o.value))} className={`${sel} h-28`}>
-                      {provinces.map((p: any) => <option key={p.code} value={p.code}>{p.name_1}</option>)}
+                      {provinces.map((p) => <option key={p.code} value={p.code}>{p.name_1}</option>)}
                     </select>
                   </div>
                   {districts.length > 0 && (
                     <div>
                       <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">District (Capital)</label>
-                      <select multiple value={Array.isArray(form.districtCode) ? form.districtCode : [form.districtCode]} onChange={e => { const v = Array.from(e.target.selectedOptions, o => o.value); setForm(f => ({ ...f, districtCode: v.includes("ALL") ? "ALL" : v as any })); }} className={`${sel} h-20`}>
+                      <select multiple value={Array.isArray(form.districtCode) ? form.districtCode : [form.districtCode]} onChange={e => { const v = Array.from(e.target.selectedOptions, o => o.value); setForm(f => ({ ...f, districtCode: v.includes("ALL") ? "ALL" : v })); }} className={`${sel} h-20`}>
                         <option value="ALL">{t("app.all")}</option>
-                        {districts.map((d: any) => <option key={d.code} value={d.code}>{d.name_1}</option>)}
+                        {districts.map((d) => <option key={d.code} value={d.code}>{d.name_1}</option>)}
                       </select>
                     </div>
                   )}
@@ -253,7 +295,7 @@ export default function SalesAssignment() {
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Sales Channel</label>
                     <select multiple value={form.channelCodes} onChange={e => setForm(f => ({ ...f, channelCodes: Array.from(e.target.selectedOptions, o => o.value) }))} className={`${sel} h-24`}>
-                      {channels.map((c: any) => <option key={c.code} value={c.code}>{c.name_1}</option>)}
+                      {channels.map((c) => <option key={c.code} value={c.code}>{c.name_1}</option>)}
                     </select>
                   </div>
                 </div>
@@ -275,7 +317,7 @@ export default function SalesAssignment() {
 }
 
 /* ── Recursive tree row component ── */
-function TreeRows({ node, level, expanded, toggle, lvl, letters, indents }: any) {
+function TreeRows({ node, level, expanded, toggle, lvl, letters, indents }: TreeRowsProps) {
   const isOpen = expanded.has(node.key);
   const hasKids = node.children && node.children.length > 0;
   const s = lvl[level] || lvl[4];
@@ -295,7 +337,7 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents }: any)
           <td key={m.v} className={`px-2 py-2 text-right tabular-nums ${node.months[m.v] > 0 ? "text-slate-700 dark:text-slate-300" : "text-slate-300 dark:text-slate-700"}`}>{fmt(node.months[m.v])}</td>
         ))}
       </tr>
-      {isOpen && hasKids && node.children.map((child: any) => (
+      {isOpen && hasKids && node.children!.map((child) => (
         <TreeRows key={child.key} node={child} level={level + 1} expanded={expanded} toggle={toggle} lvl={lvl} letters={letters} indents={indents} />
       ))}
     </>

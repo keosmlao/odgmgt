@@ -7,31 +7,51 @@ import api from "@/service/api";
 const FALLBACK_CHANNELS = [{ code: "101", name: "Retail" }, { code: "102", name: "Wholesale" }, { code: "103", name: "Technician" }, { code: "106", name: "Project" }];
 const MONTHS = [{ value: 1, label: "Jan" }, { value: 2, label: "Feb" }, { value: 3, label: "Mar" }, { value: 4, label: "Apr" }, { value: 5, label: "May" }, { value: 6, label: "Jun" }, { value: 7, label: "Jul" }, { value: 8, label: "Aug" }, { value: 9, label: "Sep" }, { value: 10, label: "Oct" }, { value: 11, label: "Nov" }, { value: 12, label: "Dec" }];
 
+interface Option { code: string; name: string }
+interface FormState {
+  year: number;
+  bu: string;
+  channel: string;
+  province: string;
+  district: string;
+  month: number;
+  target: string | number;
+  note: string;
+}
+interface Draft extends FormState {
+  id: number;
+  target: number;
+  buName: string;
+  provinceName: string;
+  districtName: string;
+  channelName: string;
+}
+
 export default function TargetCreate() {
   const router = useRouter();
-  const [buOptions, setBuOptions] = useState<any[]>([]);
+  const [buOptions, setBuOptions] = useState<Option[]>([]);
   const [provinceOptions, setProvinceOptions] = useState([{ code: "ALL", name: "Nationwide" }]);
   const [districtOptions, setDistrictOptions] = useState([{ code: "ALL", name: "All" }]);
   const [channelOptions, setChannelOptions] = useState(FALLBACK_CHANNELS);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [drafts, setDrafts] = useState<any[]>([]);
-  const [existingTargets, setExistingTargets] = useState<any[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [existingTargets, setExistingTargets] = useState<Record<string, unknown>[]>([]);
   const buSelectRef = useRef<HTMLSelectElement>(null);
-  const [form, setForm] = useState<any>({ year: new Date().getFullYear(), bu: "", channel: FALLBACK_CHANNELS[0].code, province: "ALL", district: "ALL", month: 1, target: "", note: "" });
+  const [form, setForm] = useState<FormState>({ year: new Date().getFullYear(), bu: "", channel: FALLBACK_CHANNELS[0].code, province: "ALL", district: "ALL", month: 1, target: "", note: "" });
 
   const isVientianeCapital = (code: string) => { if (!code || code === "ALL") return false; const lower = code.toLowerCase(); return lower === "01" || lower.includes("capital") || lower.includes("vientiane"); };
-  const handleChange = (field: string, value: any) => { setForm((prev: any) => { const newState = { ...prev, [field]: value }; if (field === "province") newState.district = isVientianeCapital(value) ? "" : "ALL"; return newState; }); };
+  const handleChange = (field: keyof FormState, value: string | number) => { setForm((prev) => { const newState = { ...prev, [field]: value }; if (field === "province") newState.district = isVientianeCapital(String(value)) ? "" : "ALL"; return newState; }); };
 
-  useEffect(() => { const fetchData = async () => { try { const [buRes, provRes, targetRes, chanRes] = await Promise.allSettled([api.get("/bu"), api.get("/provinces"), api.get("/targets"), api.get("/sale-channel")]); if (buRes.status === "fulfilled" && buRes.value.data.success) setBuOptions(buRes.value.data.data.map((b: any) => ({ code: b.code, name: b.name_1 || b.name || b.code }))); if (provRes.status === "fulfilled" && provRes.value.data.success) setProvinceOptions([{ code: "ALL", name: "Nationwide" }, ...provRes.value.data.data.map((p: any) => ({ code: p.code, name: p.name_1 || p.name || p.code }))]); if (targetRes.status === "fulfilled" && targetRes.value.data.success) setExistingTargets(targetRes.value.data.data); if (chanRes.status === "fulfilled" && chanRes.value.data.success && chanRes.value.data.data.length) { const mapped = chanRes.value.data.data.map((c: any) => ({ code: c.code, name: c.name_1 || c.name || c.code })); setChannelOptions(mapped); setForm((prev: any) => ({ ...prev, channel: mapped[0].code })); } } catch {} }; fetchData(); }, []);
+  useEffect(() => { const fetchData = async () => { try { const [buRes, provRes, targetRes, chanRes] = await Promise.allSettled([api.get("/bu"), api.get("/provinces"), api.get("/targets"), api.get("/sale-channel")]); if (buRes.status === "fulfilled" && buRes.value.data.success) setBuOptions(buRes.value.data.data.map((b: Record<string, unknown>) => ({ code: String(b.code), name: String(b.name_1 || b.name || b.code) }))); if (provRes.status === "fulfilled" && provRes.value.data.success) setProvinceOptions([{ code: "ALL", name: "Nationwide" }, ...provRes.value.data.data.map((p: Record<string, unknown>) => ({ code: String(p.code), name: String(p.name_1 || p.name || p.code) }))]); if (targetRes.status === "fulfilled" && targetRes.value.data.success) setExistingTargets(targetRes.value.data.data); if (chanRes.status === "fulfilled" && chanRes.value.data.success && chanRes.value.data.data.length) { const mapped = chanRes.value.data.data.map((c: Record<string, unknown>) => ({ code: String(c.code), name: String(c.name_1 || c.name || c.code) })); setChannelOptions(mapped); setForm((prev) => ({ ...prev, channel: mapped[0].code })); } } catch {} }; fetchData(); }, []);
   useEffect(() => { if (buSelectRef.current) buSelectRef.current.focus(); }, []);
-  useEffect(() => { const loadDistricts = async () => { if (!isVientianeCapital(form.province)) { setDistrictOptions([{ code: "ALL", name: "All" }]); return; } try { const { data } = await api.get("/amphur", { params: { province_code: form.province } }); if (data.success && Array.isArray(data.data)) setDistrictOptions(data.data.map((d: any) => ({ code: d.code, name: d.name_1 || d.name || d.code }))); } catch { setDistrictOptions([{ code: "ALL", name: "All" }]); } }; loadDistricts(); }, [form.province]);
+  useEffect(() => { const loadDistricts = async () => { if (!isVientianeCapital(form.province)) { setDistrictOptions([{ code: "ALL", name: "All" }]); return; } try { const { data } = await api.get("/amphur", { params: { province_code: form.province } }); if (data.success && Array.isArray(data.data)) setDistrictOptions(data.data.map((d: Record<string, unknown>) => ({ code: String(d.code), name: String(d.name_1 || d.name || d.code) }))); } catch { setDistrictOptions([{ code: "ALL", name: "All" }]); } }; loadDistricts(); }, [form.province]);
 
-  const availableMonthsForSelection = useMemo(() => { if (!form.bu || !form.channel) return MONTHS; const used = new Set([...drafts, ...existingTargets.map((t: any) => ({ bu: t.bu_code || t.bu, province: t.province_code || t.province, district: t.district_code || t.district, year: t.year || t.target_year, month: t.month || t.target_month, channel: t.sale_channel || t.channel }))].filter((d: any) => d.bu === form.bu && d.channel === form.channel && (d.province || "ALL") === form.province && (d.district || "ALL") === (form.district || "ALL") && d.year === form.year).map((d: any) => d.month)); return MONTHS.filter(m => !used.has(m.value)); }, [drafts, existingTargets, form.bu, form.channel, form.province, form.district, form.year]);
-  useEffect(() => { if (!availableMonthsForSelection.some(m => m.value === form.month)) setForm((prev: any) => ({ ...prev, month: availableMonthsForSelection[0]?.value ?? prev.month })); }, [availableMonthsForSelection, form.month]);
+  const availableMonthsForSelection = useMemo(() => { if (!form.bu || !form.channel) return MONTHS; const used = new Set([...drafts, ...existingTargets.map((t: Record<string, unknown>) => ({ bu: t.bu_code || t.bu, province: t.province_code || t.province, district: t.district_code || t.district, year: t.year || t.target_year, month: t.month || t.target_month, channel: t.sale_channel || t.channel }))].filter((d: Record<string, unknown>) => d.bu === form.bu && d.channel === form.channel && (d.province || "ALL") === form.province && (d.district || "ALL") === (form.district || "ALL") && d.year === form.year).map((d: Record<string, unknown>) => d.month)); return MONTHS.filter(m => !used.has(m.value)); }, [drafts, existingTargets, form.bu, form.channel, form.province, form.district, form.year]);
+  useEffect(() => { if (!availableMonthsForSelection.some(m => m.value === form.month)) setForm((prev) => ({ ...prev, month: availableMonthsForSelection[0]?.value ?? prev.month })); }, [availableMonthsForSelection, form.month]);
 
-  const handleAddDraft = (e: React.FormEvent) => { e.preventDefault(); setError(""); if (!form.bu) return buSelectRef.current?.focus(); if (form.bu && form.channel && availableMonthsForSelection.length === 0) return setError("Month already used"); if (!form.target || Number(form.target) <= 0) return setError("Invalid Target Amount"); if (isVientianeCapital(form.province) && !form.district) return setError("Please select district"); const channelObj = channelOptions.find(c => c.code === form.channel); const entry = { id: Date.now(), ...form, target: Number(form.target), buName: buOptions.find(b => b.code === form.bu)?.name || form.bu, provinceName: provinceOptions.find(p => p.code === form.province)?.name || form.province, districtName: districtOptions.find(d => d.code === form.district)?.name || form.district, channelName: channelObj?.name || form.channel, channel: channelObj?.code || form.channel }; setDrafts(prev => [entry, ...prev]); setForm((prev: any) => ({ ...prev, target: "", note: "" })); };
-  const handleSaveAll = async () => { setError(""); if (!drafts.length) return setError("Draft is empty"); setSaving(true); try { for (const d of drafts) { await api.post("/targets", { bu_code: d.bu, province: d.province || "ALL", district: d.district || "ALL", channel: d.channel, target: d.target, year: d.year, month: d.month, note: d.note }); } router.replace("/target"); } catch (err: any) { setError(err.response?.data?.message || "Save failed"); } finally { setSaving(false); } };
+  const handleAddDraft = (e: React.FormEvent) => { e.preventDefault(); setError(""); if (!form.bu) return buSelectRef.current?.focus(); if (form.bu && form.channel && availableMonthsForSelection.length === 0) return setError("Month already used"); if (!form.target || Number(form.target) <= 0) return setError("Invalid Target Amount"); if (isVientianeCapital(form.province) && !form.district) return setError("Please select district"); const channelObj = channelOptions.find(c => c.code === form.channel); const entry = { id: Date.now(), ...form, target: Number(form.target), buName: buOptions.find(b => b.code === form.bu)?.name || form.bu, provinceName: provinceOptions.find(p => p.code === form.province)?.name || form.province, districtName: districtOptions.find(d => d.code === form.district)?.name || form.district, channelName: channelObj?.name || form.channel, channel: channelObj?.code || form.channel }; setDrafts(prev => [entry, ...prev]); setForm((prev) => ({ ...prev, target: "", note: "" })); };
+  const handleSaveAll = async () => { setError(""); if (!drafts.length) return setError("Draft is empty"); setSaving(true); try { for (const d of drafts) { await api.post("/targets", { bu_code: d.bu, province: d.province || "ALL", district: d.district || "ALL", channel: d.channel, target: d.target, year: d.year, month: d.month, note: d.note }); } router.replace("/target"); } catch (err) { setError((err as { response?: { data?: { message?: string } } }).response?.data?.message || "Save failed"); } finally { setSaving(false); } };
   const totalDraftAmount = drafts.reduce((sum, item) => sum + item.target, 0);
 
   return (

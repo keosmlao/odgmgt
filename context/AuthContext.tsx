@@ -8,12 +8,34 @@ import {
   useState,
 } from "react";
 import api from "@/service/api";
+import type { AuthUser } from "@/lib/types";
+
+interface AuthResponse {
+  success: boolean;
+  user?: AuthUser;
+  token?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+interface AuthContextValue {
+  user: AuthUser | null;
+  hydrated: boolean;
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => Promise<AuthResponse>;
+  bootstrap: (form: Record<string, unknown>) => Promise<AuthResponse>;
+  logout: () => Promise<void>;
+}
+
+interface ApiError {
+  response?: { data?: { message?: string } };
+}
 
 const TOKEN_KEY = "odg_token";
 const USER_KEY = "odg_user";
-const AuthContext = createContext<any>(null);
+const AuthContext = createContext<AuthContextValue | null>(null);
 
-function persistAuth(user: any, token: string | null) {
+function persistAuth(user: AuthUser | null, token: string | null) {
   if (typeof window === "undefined") {
     return;
   }
@@ -35,7 +57,7 @@ function clearAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -60,10 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     api
       .get("/auth/me")
-      .then((response: any) => {
+      .then((response: { data?: AuthResponse }) => {
         if (response.data?.success && response.data.user) {
           setUser(response.data.user);
-          persistAuth(response.data.user, token);
+          persistAuth(response.data.user ?? null, token);
         } else {
           clearAuth();
           setUser(null);
@@ -81,28 +103,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (username: string, password: string) => {
     try {
       const response = await api.post("/auth/login", { username, password });
-      const payload = response.data || {};
+      const payload: AuthResponse = response.data || { success: false };
       if (payload.success && payload.user && payload.token) {
         setUser(payload.user);
         persistAuth(payload.user, payload.token);
       }
       return payload;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as ApiError;
       return {
         success: false,
-        message: error?.response?.data?.message || "Login failed",
+        message: err?.response?.data?.message || "Login failed",
       };
     }
   };
 
-  const bootstrap = async (form: any) => {
+  const bootstrap = async (form: Record<string, unknown>) => {
     try {
       const response = await api.post("/auth/bootstrap", form);
-      return response.data || { success: false };
-    } catch (error: any) {
+      return (response.data || { success: false }) as AuthResponse;
+    } catch (error: unknown) {
+      const err = error as ApiError;
       return {
         success: false,
-        message: error?.response?.data?.message || "Bootstrap failed",
+        message: err?.response?.data?.message || "Bootstrap failed",
       };
     }
   };

@@ -4,26 +4,35 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import api from "@/service/api";
 
+interface WeightRow {
+  id: string;
+  label: string;
+  percent: number;
+}
+
+type DepartmentRow = Record<string, unknown>;
+type SavedWeightRow = Record<string, unknown>;
+
 export default function EvaluationDepartment() {
   const [form, setForm] = useState({ weightBalancedScorecard: 30, weightMatrix: 70 });
-  const [departments, setDepartments] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [department, setDepartment] = useState("ALL");
   const [loadingWeights, setLoadingWeights] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
-  const [allWeights, setAllWeights] = useState<any[]>([]);
+  const [allWeights, setAllWeights] = useState<SavedWeightRow[]>([]);
   const [loadingAllWeights, setLoadingAllWeights] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
+  const [, setIsDirty] = useState(false);
   const dirtyRef = useRef(false);
-  const [balancedRows, setBalancedRows] = useState([{ id: "revenue", label: "Revenue", percent: 25 }, { id: "customer", label: "Customer", percent: 25 }, { id: "employee", label: "Employee", percent: 25 }, { id: "top5", label: "Top 5", percent: 25 }]);
-  const [matrixRows, setMatrixRows] = useState([{ id: "performance", label: "Performance", percent: 50 }, { id: "potential", label: "Potential", percent: 50 }]);
+  const [balancedRows, setBalancedRows] = useState<WeightRow[]>([{ id: "revenue", label: "Revenue", percent: 25 }, { id: "customer", label: "Customer", percent: 25 }, { id: "employee", label: "Employee", percent: 25 }, { id: "top5", label: "Top 5", percent: 25 }]);
+  const [matrixRows, setMatrixRows] = useState<WeightRow[]>([{ id: "performance", label: "Performance", percent: 50 }, { id: "potential", label: "Potential", percent: 50 }]);
 
   const clampPercent = (value: number) => { if (Number.isNaN(value)) return 0; return Math.min(100, Math.max(0, value)); };
-  const normalizeNumericInput = (raw: any) => { const map: Record<string, string> = { "\u0ED0": "0", "\u0ED1": "1", "\u0ED2": "2", "\u0ED3": "3", "\u0ED4": "4", "\u0ED5": "5", "\u0ED6": "6", "\u0ED7": "7", "\u0ED8": "8", "\u0ED9": "9" }; return String(raw ?? "").replace(/[\u0ED0-\u0ED9]/g, (ch) => map[ch] || ch); };
+  const normalizeNumericInput = (raw: unknown) => { const map: Record<string, string> = { "\u0ED0": "0", "\u0ED1": "1", "\u0ED2": "2", "\u0ED3": "3", "\u0ED4": "4", "\u0ED5": "5", "\u0ED6": "6", "\u0ED7": "7", "\u0ED8": "8", "\u0ED9": "9" }; return String(raw ?? "").replace(/[\u0ED0-\u0ED9]/g, (ch) => map[ch] || ch); };
 
-  const update = (key: string, rawValue: any) => { const normalized = normalizeNumericInput(rawValue); const parsed = Number(normalized); if (Number.isNaN(parsed)) return; const value = clampPercent(parsed); setIsDirty(true); dirtyRef.current = true; setForm((prev) => { if (key === "weightBalancedScorecard") return { ...prev, weightBalancedScorecard: value, weightMatrix: 100 - value }; if (key === "weightMatrix") return { ...prev, weightMatrix: value, weightBalancedScorecard: 100 - value }; return { ...prev, [key]: value }; }); };
-  const updateRowPercent = (setter: any, rows: any[], id: string, rawValue: any) => { const normalized = normalizeNumericInput(rawValue); const parsed = Number(normalized); if (Number.isNaN(parsed)) return; const value = clampPercent(parsed); setter(rows.map((row: any) => (row.id === id ? { ...row, percent: value } : row))); };
-  const sumPercent = (rows: any[]) => rows.reduce((acc, row) => acc + Number(row.percent || 0), 0);
+  const update = (key: string, rawValue: unknown) => { const normalized = normalizeNumericInput(rawValue); const parsed = Number(normalized); if (Number.isNaN(parsed)) return; const value = clampPercent(parsed); setIsDirty(true); dirtyRef.current = true; setForm((prev) => { if (key === "weightBalancedScorecard") return { ...prev, weightBalancedScorecard: value, weightMatrix: 100 - value }; if (key === "weightMatrix") return { ...prev, weightMatrix: value, weightBalancedScorecard: 100 - value }; return { ...prev, [key]: value }; }); };
+  const updateRowPercent = (setter: React.Dispatch<React.SetStateAction<WeightRow[]>>, rows: WeightRow[], id: string, rawValue: unknown) => { const normalized = normalizeNumericInput(rawValue); const parsed = Number(normalized); if (Number.isNaN(parsed)) return; const value = clampPercent(parsed); setter(rows.map((row) => (row.id === id ? { ...row, percent: value } : row))); };
+  const sumPercent = (rows: WeightRow[]) => rows.reduce((acc, row) => acc + Number(row.percent || 0), 0);
 
   const loadAllWeights = async () => { setLoadingAllWeights(true); try { const res = await api.get("/evaluation-weights"); if (res.data?.success) setAllWeights(res.data.data || []); } catch (err) { console.error("Failed to load evaluation weights list", err); } finally { setLoadingAllWeights(false); } };
 
@@ -33,7 +42,7 @@ export default function EvaluationDepartment() {
 
   const saveWeights = async () => { setSaving(true); setSaveStatus(""); try { const payload = { department_code: department, weight_balanced_scorecard: form.weightBalancedScorecard, weight_matrix: form.weightMatrix }; const res = await api.post("/evaluation-weights", payload); if (res.data?.success) { setSaveStatus("Saved successfully"); setIsDirty(false); dirtyRef.current = false; await loadAllWeights(); } else { setSaveStatus("Save failed"); } } catch { setSaveStatus("Save failed"); } finally { setSaving(false); } };
 
-  const departmentNameMap = new Map((departments || []).map((d: any) => [String(d.code), d.name_1 || d.code]));
+  const departmentNameMap = new Map((departments || []).map((d) => [String(d.code), String(d.name_1 || d.code)]));
   const getDepartmentLabel = (code: string) => { if (code === "ALL") return "All Departments"; return departmentNameMap.get(String(code)) || code; };
 
   return (
@@ -59,7 +68,7 @@ export default function EvaluationDepartment() {
                 <label className="block text-xs font-medium text-slate-500 mb-1.5">Department</label>
                 <select value={department} onChange={(e) => { setIsDirty(false); dirtyRef.current = false; setDepartment(e.target.value); }} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white">
                   <option value="ALL">All Departments</option>
-                  {departments.map((d: any) => <option key={d.code} value={d.code}>{d.name_1 || d.code}</option>)}
+                  {departments.map((d) => <option key={String(d.code)} value={String(d.code)}>{String(d.name_1 || d.code)}</option>)}
                 </select>
               </div>
               <div>
@@ -156,9 +165,9 @@ export default function EvaluationDepartment() {
               <tbody className="divide-y divide-slate-200">
                 {allWeights.length === 0 ? (
                   <tr><td className="px-3 py-3 text-slate-400" colSpan={3}>No data yet</td></tr>
-                ) : allWeights.map((row: any) => (
-                  <tr key={row.department_code} className="hover:bg-slate-50 transition-colors duration-150">
-                    <td className="px-3 py-2 font-medium text-slate-700">{getDepartmentLabel(row.department_code)}</td>
+                ) : allWeights.map((row) => (
+                  <tr key={String(row.department_code)} className="hover:bg-slate-50 transition-colors duration-150">
+                    <td className="px-3 py-2 font-medium text-slate-700">{getDepartmentLabel(String(row.department_code))}</td>
                     <td className="px-3 py-2 text-right">{Number(row.weight_balanced_scorecard || 0)}%</td>
                     <td className="px-3 py-2 text-right">{Number(row.weight_matrix || 0)}%</td>
                   </tr>

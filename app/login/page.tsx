@@ -39,6 +39,26 @@ interface OptionItem {
   name?: string | null;
 }
 
+interface AuthResult {
+  success: boolean;
+  message?: string;
+}
+
+interface AuthContextShape {
+  login: (username: string, password: string) => Promise<AuthResult>;
+  bootstrap: (form: ActionForm) => Promise<AuthResult>;
+  user?: { role?: string } | null;
+}
+
+interface ApiResponse {
+  data?: {
+    success?: boolean;
+    initialized?: boolean;
+    data?: OptionItem[];
+    message?: string;
+  };
+}
+
 const ROLES = [
   { value: "ceo", label: "CEO" },
   { value: "gm", label: "GM" },
@@ -90,7 +110,7 @@ function Field({
 /* ── Main ── */
 export default function Login() {
   const router = useRouter();
-  const { login, bootstrap, user } = useAuth() as any;
+  const { login, bootstrap, user } = useAuth() as unknown as AuthContextShape;
   const { t, locale, setLocale, locales: locs, localeLabels } = useLanguage();
 
   const [view, setView] = useState<View>("login");
@@ -115,7 +135,7 @@ export default function Login() {
       api.get("/auth/status").catch(() => ({ data: { success: false } })),
       api.get("/bu").catch(() => ({ data: { data: [] } })),
       api.get("/sale-channel").catch(() => ({ data: { data: [] } })),
-    ]).then(([statusRes, buRes, chRes]: any[]) => {
+    ]).then(([statusRes, buRes, chRes]: ApiResponse[]) => {
       if (cancelled) return;
       if (statusRes.data?.success) {
         const init = !!statusRes.data.initialized;
@@ -194,10 +214,10 @@ export default function Login() {
   const inputCls =
     "w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500";
 
-  const setField = (
+  const setField = <K extends keyof ActionForm>(
     setter: Dispatch<SetStateAction<ActionForm>>,
-    key: keyof ActionForm,
-    val: any,
+    key: K,
+    val: ActionForm[K],
   ) => setter((p) => ({ ...p, [key]: val }));
 
   /* ── Role fields for setup/register ── */
@@ -489,9 +509,11 @@ export default function Login() {
                     value={view === "setup" ? setupForm.full_name : regForm.full_name}
                     onChange={(e) => {
                       const v = e.target.value;
-                      view === "setup"
-                        ? setField(setSetupForm, "full_name", v)
-                        : setField(setRegForm, "full_name", v);
+                      if (view === "setup") {
+                        setField(setSetupForm, "full_name", v);
+                      } else {
+                        setField(setRegForm, "full_name", v);
+                      }
                     }}
                   />
                 </Field>
@@ -502,9 +524,11 @@ export default function Login() {
                     value={view === "setup" ? setupForm.username : regForm.username}
                     onChange={(e) => {
                       const v = e.target.value;
-                      view === "setup"
-                        ? setField(setSetupForm, "username", v)
-                        : setField(setRegForm, "username", v);
+                      if (view === "setup") {
+                        setField(setSetupForm, "username", v);
+                      } else {
+                        setField(setRegForm, "username", v);
+                      }
                     }}
                   />
                 </Field>
@@ -518,9 +542,11 @@ export default function Login() {
                   value={view === "setup" ? setupForm.password : regForm.password}
                   onChange={(e) => {
                     const v = e.target.value;
-                    view === "setup"
-                      ? setField(setSetupForm, "password", v)
-                      : setField(setRegForm, "password", v);
+                    if (view === "setup") {
+                      setField(setSetupForm, "password", v);
+                    } else {
+                      setField(setRegForm, "password", v);
+                    }
                   }}
                 />
                 <button

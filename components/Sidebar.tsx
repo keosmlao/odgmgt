@@ -13,7 +13,6 @@ import {
   ChevronRight,
   Users,
   Table,
-  Smartphone,
   Menu,
   X,
   Globe,

@@ -3,7 +3,14 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "odg_theme";
-const ThemeContext = createContext<any>(null);
+
+interface ThemeContextValue {
+  isDark: boolean;
+  toggleTheme: () => void;
+  setTheme: (next: string) => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDark, setIsDark] = useState(() => {

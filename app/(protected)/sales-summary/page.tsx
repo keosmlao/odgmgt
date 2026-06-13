@@ -9,21 +9,34 @@ import api from "@/service/api";
 import { useLanguage } from "@/context/LanguageContext";
 
 const C = { blue: "#3b82f6", emerald: "#10b981", amber: "#f59e0b", rose: "#ef4444" };
-const num = (v: any) => Number(v || 0);
-const fmt = (v: any) => num(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
-const pct = (v: any) => `${num(v).toFixed(1)}%`;
-const displayLabel = (value: any) => {
+const num = (v: unknown) => Number(v || 0);
+const fmt = (v: unknown) => num(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const pct = (v: unknown) => `${num(v).toFixed(1)}%`;
+const displayLabel = (value: unknown) => {
   const label = String(value || "");
   if (label === "PROJECT" || label === "ຂາຍໂຄງການ") return "ໂຄງການ";
   return label;
 };
 
-function Tip({ active, payload, label }: any) {
+interface SelectOption { v: string; l: string }
+type SummaryRow = Record<string, unknown>;
+interface SummarySection { rows?: SummaryRow[]; total?: Record<string, unknown> }
+interface SummaryData {
+  meta?: Record<string, unknown>;
+  overall?: SummarySection;
+  by_area?: SummarySection;
+  collection?: SummarySection;
+}
+
+interface TipPayload { color?: string; name?: string; value?: unknown }
+interface TipProps { active?: boolean; payload?: TipPayload[]; label?: string | number }
+
+function Tip({ active, payload, label }: TipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-800">
       <p className="mb-1 font-semibold text-slate-600 dark:text-slate-300">{label}</p>
-      {payload.map((p: any, i: number) => (
+      {payload.map((p: TipPayload, i: number) => (
         <div key={i} className="flex justify-between gap-4 py-0.5">
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />{p.name}</span>
           <span className="font-semibold text-slate-900 dark:text-white">{fmt(p.value)}</span>
@@ -41,18 +54,18 @@ export default function SalesSummary() {
   const [bu, setBu] = useState("ALL");
   const [channel, setChannel] = useState("ALL");
   const [province, setProvince] = useState("ALL");
-  const [buOptions, setBuOptions] = useState<any[]>([]);
-  const [provinceOptions, setProvinceOptions] = useState<any[]>([]);
+  const [buOptions, setBuOptions] = useState<SelectOption[]>([]);
+  const [provinceOptions, setProvinceOptions] = useState<SelectOption[]>([]);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<SummaryData | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ overall: true, area: true, collection: false });
 
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
   useEffect(() => {
     Promise.all([api.get("/bu"), api.get("/provinces")]).then(([b, p]) => {
-      setBuOptions((b.data?.data || []).map((r: any) => ({ v: r.code || r.bu_code || r.id, l: r.name_1 || r.name || r.code })));
-      setProvinceOptions((p.data?.data || []).map((r: any) => ({ v: r.code || r.id, l: r.name_1 || r.name })));
+      setBuOptions((b.data?.data || []).map((r: Record<string, unknown>) => ({ v: String(r.code || r.bu_code || r.id), l: String(r.name_1 || r.name || r.code) })));
+      setProvinceOptions((p.data?.data || []).map((r: Record<string, unknown>) => ({ v: String(r.code || r.id), l: String(r.name_1 || r.name) })));
     }).catch(() => {});
   }, []);
 
@@ -70,20 +83,20 @@ export default function SalesSummary() {
     if (!data?.meta || !data?.overall?.total) return null;
     const tot = data.overall.total;
     return {
-      daysLeft: data.meta.working_days_left ?? 0,
-      target: tot.target || 0,
-      actual: tot.actual || 0,
-      ach: tot.ach_pct || 0,
-      dailyReq: tot.daily_remind || 0,
-      ytdTarget: tot.ytd_target || 0,
-      ytdActual: tot.ytd_actual || 0,
-      ytdAch: tot.ytd_ach_pct || 0,
+      daysLeft: num(data.meta.working_days_left),
+      target: num(tot.target),
+      actual: num(tot.actual),
+      ach: num(tot.ach_pct),
+      dailyReq: num(tot.daily_remind),
+      ytdTarget: num(tot.ytd_target),
+      ytdActual: num(tot.ytd_actual),
+      ytdAch: num(tot.ytd_ach_pct),
     };
   }, [data]);
 
   // Chart data from area rows
   const areaChart = useMemo(() => {
-    return (data?.by_area?.rows || []).map((r: any) => ({
+    return (data?.by_area?.rows || []).map((r: SummaryRow) => ({
       name: displayLabel(r.label)?.length > 12 ? displayLabel(r.label).slice(0, 12) + "…" : displayLabel(r.label),
       target: num(r.target),
       actual: num(r.actual),
@@ -252,7 +265,7 @@ export default function SalesSummary() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {(tableData.rows || []).map((row: any, idx: number) => {
+                          {(tableData.rows || []).map((row: SummaryRow, idx: number) => {
                             const achPct = num(row.ach_pct);
                             return (
                               <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -266,7 +279,7 @@ export default function SalesSummary() {
                                     "bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400"
                                   }`}>{pct(achPct)}</span>
                                 </td>
-                                <td className="px-3 py-2.5 text-center tabular-nums text-slate-500">{row.working_days_left}</td>
+                                <td className="px-3 py-2.5 text-center tabular-nums text-slate-500">{num(row.working_days_left)}</td>
                                 <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${num(row.daily_remind) > 0 ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"}`}>{fmt(row.daily_remind)}</td>
                                 <td className="px-3 py-2.5 text-right tabular-nums text-slate-400">{fmt(row.ytd_target)}</td>
                                 <td className="px-3 py-2.5 text-right tabular-nums text-slate-400">{fmt(row.ytd_actual)}</td>
@@ -287,7 +300,7 @@ export default function SalesSummary() {
                                   "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
                                 }`}>{pct(tableData.total.ach_pct)}</span>
                               </td>
-                              <td className="px-3 py-3 text-center tabular-nums">{tableData.total.working_days_left}</td>
+                              <td className="px-3 py-3 text-center tabular-nums">{num(tableData.total.working_days_left)}</td>
                               <td className={`px-3 py-3 text-right tabular-nums ${num(tableData.total.daily_remind) > 0 ? "text-blue-600" : "text-emerald-600"}`}>{fmt(tableData.total.daily_remind)}</td>
                               <td className="px-3 py-3 text-right tabular-nums text-slate-500">{fmt(tableData.total.ytd_target)}</td>
                               <td className="px-3 py-3 text-right tabular-nums text-slate-500">{fmt(tableData.total.ytd_actual)}</td>
