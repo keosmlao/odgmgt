@@ -11,9 +11,13 @@ import {
   CalendarRange,
   Award,
   BadgePercent,
+  ChevronDown,
+  FileCheck2,
+  PackageCheck,
   Settings,
   Settings2,
   ShieldCheck,
+  ShoppingCart,
   LogOut,
   Users,
   Table,
@@ -56,6 +60,14 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    key: "sidebar.groupApproval",
+    items: [
+      { path: "/approvals/product-name", i18nKey: "sidebar.approveProductName", icon: <PackageCheck size={17} /> },
+      { path: "/approvals/pr", i18nKey: "sidebar.approvePr", icon: <FileCheck2 size={17} /> },
+      { path: "/approvals/po", i18nKey: "sidebar.approvePo", icon: <ShoppingCart size={17} /> },
+    ],
+  },
+  {
     key: "sidebar.groupSystem",
     items: [
       { path: "/incentive-config", i18nKey: "sidebar.incentiveCfg", icon: <Settings2 size={17} /> },
@@ -65,6 +77,9 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
 ];
+
+const isPathActive = (pathname: string, path: string) =>
+  pathname === path || pathname.startsWith(`${path}/`);
 
 const initials = (name: string) =>
   name
@@ -81,9 +96,18 @@ export default function Sidebar() {
   const { isDark, toggleTheme } = useTheme() as { isDark: boolean; toggleTheme: () => void };
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  /** Sections the user folded away — every group starts open. */
+  const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
     setMobileOpen(false);
+  }, [pathname]);
+
+  /** Never leave the section holding the current page folded. */
+  React.useEffect(() => {
+    const active = MENU_GROUPS.find((group) => group.items.some((item) => isPathActive(pathname, item.path)));
+    if (!active) return;
+    setCollapsed((prev) => (prev[active.key] ? { ...prev, [active.key]: false } : prev));
   }, [pathname]);
 
   const displayName = user?.full_name || user?.username || "User";
@@ -147,14 +171,25 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-2.5 py-3">
-          {MENU_GROUPS.map((group) => (
+          {MENU_GROUPS.map((group) => {
+            const isOpen = !collapsed[group.key];
+            return (
             <div key={group.key} className="mb-3 last:mb-0">
-              <p className="mb-1 px-2.5 text-[9.5px] font-bold uppercase tracking-[0.18em] text-white/35">
-                {t(group.key)}
-              </p>
-              <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => setCollapsed((prev) => ({ ...prev, [group.key]: !prev[group.key] }))}
+                aria-expanded={isOpen}
+                className="mb-1 flex w-full items-center justify-between gap-2 rounded-[var(--r-xs)] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.18em] text-white/35 transition-colors hover:text-white/60"
+              >
+                <span className="truncate">{t(group.key)}</span>
+                <ChevronDown
+                  size={13}
+                  className={`shrink-0 transition-transform ${isOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+              <div className={`space-y-0.5 ${isOpen ? "" : "hidden"}`}>
                 {group.items.map((item) => {
-                  const isActive = pathname === item.path || pathname.startsWith(`${item.path}/`);
+                  const isActive = isPathActive(pathname, item.path);
                   return (
                     <Link
                       key={item.path}
@@ -174,7 +209,8 @@ export default function Sidebar() {
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Preferences */}
