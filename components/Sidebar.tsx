@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   ShoppingCart,
   Users,
+  Store,
   Table,
   Timer,
   MapPin,
@@ -92,6 +93,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/target", i18nKey: "sidebar.target", icon: <Target size={17} /> },
       { path: "/sales-assignment", i18nKey: "sidebar.assignment", icon: <Users size={17} /> },
+      { path: "/shop-map", i18nKey: "sidebar.shopMap", icon: <Store size={17} /> },
     ],
   },
   {
