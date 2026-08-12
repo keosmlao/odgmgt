@@ -186,20 +186,6 @@ export default function ReceivablesPage() {
                         <span className="muted ml-1.5 text-[10px]">{row.department_name}</span>
                       </td>
                       <td className="num text-right">{fmtNum(row.customers)}</td>
-                      <td>
-                    {row.purchases_after === 0 ? (
-                      <span className="muted text-[11px]">—</span>
-                    ) : row.settled_after > 0 ? (
-                      <span className="whitespace-nowrap">
-                        <Pill tone="pos">{fmtNum(row.settled_after)}</Pill>
-                        {row.unpaid_after > 0 && (
-                          <span className="muted ml-1.5 text-[10px]">{t("ar.stillOwing")} {fmtNum(row.unpaid_after)}</span>
-                        )}
-                      </span>
-                    ) : (
-                      <Pill tone="neg">{t("ar.neverPaid")}</Pill>
-                    )}
-                  </td>
                   <td className="num text-right font-semibold">{fmtNum(row.balance)}</td>
                       <td className="text-right">
                         <Pill tone={row.overdue > 0 ? overdueTone(row.max_overdue_days) : "muted"}>{fmtNum(row.overdue)}</Pill>
@@ -286,6 +272,20 @@ export default function ReceivablesPage() {
                       <Pill tone="neg">{t("ar.neverPaid")}</Pill>
                     )}
                   </td>
+                  <td>
+                    {row.purchases_after === 0 ? (
+                      <span className="muted text-[11px]">—</span>
+                    ) : row.settled_after > 0 ? (
+                      <span className="whitespace-nowrap">
+                        <Pill tone="pos">{fmtNum(row.settled_after)}</Pill>
+                        {row.unpaid_after > 0 && (
+                          <span className="muted ml-1.5 text-[10px]">{t("ar.stillOwing")} {fmtNum(row.unpaid_after)}</span>
+                        )}
+                      </span>
+                    ) : (
+                      <Pill tone="neg">{t("ar.neverPaid")}</Pill>
+                    )}
+                  </td>
                   <td className="num text-right font-semibold">{fmtNum(row.balance)}</td>
                 </tr>
               ))}
@@ -313,20 +313,6 @@ export default function ReceivablesPage() {
                   <td className="num text-right">{fmtNum(row.bills)}</td>
                   <td className="text-right">
                     <Pill tone={overdueTone(row.max_overdue_days)}>{fmtNum(row.max_overdue_days)}</Pill>
-                  </td>
-                  <td>
-                    {row.purchases_after === 0 ? (
-                      <span className="muted text-[11px]">—</span>
-                    ) : row.settled_after > 0 ? (
-                      <span className="whitespace-nowrap">
-                        <Pill tone="pos">{fmtNum(row.settled_after)}</Pill>
-                        {row.unpaid_after > 0 && (
-                          <span className="muted ml-1.5 text-[10px]">{t("ar.stillOwing")} {fmtNum(row.unpaid_after)}</span>
-                        )}
-                      </span>
-                    ) : (
-                      <Pill tone="neg">{t("ar.neverPaid")}</Pill>
-                    )}
                   </td>
                   <td className="num text-right font-semibold">{fmtNum(row.balance)}</td>
                 </tr>
