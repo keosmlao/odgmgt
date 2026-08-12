@@ -29,7 +29,7 @@ type Data = {
   topDebtors: { ar_code: string; name: string; sale_name: string; balance: number; bills: number; max_overdue_days: number }[];
   bySalesperson: { sale_name: string; department_name: string; bills: number; customers: number; balance: number; overdue: number; max_overdue_days: number }[];
   byBranch: { branch: string; bills: number; balance: number; overdue: number }[];
-  byBu: { bu_code: string; bills: number; balance: number; overdue: number }[];
+  byBu: { bu_code: string; bu_name: string; bills: number; balance: number; overdue: number }[];
   worstBills: {
     doc_no: string; ar_code: string; name: string; doc_date: string; due_date: string;
     sale_name: string; balance: number; overdue_days: number;
@@ -163,7 +163,7 @@ export default function ReceivablesPage() {
                 <Rank
                   key={row.bu_code}
                   index={index}
-                  label={`${row.bu_code} · ${fmtNum(row.bills)} ${t("approve.pn.items")}`}
+                  label={`${row.bu_name} · ${fmtNum(row.bills)} ${t("approve.pn.items")}`}
                   value={fmtNum(row.balance)}
                   pct={row.balance > 0 ? (row.overdue / row.balance) * 100 : 0}
                 />
