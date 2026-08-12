@@ -372,3 +372,10 @@ body {
   .tab.is-active { background: var(--brand-deep); color: #fff; }
   .tab.is-active:hover { background: var(--brand); color: #fff; }
 }
+details[open] > summary .details-chevron {
+  transform: rotate(90deg);
+}
+
+.details-chevron {
+  transition: transform 0.15s ease;
+}

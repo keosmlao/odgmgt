@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { currency, readSessionCache, writeSessionCache } from "@/hooks/useDashboard";
 import { useLanguage } from "@/context/LanguageContext";
+import { fmtDate } from "@/components/ui";
 
 const C = { blue: "#2b70b5", emerald: "#17876d", amber: "#f5911f", rose: "#d0453f", violet: "#003361", slate: "#8ba6bd" };
 const TTL = 300_000;
@@ -28,7 +29,7 @@ const pctTxt = (v: any) => `${Number(v || 0).toFixed(1)}%`;
 const dateTxt = (v: any) => {
   if (!v) return "-";
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("en-GB");
+  return Number.isNaN(d.getTime()) ? "-" : fmtDate(d);
 };
 
 function Tip({ active, payload, label }: any) {

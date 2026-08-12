@@ -10,7 +10,9 @@ import {
   BarChart2,
   CalendarRange,
   Award,
+  BadgePercent,
   Settings,
+  Settings2,
   ShieldCheck,
   LogOut,
   Users,
@@ -56,6 +58,8 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: "sidebar.groupSystem",
     items: [
+      { path: "/incentive-config", i18nKey: "sidebar.incentiveCfg", icon: <Settings2 size={17} /> },
+      { path: "/commission", i18nKey: "sidebar.commission", icon: <BadgePercent size={17} /> },
       { path: "/access", i18nKey: "sidebar.access", icon: <ShieldCheck size={17} /> },
       { path: "/settings", i18nKey: "sidebar.settings", icon: <Settings size={17} /> },
     ],

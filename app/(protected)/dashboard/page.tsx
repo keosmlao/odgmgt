@@ -14,6 +14,7 @@ import {
 import { useDashboard, currency, readSessionCache, writeSessionCache } from "@/hooks/useDashboard";
 import { useTheme } from "@/context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { fmtDayMonth } from "@/components/ui";
 
 /* ── Chart colors ── */
 const C = { blue: "#2b70b5", emerald: "#17876d", amber: "#f5911f", rose: "#d0453f", violet: "#003361", cyan: "#4ac7f0", slate: "#8ba6bd" };
@@ -955,7 +956,7 @@ export default function Dashboard() {
             <ChartFrame className="h-48">
               <BarChart data={exec.dailyTrend} barSize={14}>
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: string) => { const dt = new Date(v); return `${dt.getDate()}/${dt.getMonth()+1}`; }} />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: string) => fmtDayMonth(v)} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
                 <Tooltip {...CHART_NO_ANIM} content={<Tip />} /><Bar {...CHART_NO_ANIM} dataKey="amount" name={t("label.actual")} fill={C.blue} radius={[3, 3, 0, 0]} />
               </BarChart>
@@ -1906,7 +1907,7 @@ export default function Dashboard() {
               <ChartFrame className="h-48">
                 <BarChart data={exec.dailyTrend} barSize={14}>
                   <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: string) => { const dt = new Date(v); return `${dt.getDate()}/${dt.getMonth()+1}`; }} />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: string) => fmtDayMonth(v)} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v: number) => compact(v)} />
                   <Tooltip {...CHART_NO_ANIM} content={<Tip />} /><Bar {...CHART_NO_ANIM} dataKey="amount" name={t("label.actual")} fill={C.blue} radius={[3, 3, 0, 0]} />
                 </BarChart>

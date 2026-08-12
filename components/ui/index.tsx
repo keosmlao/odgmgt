@@ -25,6 +25,23 @@ export const fmtNum = (value: unknown) =>
 
 export const fmtPct = (value: unknown, digits = 1) => `${Number(value || 0).toFixed(digits)}%`;
 
+/** The app's one date format: dd-MM-yyyy. Accepts Date, ISO string or epoch. */
+export const fmtDate = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "-";
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
+};
+
+/** Short day-month for chart axes: dd-MM. */
+export const fmtDayMonth = (value: unknown) => {
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value ?? "");
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}`;
+};
+
 /* ── Page frame ───────────────────────────────────────────── */
 
 export function PageHeader({
