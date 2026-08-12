@@ -29,6 +29,7 @@ type Data = {
   bySalesperson: { sale_name: string; department_name: string; bills: number; customers: number; balance: number; overdue: number; max_overdue_days: number }[];
   byBranch: { branch: string; bills: number; balance: number; overdue: number }[];
   byBu: { bu_code: string; bu_name: string; bills: number; balance: number; overdue: number }[];
+  byYear: { year: number; bills: number; customers: number; balance: number; overdue: number }[];
   worstBills: {
     doc_no: string; ar_code: string; name: string; doc_date: string; due_date: string;
     sale_name: string; balance: number; overdue_days: number;
@@ -156,6 +157,37 @@ export default function ReceivablesPage() {
               icon={<Users size={14} />}
             />
           </div>
+
+          <Card title={t("ar.byYear")} action={<span className="muted text-[11px]">{t("ar.byYearHint")}</span>} flush>
+            <Table
+              minWidth={560}
+              heads={[
+                t("filter.year"),
+                <span key="b" className="block text-right">{t("approve.pn.items")}</span>,
+                <span key="c" className="block text-right">{t("ar.customers")}</span>,
+                <span key="v" className="block text-right">{t("ar.balance")}</span>,
+                <span key="s" className="block text-right">{t("ar.shareOfBook")}</span>,
+                <span key="o" className="block text-right">{t("ar.overdue")}</span>,
+              ]}
+            >
+              {(data?.byYear || []).map((row) => {
+                const share = summary.total_balance > 0 ? (row.balance / summary.total_balance) * 100 : 0;
+                const overduePct = row.balance > 0 ? (row.overdue / row.balance) * 100 : 0;
+                return (
+                  <tr key={row.year}>
+                    <td className="num font-semibold">{row.year}</td>
+                    <td className="num text-right">{fmtNum(row.bills)}</td>
+                    <td className="num text-right">{fmtNum(row.customers)}</td>
+                    <td className="num text-right font-semibold">{fmtNum(row.balance)}</td>
+                    <td className="num text-right">{fmtPct(share, 1)}</td>
+                    <td className="text-right">
+                      <Pill tone={overduePct >= 75 ? "neg" : overduePct >= 40 ? "warn" : "pos"}>{fmtPct(overduePct, 0)}</Pill>
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
+          </Card>
 
           <Card title={t("ar.aging")}>
             <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:grid-cols-7">
