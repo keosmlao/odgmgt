@@ -2,9 +2,12 @@
 "use client";
 
 import { useState, useEffect, useRef, cloneElement, isValidElement } from "react";
+import Link from "next/link";
 import {
   Loader2, AlertCircle, RefreshCw, Sun, Moon, Filter,
-  Clock, Zap, AlertTriangle, TrendingUp,
+  Clock, Zap, AlertTriangle, TrendingUp, RotateCcw, X, ArrowUpRight, ClipboardCheck,
+  Target, BarChart3, ChevronRight, LayoutDashboard, DollarSign, Database, Shield,
+  Printer, Bell, Monitor, Sparkles, Download,
 } from "lucide-react";
 import api from "@/service/api";
 import {
@@ -14,7 +17,8 @@ import {
 import { useDashboard, currency, readSessionCache, writeSessionCache } from "@/hooks/useDashboard";
 import { useTheme } from "@/context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { fmtDayMonth } from "@/components/ui";
+import { fmtDate, fmtDayMonth } from "@/components/ui";
+import { downloadCsv } from "@/lib/csv";
 
 /* ── Chart colors ── */
 const C = { blue: "#2b70b5", emerald: "#17876d", amber: "#f5911f", rose: "#d0453f", violet: "#003361", cyan: "#4ac7f0", slate: "#8ba6bd" };
@@ -189,9 +193,15 @@ export default function Dashboard() {
   const [showFilter, setShowFilter] = useState(false);
   const [tab, setTab] = useState<"overview" | "lastMonth" | "thisMonth">("overview");
   const [exec, setExec] = useState<any>(null);
+  const [execFailed, setExecFailed] = useState(false);
   const [analytics, setAnalytics] = useState<any>(null);
   const [managerInsights, setManagerInsights] = useState<any>(null);
   const [ownerInsights, setOwnerInsights] = useState<any>(null);
+  const [approvalSummary, setApprovalSummary] = useState<any>(null);
+  const [buTargets, setBuTargets] = useState<any>(null);
+  const [dataSync, setDataSync] = useState<any>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [tvMode, setTvMode] = useState(false);
   const [thisMonthSnapshot, setThisMonthSnapshot] = useState<any>(null);
   const [lastMonthSnapshot, setLastMonthSnapshot] = useState<any>(null);
   const overviewKeyRef = useRef("");
@@ -199,6 +209,58 @@ export default function Dashboard() {
   const thisMonthSnapshotKeyRef = useRef("");
   const lastMonthSnapshotKeyRef = useRef("");
   const font = { fontFamily: '"Noto Sans Lao","Noto Sans",system-ui,sans-serif' };
+  const activeFilters = [
+    d.bu !== "ALL" ? { key: "bu", label: `${t("filter.bu")}: ${d.buNameMap?.[d.bu] || d.bu}`, clear: () => d.setBu("ALL") } : null,
+    !d.channel.includes("ALL") ? { key: "channel", label: `${t("filter.channel")}: ${d.channel.join(", ")}`, clear: () => d.setChannel(["ALL"]) } : null,
+    !d.province.includes("ALL") ? { key: "province", label: `${t("filter.province")}: ${d.province.join(", ")}`, clear: () => d.setProvince(["ALL"]) } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/dashboard/approval-summary")
+      .then((response) => {
+        if (!cancelled && response.data?.success) setApprovalSummary(response.data);
+      })
+      .catch(() => {
+        if (!cancelled) setApprovalSummary({ failed: true });
+      });
+    api.get("/targets-by-bu", { params: { year: d.year } })
+      .then((response) => {
+        if (!cancelled && response.data?.success) setBuTargets(response.data.data);
+      })
+      .catch(() => {});
+    api.get("/system/data-sync")
+      .then((response) => {
+        if (!cancelled && response.data?.success) setDataSync(response.data.data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [d.year]);
+
+  /* Auto-refresh every 5 minutes (for TV / meeting screens) */
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(() => d.load(), 5 * 60 * 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh]);
+
+  /* Presentation / TV mode: hide chrome, zoom up, go fullscreen. ESC exits. */
+  useEffect(() => {
+    document.body.classList.toggle("tv-mode", tvMode);
+    if (tvMode) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  }, [tvMode]);
+
+  useEffect(() => {
+    if (!tvMode) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setTvMode(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tvMode]);
 
   useEffect(() => {
     if (d.year) {
@@ -237,6 +299,12 @@ export default function Dashboard() {
         if (execResult.status === "fulfilled") {
           setExec(execResult.value.data);
           nextCache.exec = execResult.value.data;
+          setExecFailed(false);
+        } else {
+          // Without this the tiles that wait on /executive keep a skeleton for
+          // ever. Let the next filter change retry rather than pretend.
+          setExecFailed(true);
+          overviewKeyRef.current = "";
         }
         if (analyticsResult.status === "fulfilled") {
           setAnalytics(analyticsResult.value.data);
@@ -398,7 +466,7 @@ export default function Dashboard() {
     <div style={font} className="flex min-h-screen items-center justify-center bg-[var(--surface-2)] p-4">
       <div className="w-full max-w-sm rounded-[var(--r-md)] border bg-[var(--surface)] p-6 text-center shadow">
         <AlertCircle className="mx-auto mb-3 h-8 w-8 text-[var(--neg)]" /><p className="font-semibold text-[var(--ink)]">{t("app.error")}</p><p className="mt-1 text-sm text-[var(--muted)]">{error}</p>
-        <button onClick={() => window.location.reload()} className="mt-4 w-full rounded-lg bg-[var(--brand-deep)] px-4 py-2 text-sm font-medium text-white hover:brightness-110 dark:bg-[var(--info-bg)]0">{t("app.retry")}</button>
+        <button onClick={() => window.location.reload()} className="mt-4 w-full rounded-lg bg-[var(--brand-deep)] px-4 py-2 text-sm font-medium text-white hover:brightness-110">{t("app.retry")}</button>
       </div>
     </div>
   );
@@ -463,8 +531,124 @@ export default function Dashboard() {
   const thisMonthAch = Number(data?.thisMonthAch || 0);
   const lastMonthAch = Number(data?.lastMonthAch || 0);
   const yoy = Number(data?.yoy || 0);
+  /** Positive = short of the full-year plan, negative = forecast beats it. */
+  const eoyGap = Number(data?.eoyGap || 0);
+  /** Years with no rows in odg_sales_target cannot be judged against a plan. */
+  const hasYtdTarget = Number(kpi.ytd_target || 0) > 0;
+  const forecastAch = hasYtdTarget ? (Number(data?.forecastEOY || 0) / Number(kpi.ytd_target)) * 100 : 0;
+  const gpPct = Number(exec?.grossProfit?.gpPct || 0);
+  const collectionRate = Number(exec?.collection?.rate || 0);
+  const momGrowthPct = Number(analytics?.momGrowth?.growthPct || 0);
+  const top10Pct = Number(analytics?.concentration?.top10Pct || 0);
+  const retentionRate = Number(analytics?.churn?.retentionRate || 0);
+  /** Direction badge for a change that is already a percentage. */
+  const trendBadge = (change: number) =>
+    ({ text: t(change >= 0 ? "kpi.up" : "kpi.down"), tone: change >= 0 ? ("pos" as const) : ("neg" as const) });
+  /** Pass/watch badge for a figure judged against a threshold, not a target. */
+  const thresholdBadge = (ok: boolean) =>
+    ({ text: t(ok ? "kpi.good" : "kpi.watch"), tone: ok ? ("pos" as const) : ("warn" as const) });
+  /** Cash as a share of the month's collected value — a real 0-100 figure. */
+  const cashShare = (cash: unknown, credit: unknown) => {
+    const total = Number(cash || 0) + Number(credit || 0);
+    return total > 0 ? (Number(cash || 0) / total) * 100 : 0;
+  };
+
+  /**
+   * The figures behind the overview as one long-format sheet — section, label,
+   * value — so the same file works whatever mix of tables is on screen.
+   */
+  const exportCsv = () => {
+    const rows: (string | number)[][] = [];
+    const push = (section: string, label: string, value: string | number) => rows.push([section, label, value]);
+
+    const kpiSection = t("dash.csvKpi");
+    push(kpiSection, t("kpi.ytd"), Math.round(Number(kpi.ytd_actual || 0)));
+    push(kpiSection, t("kpi.target"), Math.round(Number(kpi.ytd_target || 0)));
+    push(kpiSection, t("dash.achievement"), ytdAch.toFixed(1));
+    push(kpiSection, t("kpi.lastYear"), Math.round(Number(kpi.ytd_last_year || 0)));
+    push(kpiSection, "YoY %", yoy.toFixed(1));
+    push(kpiSection, "Forecast EOY", Math.round(Number(data?.forecastEOY || 0)));
+    push(kpiSection, "GP %", gpPct.toFixed(1));
+    push(kpiSection, t("kpi.collection"), collectionRate.toFixed(1));
+    push(kpiSection, t("kpi.thisMonth"), Math.round(Number(kpi.this_month_actual || 0)));
+    push(kpiSection, t("momentum.cash"), Math.round(cashVal));
+    push(kpiSection, t("momentum.credit"), Math.round(creditVal));
+
+    const trendSection = t("section.revenueTrend");
+    for (const row of trend as any[]) {
+      push(trendSection, `${row.name} ${t("label.actual")}`, Math.round(Number(row.actual || 0)));
+      push(trendSection, `${row.name} ${t("kpi.target")}`, Math.round(Number(row.target || 0)));
+      push(trendSection, `${row.name} ${t("kpi.lastYear")}`, Math.round(Number(row.lastYear || 0)));
+    }
+
+    const matrixSection = t("dash.revenueMatrix");
+    pivot.forEach((channels: Map<string, number>, buCode: string) => {
+      channels.forEach((amount: number, channelCode: string) =>
+        push(matrixSection, `${buCode} × ${channelCode}`, Math.round(Number(amount || 0))),
+      );
+    });
+
+    downloadCsv(
+      `dashboard-${d.year}`,
+      [t("dash.csvSection"), t("dash.csvLabel"), `${t("dash.csvValue")} (THB)`],
+      rows,
+    );
+  };
   const monthGap = Number(data?.gapThisMonth || 0);
   const onTrack = monthGap <= 0;
+
+  /* ══ Executive alert center — aggregated "needs attention" items ══ */
+  const overdueAr = (arAging.buckets || []).reduce(
+    (s: number, b: any) => s + (String(b.overdue_group || "").trim().toLowerCase() === "ondue" ? 0 : Number(b.balance || 0)),
+    0,
+  );
+  const execAlerts: Array<{ level: "high" | "warn"; icon: any; title: string; detail: string; to?: string }> = [];
+  if (monthGap > 0 && Number(data?.daysLeft || 0) > 0) {
+    execAlerts.push({
+      level: "high", icon: Target,
+      title: `${t("dash.monthGap")} ${fmt(monthGap)}`,
+      detail: `${t("dash.requiredPerDay")} ${fmt(data?.requiredPerDay)} ${t("dash.perDay")} • ${data?.daysLeft} ${t("momentum.daysLeft")}`,
+      to: "sec-target",
+    });
+  }
+  if (overdueAr > 0) {
+    execAlerts.push({
+      level: overdueAr >= Number(arAging.total || 0) * 0.4 ? "high" : "warn", icon: AlertTriangle,
+      title: `${t("dash.arOverdue")} ${fmt(overdueAr)}`,
+      detail: `${t("dash.arAging")}: ${fmt(arAging.total)}`,
+      to: "sec-finance",
+    });
+  }
+  if (Number(approvalSummary?.totalPending || 0) > 0) {
+    execAlerts.push({
+      level: Number(approvalSummary?.totalOverdue || 0) > 0 ? "high" : "warn", icon: ClipboardCheck,
+      title: `${t("dash.pendingDocs")}: ${approvalSummary?.totalPending}`,
+      detail: `${t("dash.overdueSla")} ${approvalSummary?.totalOverdue ?? 0}`,
+      to: "/approvals/po",
+    });
+  }
+  if ((stock.low_stock || []).length > 0) {
+    execAlerts.push({
+      level: "warn", icon: Database,
+      title: `${t("dash.lowStock")}: ${(stock.low_stock || []).length}`,
+      detail: (stock.low_stock || []).slice(0, 2).map((s: any) => s.item_name).join(", "),
+      to: "sec-finance",
+    });
+  }
+
+  /* ══ One-line executive summary built from the live KPI numbers ══ */
+  const topBu = (buProfit || []).slice().sort((a: any, b: any) => Number(b.revenue || 0) - Number(a.revenue || 0))[0];
+  const secNav = [
+    { id: "sec-kpi", label: t("dash.navKpi") },
+    { id: "sec-target", label: t("dash.navTarget") },
+    { id: "sec-trend", label: t("dash.navTrend") },
+    { id: "sec-products", label: t("dash.navProducts") },
+    { id: "sec-team", label: t("dash.navTeam") },
+    { id: "sec-finance", label: t("dash.navFinance") },
+    { id: "sec-insights", label: t("dash.navInsights") },
+    { id: "sec-health", label: t("dash.navHealth") },
+  ];
+  const sync = dataSync;
   const cashVal = Number(payment.cash || 0);
   const creditVal = Number(payment.credit || 0);
   const provinces = (structure.province || []).slice().sort((a: any, b: any) => b.actual - a.actual).slice(0, 8);
@@ -782,7 +966,7 @@ export default function Dashboard() {
               <div key={i}>
                 <div className="flex justify-between text-xs"><span className={tw.sub}>{b.overdue_group}</span><span className={`font-semibold tabular-nums ${tw.head}`}>{fmt(b.balance)}</span></div>
                 <div className="mt-0.5 h-1.5 w-full rounded-full bg-[var(--surface-2)]">
-                  <div className={`h-full rounded-full transition-all duration-500 ${i < 2 ? "bg-[var(--pos-bg)]0" : i < 4 ? "bg-[var(--warn-bg)]0" : "bg-[var(--neg-bg)]0"}`} style={{ width: `${(Number(b.balance || 0) / maxB) * 100}%` }} />
+                  <div className={`h-full rounded-full transition-all duration-500 ${i < 2 ? "bg-[var(--pos)]" : i < 4 ? "bg-[var(--warn)]" : "bg-[var(--neg)]"}`} style={{ width: `${(Number(b.balance || 0) / maxB) * 100}%` }} />
                 </div>
               </div>
             );
@@ -816,16 +1000,33 @@ export default function Dashboard() {
           <div>
             <p className="eyebrow">Executive overview</p>
             <h1 className="page-title">{t("app.title")}</h1>
-            <p className="page-sub">{t("app.subtitle")} — FY {d.year}</p>
+            <p className="page-sub">
+              {t("app.subtitle")} — FY {d.year} · {t("dash.currencyUnit")}
+              {d.updatedAt && <> · {t("dash.updatedAt")} {d.updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>}
+            </p>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 print:hidden">
             <button onClick={() => setShowFilter(!showFilter)} className={`btn ${showFilter ? "btn-primary" : ""}`}><Filter size={13} /> {t("app.filters")}</button>
+            <button onClick={() => setAutoRefresh(!autoRefresh)} title={t("dash.autoRefresh")} className={`btn btn-ghost btn-icon ${autoRefresh ? "!bg-[var(--info-bg)] !text-[var(--brand)]" : ""}`}><Zap size={14} /></button>
+            <button onClick={exportCsv} title={t("dash.exportCsv")} className="btn btn-ghost btn-icon"><Download size={14} /></button>
+            <button onClick={() => window.print()} title={t("dash.printReport")} className="btn btn-ghost btn-icon"><Printer size={14} /></button>
+            <button onClick={() => setTvMode(!tvMode)} title={t("dash.tvMode")} className={`btn btn-ghost btn-icon ${tvMode ? "!bg-[var(--info-bg)] !text-[var(--brand)]" : ""}`}><Monitor size={14} /></button>
             <button onClick={() => d.load()} className="btn btn-ghost btn-icon"><RefreshCw size={14} className={d.loading || d.refreshing ? "animate-spin" : ""} /></button>
             <button onClick={toggleTheme} className="btn btn-ghost btn-icon">{isDark ? <Sun size={14} /> : <Moon size={14} />}</button>
           </div>
         </div>
+        {tvMode && (
+          <button onClick={() => setTvMode(false)} className="tv-keep fixed bottom-5 right-5 z-[60] inline-flex items-center gap-2 rounded-full bg-[var(--brand-deep)] px-4 py-2.5 text-xs font-semibold text-white shadow-xl print:hidden">
+            <X size={14} /> {t("dash.exitTv")}
+          </button>
+        )}
         {showFilter && (
-          <div className="grid grid-cols-2 gap-2.5 border-t border-[var(--line-soft)] px-4 py-2.5 lg:grid-cols-4 lg:px-6">
+          <div className="border-t border-[var(--line-soft)] px-4 py-2.5 lg:px-6">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold text-[var(--ink)]">{t("app.filters")}</p>
+              <button type="button" onClick={d.resetFilters} className="btn btn-ghost !px-2 !py-1 text-[10px]"><RotateCcw size={11} />{t("dash.resetFilters")}</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
             {[
               { l: t("filter.year"), v: d.year, fn: (v: string) => d.setYear(v), opts: d.yearOptions.map((y: any) => ({ v: y, l: y })), noAll: true },
               { l: t("filter.bu"), v: d.bu, fn: (v: string) => d.setBu(v), opts: d.buOptions.map((o: any) => ({ v: o.value, l: o.label })) },
@@ -838,6 +1039,17 @@ export default function Dashboard() {
                   {f.opts.map((o: any) => <option key={o.v} value={o.v}>{o.l}</option>)}
                 </select>
               </div>
+            ))}
+            </div>
+          </div>
+        )}
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--line-soft)] px-4 py-2 lg:px-6">
+            <span className="text-[10px] font-semibold text-[var(--muted)]">{t("dash.activeFilters")}</span>
+            {activeFilters.map((filter) => (
+              <button key={filter.key} type="button" onClick={filter.clear} className="pill hover:opacity-75">
+                {filter.label}<X size={10} />
+              </button>
             ))}
           </div>
         )}
@@ -870,16 +1082,259 @@ export default function Dashboard() {
         {tab === "overview" && (<>
 
         {/* ═══════════════════════════════════════════════════════════
+            SECTION 0: EXECUTIVE SUMMARY (one-line status)
+        ═══════════════════════════════════════════════════════════ */}
+        <div className="rounded-[var(--r-lg)] border border-[var(--brand-soft)] bg-[var(--brand-soft)]/40 px-4 py-3">
+          <p className={`text-[13px] leading-relaxed ${tw.head}`}>
+            <Sparkles size={14} className="mr-1.5 inline-block -translate-y-px text-[var(--brand)]" />
+            <strong>{fmt(kpi.ytd_actual)}</strong> {t("dash.summaryAch")} <strong>{ytdAch.toFixed(1)}%</strong> {t("dash.summaryOfTarget")}
+            {" • "}
+            {monthGap > 0 ? (
+              <>{t("dash.summaryRemain")} <strong className="text-[var(--neg)]">{fmt(monthGap)}</strong> {t("dash.summaryInDays")} <strong>{data?.daysLeft || 0}</strong> {t("momentum.daysLeft")}</>
+            ) : (
+              <strong className="text-[var(--pos)]">{t("momentum.onTrack")}</strong>
+            )}
+            {topBu && <>{" • "}{t("dash.summaryTopBu")}: <strong>{d.buNameMap?.[String(topBu.bu)] || topBu.bu}</strong> ({compact(topBu.revenue)})</>}
+            {exec?.grossProfit?.profit != null && <>{" • "}{t("kpi.profit")} <strong>{fmt(exec.grossProfit.profit)}</strong> ({gpPct.toFixed(1)}%)</>}
+          </p>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
+            SECTION 0A: EXECUTIVE ALERT CENTER
+        ═══════════════════════════════════════════════════════════ */}
+        {execAlerts.length > 0 && (<>
+          <div className="flex items-center gap-2">
+            <Bell size={14} className="text-[var(--accent)]" />
+            <h2 className="text-[15px] font-bold tracking-tight text-[var(--ink)]">{t("dash.alertCenter")}</h2>
+          </div>
+          <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+            {execAlerts.map((al, i) => {
+              const cls = `flex w-full items-start gap-3 rounded-[var(--r-md)] border px-3.5 py-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${al.level === "high" ? "border-[var(--neg)]/30 bg-[var(--neg-bg)]" : "border-[var(--warn)]/30 bg-[var(--warn-bg)]"}`;
+              const inner = (<>
+                <al.icon size={16} className={`mt-0.5 shrink-0 ${al.level === "high" ? "text-[var(--neg)]" : "text-[var(--warn)]"}`} />
+                <div className="min-w-0">
+                  <p className={`text-xs font-bold ${al.level === "high" ? "text-[var(--neg)]" : "text-[var(--warn)]"}`}>{al.title}</p>
+                  <p className={`mt-0.5 truncate text-[11px] leading-snug ${tw.sub}`}>{al.detail}</p>
+                </div>
+              </>);
+              if (al.to?.startsWith("/")) return <Link key={i} href={al.to} className={cls}>{inner}</Link>;
+              return (
+                <button key={i} type="button" onClick={() => al.to && document.getElementById(al.to)?.scrollIntoView({ behavior: "smooth", block: "start" })} className={`${cls} cursor-pointer`}>
+                  {inner}
+                </button>
+              );
+            })}
+          </div>
+        </>)}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SECTION 0B: STICKY SECTION NAVIGATOR
+        ═══════════════════════════════════════════════════════════ */}
+        <div className="sticky top-14 z-30 -mx-5 flex gap-1.5 overflow-x-auto border-y border-[var(--line-soft)] bg-[var(--canvas)]/90 px-5 py-2 backdrop-blur-md md:top-0 lg:-mx-8 lg:px-8 print:hidden">
+          {secNav.map((n) => (
+            <button key={n.id} onClick={() => document.getElementById(n.id)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="pill whitespace-nowrap">{n.label}</button>
+          ))}
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
             SECTION 1: EXECUTIVE KPI STRIP
         ═══════════════════════════════════════════════════════════ */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div id="sec-kpi" className="scroll-mt-32 md:scroll-mt-14" />
+        {!hasYtdTarget && (
+          <div className="flex items-start gap-2 rounded-[var(--r-md)] border border-[var(--warn)] bg-[var(--warn-bg)] px-3 py-2 text-[11.5px] text-[var(--warn)]">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+            <span>{t("dash.targetMissing")}</span>
+          </div>
+        )}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Kpi featured label={t("kpi.ytd")} value={fmt(kpi.ytd_actual)} sub={`${t("kpi.target")} ${fmt(kpi.ytd_target)}`} ach={ytdAch} color="blue" />
           <Kpi label={t("kpi.thisMonth")} value={fmt(kpi.this_month_actual)} sub={`${t("kpi.target")} ${fmt(kpi.this_month_target)}`} ach={thisMonthAch} color="violet" />
-          <Kpi label="YoY" value={`${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%`} sub={`${t("kpi.lastYear")} ${fmt(kpi.ytd_last_year)}`} ach={yoy >= 0 ? 100 : 0} color={yoy >= 0 ? "emerald" : "rose"} />
-          <Kpi label="Forecast EOY" value={compact(data?.forecastEOY)} sub={`Gap ${compact(data?.eoyGap)}`} ach={ytdAch} color="amber" />
-          <Kpi label="GP %" value={exec ? `${Number(exec.grossProfit?.gpPct || 0).toFixed(1)}%` : "..."} sub={`${t("kpi.profit")} ${exec ? fmt(exec.grossProfit?.profit) : "..."}`} ach={Number(exec?.grossProfit?.gpPct || 0) >= 20 ? 100 : 50} color="emerald" />
-          <Kpi label={t("kpi.cashShare")} value={exec ? `${Number(exec.collection?.rate || 0).toFixed(0)}%` : "..."} sub={`${t("momentum.cash")} ${exec ? fmt(exec.collection?.collected) : "..."}`} ach={Number(exec?.collection?.rate || 0) >= 50 ? 100 : 30} color="cyan" />
+          {/* YoY is a direction, not an achievement — the value already carries the number. */}
+          <Kpi
+            label="YoY"
+            value={`${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%`}
+            sub={`${t("kpi.lastYear")} ${fmt(kpi.ytd_last_year)}`}
+            badge={{ text: t(yoy >= 0 ? "kpi.up" : "kpi.down"), tone: yoy >= 0 ? "pos" : "neg" }}
+          />
+          {/* eoyGap is target − forecast, so a negative gap means the forecast beats the plan. */}
+          <Kpi
+            label="Forecast EOY"
+            value={compact(data?.forecastEOY)}
+            sub={
+              !hasYtdTarget
+                ? t("kpi.noTarget")
+                : eoyGap <= 0
+                  ? `${t("kpi.aheadOfPlan")} ${compact(Math.abs(eoyGap))}`
+                  : `${t("kpi.gap")} ${compact(eoyGap)}`
+            }
+            ach={hasYtdTarget ? forecastAch : undefined}
+          />
+          <Kpi
+            label="GP %"
+            loading={!exec && !execFailed}
+            value={`${gpPct.toFixed(1)}%`}
+            sub={`${t("kpi.profit")} ${fmt(exec?.grossProfit?.profit)}`}
+            ach={gpPct}
+            barTone={gpPct >= 20 ? "pos" : "warn"}
+            badge={null}
+          />
+          <Kpi
+            label={t("kpi.cashShare")}
+            loading={!exec && !execFailed}
+            value={`${collectionRate.toFixed(0)}%`}
+            sub={`${t("momentum.cash")} ${fmt(exec?.collection?.collected)}`}
+            ach={collectionRate}
+            barTone={collectionRate >= 50 ? "pos" : "warn"}
+            badge={null}
+          />
+          <Kpi
+            label={t("dash.customers")}
+            value={Number(data?.counts?.customers || 0).toLocaleString()}
+            sub={`${t("dash.ordersPerCust")} ${Number(data?.counts?.customers || 0) > 0 ? (Number(data?.counts?.orders || 0) / Number(data?.counts?.customers)).toFixed(1) : "0"}`}
+            badge={null}
+          />
+          <Kpi
+            label={t("dash.orders")}
+            value={Number(data?.counts?.orders || 0).toLocaleString()}
+            sub={`${t("dash.revPerOrder")} ${compact(Number(data?.counts?.orders || 0) > 0 ? Number(kpi.ytd_actual || 0) / Number(data?.counts?.orders) : 0)}`}
+            badge={null}
+          />
         </div>
+
+        {/* Executive decisions and approval workload */}
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+          <Card title={t("dash.executiveDecision") }>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <DecisionTile
+                tone={ytdAch >= 100 ? "pos" : ytdAch >= 90 ? "warn" : "neg"}
+                label={t("dash.salesPosition")}
+                value={`${ytdAch.toFixed(1)}%`}
+                detail={hasYtdTarget ? `${t("kpi.gap")} ${fmt(Math.max(Number(kpi.ytd_target || 0) - Number(kpi.ytd_actual || 0), 0))}` : t("kpi.noTarget")}
+              />
+              <DecisionTile
+                tone={gpPct >= 20 ? "pos" : "warn"}
+                label={t("dash.profitHealth")}
+                value={`${gpPct.toFixed(1)}%`}
+                detail={`${t("kpi.profit")} ${fmt(exec?.grossProfit?.profit)}`}
+              />
+              <DecisionTile
+                tone={Number(approvalSummary?.totalOverdue || 0) > 0 ? "neg" : "pos"}
+                label={t("dash.pendingDecisions")}
+                value={String(approvalSummary?.totalPending ?? "—")}
+                detail={`${t("dash.overdueSla")} ${approvalSummary?.totalOverdue ?? "—"}`}
+              />
+            </div>
+          </Card>
+
+          <Card title={t("dash.approvalCenter")}>
+            {!approvalSummary ? (
+              <div className="space-y-2"><div className="skeleton h-10" /><div className="skeleton h-10" /><div className="skeleton h-10" /></div>
+            ) : (
+              <div className="space-y-1">
+                {[
+                  { key: "po", label: "PO", href: "/approvals/po" },
+                  { key: "pr", label: "PR", href: "/approvals/pr" },
+                  { key: "product", label: t("sidebar.approveProductName"), href: "/approvals/product-name" },
+                ].map((item) => {
+                  const queue = approvalSummary.queues?.[item.key] || {};
+                  return (
+                    <Link key={item.key} href={item.href} className="flex items-center gap-3 rounded-[var(--r-sm)] px-2 py-2 hover:bg-[var(--surface-2)]">
+                      <span className="grid h-8 w-8 place-items-center rounded-[var(--r-sm)] bg-[var(--brand-soft)] text-[var(--brand)]"><ClipboardCheck size={15} /></span>
+                      <span className="min-w-0 flex-1"><strong className="block text-[11.5px] text-[var(--ink)]">{item.label}</strong><small className="text-[10px] text-[var(--muted)]">{t("dash.overdueSla")} {queue.overdue || 0}</small></span>
+                      <span className="num text-sm font-bold text-[var(--ink)]">{queue.pending || 0}</span>
+                      <ArrowUpRight size={13} className="text-[var(--muted)]" />
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
+            SECTION 1B: TARGET VS ACTUAL BY BU (moved up — headline view)
+        ═══════════════════════════════════════════════════════════ */}
+        <div id="sec-target" className="scroll-mt-32 md:scroll-mt-14" />
+        <Card title={t("dash.targetVsActual")}>
+          <p className={`mb-3 text-xs ${tw.sub}`}>
+            {t("dash.targetVsActualDesc")}
+            {/* The target is 8 full months while the actual stops at the last
+                synced sale, so the period has to be spelled out or the gap
+                reads as underperformance. */}
+            {sync?.sale_detail?.latest && (
+              <>
+                {" · "}
+                {t("dash.targetPeriod")} 1–{new Date().getMonth() + 1} · {t("dash.actualThrough")}{" "}
+                <span className="num font-semibold">{fmtDate(sync.sale_detail.latest)}</span>
+              </>
+            )}
+          </p>
+          {(() => {
+            const curM = new Date().getMonth() + 1;
+            const mKeys = ["","jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+            // odg_sales_target is stored per BU × channel × province × district,
+            // so /targets-by-bu returns up to 30 rows for one BU. They have to be
+            // summed — keying a Map by bu_code keeps only the last slice and
+            // shows a target ~18× too small.
+            const targetMap = new Map<string, number>();
+            for (const row of (buTargets || []) as any[]) {
+              let ytd = 0;
+              for (let m = 1; m <= curM; m++) ytd += Number(row?.[mKeys[m]] || 0);
+              const code = String(row?.bu_code);
+              targetMap.set(code, (targetMap.get(code) || 0) + ytd);
+            }
+            const rows = buProfit
+              .map((b: any) => {
+                const bc = String(b.bu);
+                const ytdTgt = targetMap.get(bc) || 0;
+                const act = Number(b.revenue || 0);
+                return { bu: bc, name: d.buNameMap?.[bc] || bc, target: ytdTgt, actual: act, ach: ytdTgt > 0 ? (act / ytdTgt) * 100 : 0 };
+              })
+              .sort((a: any, b: any) => b.actual - a.actual);
+            const grandTarget = rows.reduce((s: number, r: any) => s + r.target, 0);
+            const grandActual = rows.reduce((s: number, r: any) => s + r.actual, 0);
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className={tw.sub}>
+                      <th className="pb-2 pr-2 text-left text-[10px] font-semibold uppercase tracking-wider">BU</th>
+                      <th className="pb-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider">{t("kpi.target")}</th>
+                      <th className="pb-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider">{t("label.actual")}</th>
+                      <th className="pb-2 pl-2 text-right text-[10px] font-semibold uppercase tracking-wider">Ach</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line-soft)] dark:divide-slate-800">
+                    {rows.map((r: any, i: number) => (
+                      <tr key={i} className="hover:bg-[var(--surface-2)]">
+                        <td className={`py-1.5 pr-2 font-medium ${tw.head}`}>{r.name}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums text-[var(--muted)]">{compact(r.target)}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{compact(r.actual)}</td>
+                        <td className="py-1.5 pl-2 text-right">
+                          <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${r.ach >= 100 ? "bg-[var(--pos-bg)] text-[var(--pos)]" : r.ach >= 90 ? "bg-[var(--warn-bg)] text-[var(--warn)]" : "bg-[var(--neg-bg)] text-[var(--neg)]"}`}>
+                            {r.ach.toFixed(0)}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-[var(--line)]">
+                      <td className={`pt-2 pr-2 text-xs font-bold ${tw.head}`}>{t("app.all")}</td>
+                      <td className="pt-2 px-2 text-right text-xs font-bold tabular-nums">{compact(grandTarget)}</td>
+                      <td className="pt-2 px-2 text-right text-xs font-bold tabular-nums">{compact(grandActual)}</td>
+                      <td className="pt-2 pl-2 text-right text-xs font-bold">
+                        <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${grandTarget > 0 && (grandActual / grandTarget) * 100 >= 100 ? "bg-[var(--pos-bg)] text-[var(--pos)]" : (grandTarget > 0 && (grandActual / grandTarget) * 100 >= 90) ? "bg-[var(--warn-bg)] text-[var(--warn)]" : "bg-[var(--neg-bg)] text-[var(--neg)]"}`}>
+                          {grandTarget > 0 ? ((grandActual / grandTarget) * 100).toFixed(0) : "—"}%
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })()}
+        </Card>
 
         {/* ═══════════════════════════════════════════════════════════
             SECTION 2: TODAY / WEEK / MOMENTUM
@@ -897,6 +1352,38 @@ export default function Dashboard() {
           <Sep />
           <Pill label={t("momentum.cash")} value={fmt(cashVal)} accent="emerald" /><Pill label={t("momentum.credit")} value={fmt(creditVal)} accent="amber" />
           {exec && <><Sep /><Pill label={t("momentum.ordersToday")} value={String(exec.today?.orders || 0)} accent="blue" /></>}
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════
+            SECTION 2B: QUICK ACTIONS / NAVIGATION CARDS
+        ═══════════════════════════════════════════════════════════ */}
+        <div className="flex items-center justify-between gap-4 print:hidden">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-bold tracking-tight text-[var(--ink)]">{t("dash.quickNav")}</h2>
+            <p className="page-sub">{t("dash.quickNavDesc")}</p>
+          </div>
+          <span className="hidden h-px w-24 bg-gradient-to-r from-[var(--accent)] to-transparent sm:block" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 print:hidden">
+          {[
+            { href: "/target", icon: Target, label: t("dash.goToTarget") },
+            { href: "/sales-summary", icon: BarChart3, label: t("dash.goToSalesSummary") },
+            { href: "/month-summary", icon: LayoutDashboard, label: t("dash.goToMonthSummary") },
+            { href: "/commission", icon: DollarSign, label: t("dash.goToCommission") },
+            { href: "/retail-incentive", icon: Shield, label: t("dash.goToIncentive") },
+            { href: "/sales-assignment", icon: ClipboardCheck, label: t("dash.goToAssignment") },
+            { href: "/analytics", icon: TrendingUp, label: t("dash.goToAnalytics") },
+          ].map((item) => (
+            <Link key={item.href} href={item.href} className="group flex items-center gap-3 rounded-[var(--r-md)] border border-[var(--line-soft)] px-4 py-3.5 transition-all hover:-translate-y-0.5 hover:border-[var(--brand-soft)] hover:shadow-md hover:bg-[var(--surface)]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--r-sm)] bg-[var(--brand-soft)] text-[var(--brand)] transition-colors group-hover:bg-[var(--brand)] group-hover:text-white">
+                <item.icon size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[var(--ink)]">{item.label}</p>
+              </div>
+              <ChevronRight size={15} className="shrink-0 text-[var(--muted)] transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          ))}
         </div>
 
         {/* ═══════════════════════════════════════════════════════════
@@ -928,9 +1415,10 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════
             SECTION 4: REVENUE TREND
         ═══════════════════════════════════════════════════════════ */}
+        <div id="sec-trend" className="scroll-mt-32 md:scroll-mt-14" />
         <Card title={t("section.revenueTrend")}>
           <div className="mb-2 flex gap-4 text-[11px] text-[var(--muted)]">
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--info-bg)]0" />{t("label.actual")}</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--brand)]" />{t("label.actual")}</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--line)]" />{t("kpi.target")}</span>
             <span className="flex items-center gap-1"><span className="h-0.5 w-3 border-b-2 border-dashed border-emerald-400" />{t("kpi.lastYear")}</span>
           </div>
@@ -1003,6 +1491,7 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════
             SECTION 7: BU PROFIT PIE + PRODUCT GROUP PIE + BU TABLE
         ═══════════════════════════════════════════════════════════ */}
+        <div id="sec-products" className="scroll-mt-32 md:scroll-mt-14" />
         <div className="grid gap-4 lg:grid-cols-3">
           <Card title={t("section.buRevenue")}>
             <ChartFrame className="h-44"><PieChart><Pie {...CHART_NO_ANIM} data={buPie} dataKey="value" cx="50%" cy="50%" outerRadius={65} strokeWidth={1} stroke={isDark ? "#1e293b" : "#fff"} label={({ name, percent }: any) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
@@ -1104,6 +1593,28 @@ export default function Dashboard() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
+            SECTION 7D: MONTH SUMMARY PREVIEW
+        ═══════════════════════════════════════════════════════════ */}
+        <Link href="/month-summary" className="group">
+          <section className="card min-h-0 transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
+            <div className="card-hd"><h3 className="card-title">{t("sidebar.monthSummary")}</h3></div>
+            <div className="card-bd flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <span className="grid h-14 w-14 place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)] transition-colors group-hover:bg-[var(--brand)] group-hover:text-white">
+                <LayoutDashboard size={26} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-[var(--ink)]">{t("sidebar.monthSummary")}</p>
+                <p className={`mt-1 text-xs ${tw.sub}`}>{t("dash.quickNavDesc")}</p>
+              </div>
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--brand-soft)] px-4 py-1.5 text-[11px] font-semibold text-[var(--brand)] transition-colors group-hover:bg-[var(--brand)] group-hover:text-white">
+                {t("dash.goToSalesSummary")}
+                <ChevronRight size={14} />
+              </span>
+            </div>
+          </section>
+        </Link>
+
+        {/* ═══════════════════════════════════════════════════════════
             SECTION 8: TOP PRODUCTS + TOP MARGIN
         ═══════════════════════════════════════════════════════════ */}
         <div className="grid gap-4 lg:grid-cols-2">
@@ -1130,8 +1641,41 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════
             SECTION 9: TEAM LEADERBOARD + PROVINCE RANKING
         ═══════════════════════════════════════════════════════════ */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div id="sec-team" className="scroll-mt-32 md:scroll-mt-14" />
+        <div className="grid gap-4 lg:grid-cols-3">
           <Card title={`ທີມຂາຍ (${team.length})`}>{team.map((m: any, i: number) => <Rank key={i} i={i} label={m.name} value={fmt(m.actual)} ach={m.achPct} />)}{team.length === 0 && <Empty text={t("label.noData")} />}</Card>
+          <Card title="Top Sales Reps">
+            {[...team].sort((a: any, b: any) => b.actual - a.actual).slice(0, 3).map((m: any, i: number) => (
+              <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--pos-bg)] text-[10px] font-bold text-[var(--pos)]">{i + 1}</span>
+                  <span className={`text-xs font-medium ${tw.head}`}>{m.name}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs tabular-nums">
+                  <span className={tw.sub}>{fmt(m.actual)}</span>
+                  <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${(m.achPct || 0) >= 100 ? "bg-[var(--pos-bg)] text-[var(--pos)]" : (m.achPct || 0) >= 90 ? "bg-[var(--warn-bg)] text-[var(--warn)]" : "bg-[var(--neg-bg)] text-[var(--neg)]"}`}>{pct(m.achPct)}</span>
+                </div>
+              </div>
+            ))}
+            {team.length === 0 && <Empty text={t("label.noData")} />}
+          </Card>
+          <Card title="Bottom Sales Reps">
+            {[...team].sort((a: any, b: any) => a.actual - b.actual).slice(0, 3).map((m: any, i: number) => (
+              <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--neg-bg)] text-[10px] font-bold text-[var(--neg)]">{i + 1}</span>
+                  <span className={`text-xs font-medium ${tw.head}`}>{m.name}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs tabular-nums">
+                  <span className={tw.sub}>{fmt(m.actual)}</span>
+                  <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${(m.achPct || 0) >= 100 ? "bg-[var(--pos-bg)] text-[var(--pos)]" : (m.achPct || 0) >= 90 ? "bg-[var(--warn-bg)] text-[var(--warn)]" : "bg-[var(--neg-bg)] text-[var(--neg)]"}`}>{pct(m.achPct)}</span>
+                </div>
+              </div>
+            ))}
+            {team.length === 0 && <Empty text={t("label.noData")} />}
+          </Card>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
           <Card title={`ແຂວງ Top (${provinces.length})`}>{provinces.map((p: any, i: number) => <Rank key={i} i={i} label={p.label} value={fmt(p.actual)} ach={p.achPct} />)}{provinces.length === 0 && <Empty text={t("label.noData")} />}</Card>
         </div>
 
@@ -1192,6 +1736,7 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════
             SECTION 12: STOCK + AR AGING + ACTIONS
         ═══════════════════════════════════════════════════════════ */}
+        <div id="sec-finance" className="scroll-mt-32 md:scroll-mt-14" />
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Stock */}
           <Card title={t("section.stock")}>
@@ -1223,7 +1768,7 @@ export default function Dashboard() {
                 return (<div key={i}>
                   <div className="flex justify-between text-xs"><span className={tw.sub}>{b.overdue_group}</span><span className={`font-semibold tabular-nums ${tw.head}`}>{fmt(b.balance)}</span></div>
                   <div className="mt-0.5 h-1.5 w-full rounded-full bg-[var(--surface-2)]">
-                    <div className={`h-full rounded-full transition-all duration-500 ${i < 2 ? "bg-[var(--pos-bg)]0" : i < 4 ? "bg-[var(--warn-bg)]0" : "bg-[var(--neg-bg)]0"}`} style={{ width: `${(Number(b.balance || 0) / maxB) * 100}%` }} />
+                    <div className={`h-full rounded-full transition-all duration-500 ${i < 2 ? "bg-[var(--pos)]" : i < 4 ? "bg-[var(--warn)]" : "bg-[var(--neg)]"}`} style={{ width: `${(Number(b.balance || 0) / maxB) * 100}%` }} />
                   </div>
                 </div>);
               })}
@@ -1256,11 +1801,11 @@ export default function Dashboard() {
 
           {/* MoM Growth + DSO + Concentration + AOV + Churn */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Kpi label="MoM Growth" value={`${Number(analytics.momGrowth?.growthPct || 0) >= 0 ? "+" : ""}${Number(analytics.momGrowth?.growthPct || 0).toFixed(1)}%`} sub={`${t("kpi.lastMonth")} ${fmt(analytics.momGrowth?.lastMonth)}${Number(analytics.momGrowth?.comparedDays || 0) ? ` (1-${analytics.momGrowth.comparedDays} ມື້)` : ""}`} ach={Number(analytics.momGrowth?.growthPct || 0) >= 0 ? 100 : 0} color={Number(analytics.momGrowth?.growthPct || 0) >= 0 ? "emerald" : "rose"} />
-            <Kpi label="DSO (ມື້)" value={`${analytics.dso?.value || 0} ມື້`} sub={`AR ${fmt(analytics.dso?.arTotal)} ÷ ${fmt(analytics.dso?.dailyRevenue)}/ມື້`} ach={Number(analytics.dso?.value || 0) <= 45 ? 100 : 50} color={Number(analytics.dso?.value || 0) <= 45 ? "emerald" : "amber"} />
-            <Kpi label="Top10 ລູກຄ້າ %" value={`${Number(analytics.concentration?.top10Pct || 0).toFixed(1)}%`} sub={`${fmt(analytics.concentration?.top10Revenue)} / ${fmt(analytics.concentration?.ytdTotal)}`} ach={Number(analytics.concentration?.top10Pct || 0) <= 50 ? 100 : 40} color={Number(analytics.concentration?.top10Pct || 0) <= 50 ? "emerald" : "rose"} />
-            <Kpi label="AOV ເດືອນນີ້" value={fmt(analytics.aov?.thisMonth)} sub={`${t("kpi.lastMonth")} ${fmt(analytics.aov?.lastMonth)} (${Number(analytics.aov?.changePct || 0) >= 0 ? "+" : ""}${Number(analytics.aov?.changePct || 0).toFixed(1)}%)`} ach={Number(analytics.aov?.changePct || 0) >= 0 ? 100 : 50} color="blue" />
-            <Kpi label="Retention Rate" value={`${Number(analytics.churn?.retentionRate || 0).toFixed(1)}%`} sub={`Churn ${analytics.churn?.churned || 0} / ໃໝ່ +${analytics.churn?.newAcquired || 0}${Number(analytics.momGrowth?.comparedDays || 0) ? ` · ທຽບ 1-${analytics.momGrowth.comparedDays} ມື້` : ""}`} ach={Number(analytics.churn?.retentionRate || 0) >= 80 ? 100 : 50} color={Number(analytics.churn?.retentionRate || 0) >= 80 ? "emerald" : "amber"} />
+            <Kpi label="MoM Growth" value={`${momGrowthPct >= 0 ? "+" : ""}${momGrowthPct.toFixed(1)}%`} sub={`${t("kpi.lastMonth")} ${fmt(analytics.momGrowth?.lastMonth)}${Number(analytics.momGrowth?.comparedDays || 0) ? ` (1-${analytics.momGrowth.comparedDays} ມື້)` : ""}`} badge={trendBadge(momGrowthPct)} />
+            <Kpi label="DSO (ມື້)" value={`${analytics.dso?.value || 0} ມື້`} sub={`AR ${fmt(analytics.dso?.arTotal)} ÷ ${fmt(analytics.dso?.dailyRevenue)}/ມື້`} badge={thresholdBadge(Number(analytics.dso?.value || 0) <= 45)} />
+            <Kpi label="Top10 ລູກຄ້າ %" value={`${top10Pct.toFixed(1)}%`} sub={`${fmt(analytics.concentration?.top10Revenue)} / ${fmt(analytics.concentration?.ytdTotal)}`} ach={top10Pct} barTone={top10Pct <= 50 ? "pos" : "neg"} badge={null} />
+            <Kpi label="AOV ເດືອນນີ້" value={fmt(analytics.aov?.thisMonth)} sub={`${t("kpi.lastMonth")} ${fmt(analytics.aov?.lastMonth)} (${Number(analytics.aov?.changePct || 0) >= 0 ? "+" : ""}${Number(analytics.aov?.changePct || 0).toFixed(1)}%)`} badge={trendBadge(Number(analytics.aov?.changePct || 0))} />
+            <Kpi label="Retention Rate" value={`${retentionRate.toFixed(1)}%`} sub={`Churn ${analytics.churn?.churned || 0} / ໃໝ່ +${analytics.churn?.newAcquired || 0}${Number(analytics.momGrowth?.comparedDays || 0) ? ` · ທຽບ 1-${analytics.momGrowth.comparedDays} ມື້` : ""}`} ach={retentionRate} barTone={retentionRate >= 80 ? "pos" : "warn"} badge={null} />
           </div>
 
           {/* Channel Profitability + New vs Return Revenue */}
@@ -1295,12 +1840,12 @@ export default function Dashboard() {
                 </PieChart></ChartFrame>
                 <div className="flex-1 space-y-3">
                   <div>
-                    <div className={`flex items-center gap-1.5 text-xs ${tw.sub}`}><span className="h-2 w-2 rounded-full bg-[var(--info-bg)]0" />{t("dash.oldCust")} ({analytics.newVsReturn?.returningCustomers || 0} ຄົນ)</div>
+                    <div className={`flex items-center gap-1.5 text-xs ${tw.sub}`}><span className="h-2 w-2 rounded-full bg-[var(--brand)]" />{t("dash.oldCust")} ({analytics.newVsReturn?.returningCustomers || 0} ຄົນ)</div>
                     <p className={`text-lg font-bold ${tw.blue}`}>{fmt(analytics.newVsReturn?.returningRevenue)}</p>
                     <p className="text-[10px] text-[var(--muted)]">{pct(analytics.newVsReturn?.returnPct)}</p>
                   </div>
                   <div>
-                    <div className={`flex items-center gap-1.5 text-xs ${tw.sub}`}><span className="h-2 w-2 rounded-full bg-[var(--pos-bg)]0" />{t("dash.newCust")} ({analytics.newVsReturn?.newCustomers || 0} ຄົນ)</div>
+                    <div className={`flex items-center gap-1.5 text-xs ${tw.sub}`}><span className="h-2 w-2 rounded-full bg-[var(--pos)]" />{t("dash.newCust")} ({analytics.newVsReturn?.newCustomers || 0} ຄົນ)</div>
                     <p className={`text-lg font-bold ${tw.green}`}>{fmt(analytics.newVsReturn?.newRevenue)}</p>
                     <p className="text-[10px] text-[var(--muted)]">{pct(analytics.newVsReturn?.newPct)}</p>
                   </div>
@@ -1333,13 +1878,13 @@ export default function Dashboard() {
               <div>
                 <div className="flex justify-between text-xs mb-1"><span className={tw.sub}>{t("dash.retentionRate")}</span><span className={`font-bold ${Number(analytics.churn?.retentionRate || 0) >= 80 ? tw.green : tw.red}`}>{pct(analytics.churn?.retentionRate)}</span></div>
                 <div className="h-3 w-full rounded-full bg-[var(--surface-2)]">
-                  <div className={`h-full rounded-full transition-all duration-700 ${Number(analytics.churn?.retentionRate || 0) >= 80 ? "bg-[var(--pos-bg)]0" : Number(analytics.churn?.retentionRate || 0) >= 60 ? "bg-[var(--warn-bg)]0" : "bg-[var(--neg-bg)]0"}`} style={{ width: `${Math.min(Number(analytics.churn?.retentionRate || 0), 100)}%` }} />
+                  <div className={`h-full rounded-full transition-all duration-700 ${Number(analytics.churn?.retentionRate || 0) >= 80 ? "bg-[var(--pos)]" : Number(analytics.churn?.retentionRate || 0) >= 60 ? "bg-[var(--warn)]" : "bg-[var(--neg)]"}`} style={{ width: `${Math.min(Number(analytics.churn?.retentionRate || 0), 100)}%` }} />
                 </div>
               </div>
               <div className="mt-3">
                 <div className="flex justify-between text-xs mb-1"><span className={tw.sub}>{t("dash.churnRate")}</span><span className={`font-bold ${tw.red}`}>{pct(analytics.churn?.churnRate)}</span></div>
                 <div className="h-3 w-full rounded-full bg-[var(--surface-2)]">
-                  <div className="h-full rounded-full bg-[var(--neg-bg)]0 transition-all duration-700" style={{ width: `${Math.min(Number(analytics.churn?.churnRate || 0), 100)}%` }} />
+                  <div className="h-full rounded-full bg-[var(--neg)] transition-all duration-700" style={{ width: `${Math.min(Number(analytics.churn?.churnRate || 0), 100)}%` }} />
                 </div>
               </div>
             </Card>
@@ -1349,6 +1894,7 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════
             SECTION 14: SALES MANAGER VIEW
         ═══════════════════════════════════════════════════════════ */}
+        <div id="sec-insights" className="scroll-mt-32 md:scroll-mt-14" />
         {managerInsights && (<>
           <SectionHeading eyebrow="Manager workspace" title="Team execution" description="Rep performance, coaching priorities and account coverage." />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1639,10 +2185,10 @@ export default function Dashboard() {
         {ownerInsights && (<>
           <SectionHeading eyebrow="Growth strategy" title="Owner priorities" description="Whitespace, revenue risk and the next best growth actions." />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Kpi label="Growth Gap" value={fmt(ownerFocus.whitespaceGap)} sub={`${ownerFocus.opportunityProvinces || 0} ແຂວງຍັງຕ່ຳກວ່າເປົ້າ`} ach={Number(ownerFocus.whitespaceGap || 0) <= 0 ? 100 : 45} color={Number(ownerFocus.whitespaceGap || 0) <= 0 ? "emerald" : "amber"} />
-            <Kpi label="Revenue At Risk" value={fmt(ownerFocus.lostRevenue)} sub={`${ownerFocus.lostCustomers || 0} ລູກຄ້າຢຸດຊື້ເດືອນນີ້`} ach={Number(ownerFocus.lostRevenue || 0) <= Number(ownerFocus.reactivatedRevenue || 0) ? 100 : 35} color={Number(ownerFocus.lostRevenue || 0) <= Number(ownerFocus.reactivatedRevenue || 0) ? "emerald" : "rose"} />
-            <Kpi label="Reactivated Rev" value={fmt(ownerFocus.reactivatedRevenue)} sub={`${ownerFocus.reactivatedCustomers || 0} ລູກຄ້າກັບຄືນ`} ach={Number(ownerFocus.reactivatedRevenue || 0) > 0 ? 100 : 40} color="emerald" />
-            <Kpi label="Best Channel" value={bestChannel ? `${Number(bestChannel.marginPct || 0).toFixed(1)}%` : "-"} sub={bestChannel ? `${bestChannel.channel} • share ${Number(bestChannel.sharePct || 0).toFixed(1)}%` : "-"} ach={Number(bestChannel?.marginPct || 0) >= 18 ? 100 : 60} color="blue" />
+            <Kpi label="Growth Gap" value={fmt(ownerFocus.whitespaceGap)} sub={`${ownerFocus.opportunityProvinces || 0} ແຂວງຍັງຕ່ຳກວ່າເປົ້າ`} badge={thresholdBadge(Number(ownerFocus.whitespaceGap || 0) <= 0)} />
+            <Kpi label="Revenue At Risk" value={fmt(ownerFocus.lostRevenue)} sub={`${ownerFocus.lostCustomers || 0} ລູກຄ້າຢຸດຊື້ເດືອນນີ້`} badge={thresholdBadge(Number(ownerFocus.lostRevenue || 0) <= Number(ownerFocus.reactivatedRevenue || 0))} />
+            <Kpi label="Reactivated Rev" value={fmt(ownerFocus.reactivatedRevenue)} sub={`${ownerFocus.reactivatedCustomers || 0} ລູກຄ້າກັບຄືນ`} badge={thresholdBadge(Number(ownerFocus.reactivatedRevenue || 0) > 0)} />
+            <Kpi label="Best Channel" value={bestChannel ? `${Number(bestChannel.marginPct || 0).toFixed(1)}%` : "-"} sub={bestChannel ? `${bestChannel.channel} • share ${Number(bestChannel.sharePct || 0).toFixed(1)}%` : "-"} ach={bestChannel ? Number(bestChannel.marginPct || 0) : undefined} barTone={Number(bestChannel?.marginPct || 0) >= 18 ? "pos" : "warn"} badge={null} />
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -1744,6 +2290,56 @@ export default function Dashboard() {
           </Card>
         </>)}
 
+        {/* ═══════════════════════════════════════════════════════════
+            SECTION 16: SYSTEM HEALTH / DATA FRESHNESS
+        ═══════════════════════════════════════════════════════════ */}
+        <div id="sec-health" className="scroll-mt-32 md:scroll-mt-14" />
+        <Card title={t("dash.systemHealth")}>
+          <p className={`mb-3 text-xs ${tw.sub}`}>{t("dash.systemHealthDesc")}</p>
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="flex items-center gap-3">
+              <Database size={20} className="text-[var(--brand)]" />
+              <div>
+                <p className={`text-xs ${tw.sub}`}>{t("dash.updatedAt")}</p>
+                <p className={`text-xs font-semibold ${tw.head}`}>{d.updatedAt ? d.updatedAt.toLocaleString() : "—"}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`h-2.5 w-2.5 rounded-full ${d.refreshing ? "animate-pulse bg-[var(--warn)]" : "bg-[var(--pos)]"}`} />
+              <div>
+                <p className={`text-xs ${tw.sub}`}>{t("dash.refreshing")}</p>
+                <p className={`text-xs font-semibold ${tw.head}`}>{d.refreshing ? t("app.loading") : "OK"}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => d.load()}
+              disabled={d.refreshing}
+              className="ml-auto inline-flex items-center gap-2 rounded-lg bg-[var(--brand-deep)] px-4 py-2 text-xs font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50 print:hidden"
+            >
+              <RefreshCw size={14} className={d.refreshing ? "animate-spin" : ""} />
+              {t("dash.refreshData")}
+            </button>
+          </div>
+
+          {/* Source freshness — newest record in each upstream table. */}
+          {sync && (
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[var(--line-soft)] pt-4 sm:grid-cols-4">
+              {[
+                { label: t("dash.saleDetailLatest"), value: sync.sale_detail?.latest || "—", hint: `${compact(sync.sale_detail?.rows || 0)} rows` },
+                { label: t("dash.monthlyCovers"), value: sync.sale_monthly?.latest_month ? `${sync.sale_monthly.latest_month}/${sync.sale_monthly.latest_year}` : "—" },
+                { label: t("dash.arBills"), value: `${compact(sync.ar_aging?.rows || 0)}`, hint: compact(sync.ar_aging?.balance || 0) },
+                { label: t("dash.targetYear"), value: sync.targets?.latest_year ? String(sync.targets.latest_year) : "—" },
+              ].map((item, i) => (
+                <div key={i} className="rounded-xl bg-[var(--surface-2)]/70 px-3 py-2.5">
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${tw.sub}`}>{item.label}</p>
+                  <p className={`text-sm font-bold ${tw.head}`}>{item.value}</p>
+                  {item.hint ? <p className={`text-[10px] ${tw.sub}`}>{item.hint}</p> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
         </>)}
 
         {/* ══════════════════════════════════════════════════════════════
@@ -1753,9 +2349,10 @@ export default function Dashboard() {
           <SectionHeading eyebrow="Period review" title={`${prevTrend.name || t("kpi.lastMonth")} performance`} description="Completed month results, payment mix and year-over-year comparison." />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Kpi featured label={`${prevTrend.name || "Prev"} ຍອດຂາຍ`} value={fmt(kpi.last_month_actual)} sub={`${t("kpi.target")} ${fmt(kpi.last_month_target)}`} ach={lastMonthAch} color="blue" />
-            <Kpi label={`${prevTrend.name || "Prev"} ປີກ່ອນ`} value={fmt(prevMonthLYActual)} sub={`ທຽບ: ${prevMonthLYActual > 0 ? ((Number(kpi.last_month_actual || 0) / prevMonthLYActual - 1) * 100).toFixed(1) : "0"}%`} ach={Number(kpi.last_month_actual || 0) >= prevMonthLYActual ? 100 : 50} color={Number(kpi.last_month_actual || 0) >= prevMonthLYActual ? "emerald" : "rose"} />
+            <Kpi label={`${prevTrend.name || "Prev"} ປີກ່ອນ`} value={fmt(prevMonthLYActual)} sub={`ທຽບ: ${prevMonthLYActual > 0 ? ((Number(kpi.last_month_actual || 0) / prevMonthLYActual - 1) * 100).toFixed(1) : "0"}%`} badge={trendBadge(prevMonthLYActual > 0 ? (Number(kpi.last_month_actual || 0) / prevMonthLYActual - 1) * 100 : 0)} />
             <Kpi label="Achievement" value={pct(lastMonthAch)} sub={`Gap ${fmt(Math.max(0, Number(kpi.last_month_target || 0) - Number(kpi.last_month_actual || 0)))}`} ach={lastMonthAch} color={lastMonthAch >= 100 ? "emerald" : "amber"} />
-            <Kpi label="Cash / Credit" value={fmt(Number(kpi.last_month_cash || 0))} sub={`${t("momentum.credit")} ${fmt(Number(kpi.last_month_credit || 0))}`} ach={Number(kpi.last_month_cash || 0) >= Number(kpi.last_month_credit || 0) ? 100 : 60} color="cyan" />
+            {/* The bar is the cash share of the month, so it means something on its own. */}
+            <Kpi label="Cash / Credit" value={fmt(Number(kpi.last_month_cash || 0))} sub={`${t("momentum.credit")} ${fmt(Number(kpi.last_month_credit || 0))}`} ach={cashShare(kpi.last_month_cash, kpi.last_month_credit)} barTone={cashShare(kpi.last_month_cash, kpi.last_month_credit) >= 50 ? "pos" : "warn"} badge={null} />
           </div>
 
           {renderFocusSummary(lastMonthAch, lastMonthCash, lastMonthCredit, lastMonthQuality)}
@@ -1846,10 +2443,10 @@ export default function Dashboard() {
           <SectionHeading eyebrow="Live performance" title={`${curTrend.name || t("kpi.thisMonth")} sales pulse`} description="Current progress, daily pace and actions required to close the target gap." />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Kpi featured label={`${curTrend.name || "Now"} ຍອດຂາຍ`} value={fmt(kpi.this_month_actual)} sub={`${t("kpi.target")} ${fmt(kpi.this_month_target)}`} ach={thisMonthAch} color="blue" />
-            <Kpi label={`${curTrend.name || "Now"} ປີກ່ອນ`} value={fmt(sameMonthLY)} sub={`ທຽບ: ${sameMonthLY > 0 ? ((Number(kpi.this_month_actual || 0) / sameMonthLY - 1) * 100).toFixed(1) : "0"}%`} ach={Number(kpi.this_month_actual || 0) >= sameMonthLY ? 100 : 50} color={Number(kpi.this_month_actual || 0) >= sameMonthLY ? "emerald" : "rose"} />
+            <Kpi label={`${curTrend.name || "Now"} ປີກ່ອນ`} value={fmt(sameMonthLY)} sub={`ທຽບ: ${sameMonthLY > 0 ? ((Number(kpi.this_month_actual || 0) / sameMonthLY - 1) * 100).toFixed(1) : "0"}%`} badge={trendBadge(sameMonthLY > 0 ? (Number(kpi.this_month_actual || 0) / sameMonthLY - 1) * 100 : 0)} />
             <Kpi label="Achievement" value={pct(thisMonthAch)} sub={`Gap ${fmt(monthGap)}`} ach={thisMonthAch} color={thisMonthAch >= 100 ? "emerald" : "amber"} />
-            <Kpi label={t("momentum.perDay")} value={fmt(data?.requiredPerDay)} sub={`${data?.daysLeft || 0} ${t("momentum.daysLeft")}`} ach={onTrack ? 100 : 40} color={onTrack ? "emerald" : "rose"} />
-            <Kpi label="Cash / Credit" value={fmt(Number(kpi.this_month_cash || 0))} sub={`${t("momentum.credit")} ${fmt(Number(kpi.this_month_credit || 0))}`} ach={Number(kpi.this_month_cash || 0) >= Number(kpi.this_month_credit || 0) ? 100 : 60} color="cyan" />
+            <Kpi label={t("momentum.perDay")} value={fmt(data?.requiredPerDay)} sub={`${data?.daysLeft || 0} ${t("momentum.daysLeft")}`} badge={thresholdBadge(onTrack)} />
+            <Kpi label="Cash / Credit" value={fmt(Number(kpi.this_month_cash || 0))} sub={`${t("momentum.credit")} ${fmt(Number(kpi.this_month_credit || 0))}`} ach={cashShare(kpi.this_month_cash, kpi.this_month_credit)} barTone={cashShare(kpi.this_month_cash, kpi.this_month_credit) >= 50 ? "pos" : "warn"} badge={null} />
           </div>
 
           {/* Momentum strip */}
@@ -1982,6 +2579,18 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
+function DecisionTile({ tone, label, value, detail }: { tone: "pos" | "warn" | "neg"; label: string; value: string; detail: string }) {
+  const color = tone === "pos" ? "var(--pos)" : tone === "warn" ? "var(--warn)" : "var(--neg)";
+  const background = tone === "pos" ? "var(--pos-bg)" : tone === "warn" ? "var(--warn-bg)" : "var(--neg-bg)";
+  return (
+    <div className="rounded-[var(--r-md)] border p-3" style={{ borderColor: "var(--line-soft)", background }}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">{label}</p>
+      <p className="num mt-1 text-xl font-bold" style={{ color }}>{value}</p>
+      <p className="mt-0.5 text-[10.5px] text-[var(--muted)]">{detail}</p>
+    </div>
+  );
+}
+
 function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
     <div className="mb-3 mt-6 flex items-end justify-between gap-4 border-b border-[var(--line-soft)] pb-2">
@@ -1995,16 +2604,53 @@ function SectionHeading({ eyebrow, title, description }: { eyebrow: string; titl
   );
 }
 
-function Kpi({ label, value, sub, ach, featured = false }: { label: string; value: string; sub: string; ach: number; color?: string; featured?: boolean }) {
-  const tone = ach >= 100 ? "pill-pos" : ach >= 90 ? "pill-warn" : "pill-neg";
-  const fill = ach >= 100 ? "is-pos" : ach >= 90 ? "is-warn" : "is-neg";
-  const width = Math.min(Math.abs(ach), 100);
+/**
+ * `ach` drives the pill and the bar the way an achievement does: 100% is good.
+ * Metrics that are not an achievement (YoY, GP %) pass `badge` to replace the
+ * pill — or `badge={null}` to drop it — and `barTone` to colour the bar on
+ * their own threshold instead of the 90/100 one.
+ */
+function Kpi({
+  label,
+  value,
+  sub,
+  ach,
+  badge,
+  barTone,
+  loading = false,
+  featured = false,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  ach?: number;
+  badge?: { text: string; tone: "pos" | "warn" | "neg" } | null;
+  barTone?: "pos" | "warn" | "neg";
+  color?: string;
+  loading?: boolean;
+  featured?: boolean;
+}) {
+  const scored = ach == null ? null : ach >= 100 ? "pos" : ach >= 90 ? "warn" : "neg";
+  const shade = barTone || scored;
+  const tone = shade ? `pill-${shade}` : "";
+  const fill = shade ? `is-${shade}` : "";
+  const width = ach == null ? 0 : Math.min(Math.abs(ach), 100);
+
+  const marker = loading
+    ? null
+    : badge === null
+      ? null
+      : badge
+        ? <span className={`pill pill-${badge.tone}`}>{badge.text}</span>
+        : ach != null
+          ? <span className={`pill ${tone}`}>{pct(ach)}</span>
+          : null;
 
   if (featured) return (
     <div className="card stat stat-featured flex min-h-44 flex-col justify-between p-4 sm:col-span-2 sm:row-span-2 lg:col-span-3 xl:col-span-2">
       <div className="flex items-start justify-between gap-2">
         <span className="stat-label">{label}</span>
-        <span className="pill">{pct(ach)}</span>
+        {marker}
       </div>
       <div className="py-3">
         <p className="stat-value">{value}</p>
@@ -2023,11 +2669,23 @@ function Kpi({ label, value, sub, ach, featured = false }: { label: string; valu
     <div className="card stat p-3.5">
       <div className="flex items-start justify-between gap-2">
         <span className="stat-label">{label}</span>
-        <span className={`pill ${tone}`}>{pct(ach)}</span>
+        {marker}
       </div>
-      <p className="stat-value truncate">{value}</p>
-      <p className="stat-sub truncate">{sub}</p>
-      <div className="bar mt-2.5"><div className={`bar-fill ${fill}`} style={{ width: `${width}%` }} /></div>
+      {loading ? (
+        <>
+          <div className="skeleton mt-2 h-6 w-28 rounded-[var(--r-xs)]" />
+          <div className="skeleton mt-2 h-3 w-20 rounded-[var(--r-xs)]" />
+          <div className="skeleton mt-3 h-[5px] w-full rounded-full" />
+        </>
+      ) : (
+        <>
+          <p className="stat-value truncate">{value}</p>
+          <p className="stat-sub truncate">{sub}</p>
+          {ach != null && (
+            <div className="bar mt-2.5"><div className={`bar-fill ${fill}`} style={{ width: `${width}%` }} /></div>
+          )}
+        </>
+      )}
     </div>
   );
 }

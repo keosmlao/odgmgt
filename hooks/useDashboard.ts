@@ -77,8 +77,20 @@ function normalizeDashboard(payload: any) {
   const thisMonthAch = pct(kpi.this_month_actual, kpi.this_month_target);
   const lastMonthAch = pct(kpi.last_month_actual, kpi.last_month_target);
   const yoy = pct(Number(kpi.ytd_actual || 0) - Number(kpi.ytd_last_year || 0), kpi.ytd_last_year);
-  const monthIndex = new Date().getMonth() + 1;
-  const forecastEOY = monthIndex > 0 ? (Number(kpi.ytd_actual || 0) / monthIndex) * 12 : 0;
+  // Run-rate on elapsed days, not on the month number: on 12 Aug only ~7.4
+  // months have passed, so dividing by 8 understates the pace. A year that is
+  // already finished forecasts to exactly what it did.
+  const today = new Date();
+  const selectedYear = Number(kpi.year || today.getFullYear());
+  const yearStart = new Date(selectedYear, 0, 1).getTime();
+  const daysInYear = Math.round((new Date(selectedYear, 11, 31).getTime() - yearStart) / 86_400_000) + 1;
+  const elapsedDays =
+    selectedYear < today.getFullYear()
+      ? daysInYear
+      : selectedYear > today.getFullYear()
+        ? 0
+        : Math.min(daysInYear, Math.max(1, Math.round((today.getTime() - yearStart) / 86_400_000) + 1));
+  const forecastEOY = elapsedDays > 0 ? (Number(kpi.ytd_actual || 0) / elapsedDays) * daysInYear : 0;
   const eoyGap = Number(kpi.ytd_target || 0) - forecastEOY;
   const gapThisMonth = Math.max(0, Number(kpi.this_month_target || 0) - Number(kpi.this_month_actual || 0));
   const now = new Date();
@@ -144,6 +156,7 @@ export function useDashboard() {
   const [loading, setLoading] = useState(!initialDashboardCache);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(() => initialDashboardCache ? new Date() : null);
   const filtersLoaded = useRef(false);
 
   // Load filters + dashboard data in parallel on first mount
@@ -176,6 +189,7 @@ export function useDashboard() {
           dashRes.data || {},
         );
         setData(normalizeDashboard(dashRes.data || {}));
+        setUpdatedAt(new Date());
       })
       .catch(() => {
         if (!initialDashboardCache) {
@@ -216,6 +230,7 @@ export function useDashboard() {
       const response = await api.get("/dashboard/owner-sales", { params });
       writeSessionCache(cacheKey, response.data || {});
       setData(normalizeDashboard(response.data || {}));
+      setUpdatedAt(new Date());
     } catch (err: any) {
       if (!dataRef.current && !cached) {
         setError(err?.response?.data?.error || "Unable to load dashboard data");
@@ -238,8 +253,17 @@ export function useDashboard() {
     return Object.fromEntries(buOptions.map((item: any) => [item.value, item.label]));
   }, [buOptions]);
 
+  const resetFilters = useCallback(() => {
+    const currentYear = String(new Date().getFullYear());
+    setYear(yearOptions.includes(currentYear) ? currentYear : yearOptions[yearOptions.length - 1] || currentYear);
+    setBu("ALL");
+    setChannel(["ALL"]);
+    setProvince(["ALL"]);
+    setSearchQuery("");
+  }, [yearOptions]);
+
   return {
-    data, loading, refreshing, error, load,
+    data, loading, refreshing, error, load, updatedAt, resetFilters,
     year, setYear: (v: any) => setYear(String(v)),
     bu, setBu,
     channel, setChannel,

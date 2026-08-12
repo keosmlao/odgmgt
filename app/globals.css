@@ -2,6 +2,43 @@
 @import "tailwindcss";
 
 /* ══════════════════════════════════════════════════════════════
+   Brand colour ramp the pages copied from odss-next rely on. Copied from
+   odss-next/src/app/globals.css. They are Tailwind @theme tokens, so without
+   them utilities like bg-brand-50 / text-brand-800 / text-brand-orange-700 are
+   never generated and those pages render as unstyled washed-out text.
+
+   Deliberately NOT copied: ODSS also sets html { font-size: 14px }, which would
+   shrink every page in this app, not just the copied ones.
+   ══════════════════════════════════════════════════════════════ */
+@theme {
+  --color-brand-50: #f1fafe;
+  --color-brand-100: #dff5fc;
+  --color-brand-200: #c0ebf9;
+  --color-brand-300: #93ddf5;
+  --color-brand-400: #4bc7ef;
+  --color-brand-500: #3c9bd3;
+  --color-brand-600: #2c6fb6;
+  --color-brand-700: #1e5b9a;
+  --color-brand-800: #0f477d;
+  --color-brand-900: #003260;
+
+  --color-brand-orange-50: #fef6ed;
+  --color-brand-orange-100: #fdebd7;
+  --color-brand-orange-200: #fcd9b0;
+  --color-brand-orange-300: #ffd071;
+  --color-brand-orange-400: #fbb148;
+  --color-brand-orange-500: #f6921e;
+  --color-brand-orange-600: #d17c1a;
+  --color-brand-orange-700: #9f5f14;
+
+  --color-brand: #2c6fb6;
+  --color-brand-sky: #4bc7ef;
+  --color-brand-navy: #003260;
+  --color-brand-orange: #f6921e;
+  --color-brand-yellow: #ffd071;
+}
+
+/* ══════════════════════════════════════════════════════════════
    ODIEN GROUP design tokens — navy · sky · orange, data-dense.
    Every surface, border and state colour in the app comes from
    here; pages should not hard-code palette values.
@@ -492,4 +529,188 @@ details[open] > summary .details-chevron {
 
 .details-chevron {
   transition: transform 0.15s ease;
+}
+
+/* ══════ TV / presentation mode (toggled on <body> by the dashboard) ══════ */
+body.tv-mode aside,          /* sidebar            */
+body.tv-mode .sticky { display: none !important; }
+/* Keep the floating "exit presentation" button visible. */
+body.tv-mode .fixed:not(.tv-keep) { display: none !important; }
+
+body.tv-mode .app-content { margin-left: 0 !important; }
+/* Bigger numbers for meeting screens — zoom keeps the layout intact. */
+body.tv-mode main { zoom: 1.35; }
+
+/* ══════ Print (Executive PDF / paper report) ══════ */
+@media print {
+  @page { size: A4; margin: 10mm; }
+  html, body { background: #fff !important; }
+
+  /* Hide chrome that is useless on paper */
+  aside,                       /* sidebar            */
+  .fixed,                      /* mobile top bar etc */
+  header button,               /* header actions     */
+  .tabs,                       /* tab switcher       */
+  .sticky,                     /* section navigator  */
+  [class*="print:hidden"] { display: none !important; }
+
+  /* Reset layout so content spans the page */
+  .app-content { margin-left: 0 !important; }
+  main { max-width: 100% !important; padding: 0 !important; }
+
+  /* Force light palette even in dark mode */
+  :root, .dark {
+    --ink: #0d2439; --ink-soft: #3d5a72; --muted: #5b7086;
+    --canvas: #ffffff; --surface: #ffffff; --surface-2: #f7fafd;
+    --line: rgba(0, 51, 97, 0.11); --line-soft: rgba(0, 51, 97, 0.06);
+    --brand-soft: #e8f1f9;
+    color-scheme: light;
+  }
+
+  /* Avoid splitting cards across pages */
+  .card { break-inside: avoid; box-shadow: none !important; border: 1px solid var(--line) !important; }
+  a { text-decoration: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Styles the pages copied from the TMS app depend on. Copied from
+   tms/src/app/globals.css — without them the hero renders white text on a
+   white background, because the gradient class that paints it does not exist
+   here. Names are TMS's own (glass*, brand-gradient-*), so nothing above is
+   affected.
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-bg-heavy: rgba(255, 255, 255, 0.94);
+  --glass-border: rgba(0, 50, 96, 0.10);
+  --glass-border-subtle: rgba(0, 50, 96, 0.12);
+  --glass-shadow: 0 18px 50px rgba(0, 50, 96, 0.08);
+  --glass-shadow-lg: 0 24px 70px rgba(0, 50, 96, 0.10);
+  --glass-glow-primary: rgba(44, 111, 182, 0.14);
+  --glass-glow-success: rgba(16, 185, 129, 0.15);
+  --glass-glow-warning: rgba(246, 146, 30, 0.15);
+  --glass-glow-danger: rgba(239, 68, 68, 0.15);
+}
+
+.dark {
+  --glass-bg: rgba(6, 35, 56, 0.78);
+  --glass-bg-heavy: rgba(6, 35, 56, 0.94);
+  --glass-border: rgba(224, 240, 250, 0.10);
+  --glass-border-subtle: rgba(224, 240, 250, 0.12);
+  --glass-shadow: 0 18px 52px rgba(0, 12, 24, 0.42);
+  --glass-shadow-lg: 0 28px 80px rgba(0, 12, 24, 0.54);
+  --glass-glow-primary: rgba(75, 199, 239, 0.18);
+  --glass-glow-success: rgba(16, 185, 129, 0.20);
+  --glass-glow-warning: rgba(246, 146, 30, 0.20);
+  --glass-glow-danger: rgba(239, 68, 68, 0.20);
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-heavy {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-subtle {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid var(--glass-border-subtle);
+}
+
+.glass-input {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border-subtle);
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  border-color: rgba(44, 111, 182, 0.55);
+  box-shadow: 0 0 0 3px rgba(44, 111, 182, 0.12), 0 0 16px rgba(44, 111, 182, 0.08);
+  outline: none;
+}
+
+.glow-primary { box-shadow: var(--glass-shadow), 0 0 0 1px var(--glass-glow-primary), inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.glow-success { box-shadow: var(--glass-shadow), 0 0 20px var(--glass-glow-success); }
+.glow-warning { box-shadow: var(--glass-shadow), 0 0 20px var(--glass-glow-warning); }
+.glow-danger  { box-shadow: var(--glass-shadow), 0 0 20px var(--glass-glow-danger); }
+
+.brand-gradient-cool { background: linear-gradient(135deg, #4bc7ef 0%, #2c6fb6 52%, #003260 100%); }
+.brand-gradient-warm { background: linear-gradient(135deg, #4bc7ef 0%, #ffd071 55%, #f6921e 100%); }
+.brand-gradient-text {
+  background: linear-gradient(135deg, #4bc7ef 0%, #2c6fb6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Topbar ─────────────────────────────────────────────────────
+   Sits above the page content inside the shell. On mobile it clears the
+   fixed brand bar (3.5rem) that the sidebar renders. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 3.5rem;
+  min-height: 3.25rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(14px);
+}
+@media (min-width: 768px) { .topbar { margin-top: 0; padding-inline: 1.5rem; } }
+
+.topbar-title { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+
+.topbar-locales {
+  display: none;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+@media (min-width: 640px) { .topbar-locales { display: flex; } }
+
+.topbar-locale {
+  border-radius: var(--r-xs);
+  padding: 0.2rem 0.4rem;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  transition: 150ms ease;
+}
+.topbar-locale:hover { background: var(--surface-2); color: var(--ink); }
+.topbar-locale.is-active { background: var(--brand-deep); color: #fff; }
+
+.topbar-user { display: none; align-items: center; gap: 0.5rem; padding-left: 0.4rem; }
+@media (min-width: 768px) { .topbar-user { display: flex; } }
+
+.topbar-avatar {
+  display: grid;
+  place-items: center;
+  height: 1.9rem;
+  width: 1.9rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-size: 10.5px;
+  font-weight: 800;
 }
