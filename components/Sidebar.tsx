@@ -31,6 +31,7 @@ import {
   Clock,
   Boxes,
   Wallet,
+  Landmark,
   Truck,
   History,
   Menu,
@@ -57,6 +58,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: "/month-summary", i18nKey: "sidebar.monthSummary", icon: <CalendarRange size={17} /> },
       { path: "/retail-incentive", i18nKey: "sidebar.incentive", icon: <Award size={17} /> },
       { path: "/receivables", i18nKey: "sidebar.receivables", icon: <Wallet size={17} /> },
+      { path: "/cash-bank", i18nKey: "sidebar.cashBank", icon: <Landmark size={17} /> },
     ],
   },
   {
