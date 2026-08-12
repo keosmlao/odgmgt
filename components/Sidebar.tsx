@@ -18,6 +18,7 @@ import {
   Settings,
   Settings2,
   ShieldCheck,
+  ShieldAlert,
   ShoppingCart,
   Users,
   Table,
@@ -83,6 +84,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     key: "sidebar.groupProduct",
     items: [
       { path: "/products", i18nKey: "sidebar.products", icon: <Package size={17} /> },
+      { path: "/defects", i18nKey: "sidebar.defects", icon: <ShieldAlert size={17} /> },
     ],
   },
   {
