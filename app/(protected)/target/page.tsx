@@ -259,11 +259,11 @@ export default function TargetSetup() {
         const isDirty = rowId ? dirtyCellIds.has(cellId) : false;
         const editable = Boolean(rowId) && canEditRows && !saveLoading;
         return (
-          <td key={idx} className={`border-b border-slate-100 px-1 py-0.5 text-right dark:border-slate-800 ${isParent ? "bg-slate-50/80 dark:bg-slate-800/40" : ""}`}>
+          <td key={idx} className={`border-b border-[var(--line-soft)] px-1 py-0.5 text-right ${isParent ? "bg-[var(--surface-2)]/80 " : ""}`}>
             {isParent ? (
-              <span className="block px-2 py-1 text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">{fmtCurrency(val)}</span>
+              <span className="block px-2 py-1 text-xs font-semibold tabular-nums text-[var(--ink-soft)]">{fmtCurrency(val)}</span>
             ) : !editable ? (
-              <span className={`block rounded-lg px-2 py-1.5 text-xs tabular-nums ${isDirty ? "bg-amber-50 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" : "text-slate-700 dark:text-slate-200"}`}>
+              <span className={`block rounded-lg px-2 py-1.5 text-xs tabular-nums ${isDirty ? "bg-[var(--warn-bg)] font-semibold text-[var(--warn)] dark:bg-[var(--warn-bg)]0/10 dark:text-amber-300" : "text-[var(--ink-soft)]"}`}>
                 {fmtCurrency(val)}
               </span>
             ) : (
@@ -286,7 +286,7 @@ export default function TargetSetup() {
                       return next;
                     });
                   }}
-                  className={`w-full rounded-lg bg-transparent px-2 py-1.5 text-right text-xs tabular-nums text-slate-700 outline-none transition-all focus:bg-blue-50 focus:ring-2 focus:ring-blue-500/20 dark:text-slate-200 dark:focus:bg-blue-900/20 ${isDirty ? "bg-amber-50/80 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20" : ""}`}
+                  className={`w-full rounded-lg bg-transparent px-2 py-1.5 text-right text-xs tabular-nums text-[var(--ink-soft)] outline-none transition-all focus:bg-[var(--info-bg)] focus:ring-2 focus:ring-[var(--brand)]/20 dark:focus:bg-blue-900/20 ${isDirty ? "bg-[var(--warn-bg)]/80 text-[var(--warn)] ring-1 ring-amber-200 dark:bg-[var(--warn-bg)]0/10 dark:text-amber-300 dark:ring-amber-500/20" : ""}`}
                 />
               </div>
             )}
@@ -298,19 +298,17 @@ export default function TargetSetup() {
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200"
+      className="flex h-screen flex-col overflow-hidden bg-transparent text-[var(--ink)]"
       style={{ fontFamily: '"Noto Sans Lao","Noto Sans",system-ui,sans-serif' }}
     >
       {/* ══ Header ══ */}
-      <header className="shrink-0 border-b border-slate-200/80 bg-white px-5 py-3 dark:border-slate-800/80 dark:bg-slate-900">
+      <header className="page-hd">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white">
-              {t("sidebar.target")}
-            </h1>
-            <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-1.5 dark:bg-blue-500/10">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Total</span>
-              <span className="text-sm font-bold tabular-nums text-blue-700 dark:text-blue-400">{fmtCurrency(grandTotal)}</span>
+            <div><p className="eyebrow">Sales planning</p><h1 className="page-title">{t("sidebar.target")}</h1></div>
+            <div className="flex items-center gap-2 rounded-[var(--r-md)] bg-[var(--pos-bg)] px-3 py-1.5 dark:bg-[var(--pos-bg)]0/10">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--pos)]">Total</span>
+              <span className="text-sm font-bold tabular-nums text-[var(--pos)]">{fmtCurrency(grandTotal)}</span>
             </div>
           </div>
 
@@ -318,21 +316,21 @@ export default function TargetSetup() {
             <select
               value={displayYear}
               onChange={(e) => setDisplayYear(Number(e.target.value))}
-              className="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="appearance-none rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] py-2 pl-3 pr-8 text-sm font-medium outline-none transition-all focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
             >
               {availableYears.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
             {pendingChanges.length > 0 && (
-              <span className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+              <span className="rounded-[var(--r-md)] bg-[var(--warn-bg)] px-3 py-2 text-[11px] font-semibold text-[var(--warn)] dark:bg-[var(--warn-bg)]0/10 dark:text-amber-300">
                 {pendingChanges.length} unsaved changes
               </span>
             )}
             <button
               onClick={resetCurrentYearChanges}
               disabled={saveLoading || pendingChanges.length === 0}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex items-center gap-1.5 rounded-[var(--r-md)] border border-[var(--line)] px-3 py-2 text-xs font-medium text-[var(--ink-soft)] transition-colors hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RotateCcw size={14} />
               Reset
@@ -340,7 +338,7 @@ export default function TargetSetup() {
             <button
               onClick={saveChanges}
               disabled={saveLoading || pendingChanges.length === 0}
-              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-600/20 transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn btn-accent"
             >
               {saveLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               {saveLoading ? "Saving..." : "Save Changes"}
@@ -349,7 +347,7 @@ export default function TargetSetup() {
             <button
               onClick={handleCreateNew}
               disabled={navLoading}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-60"
+              className="btn btn-primary"
             >
               {navLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               {navLoading ? t("app.loading") : t("sidebar.target")}
@@ -359,17 +357,13 @@ export default function TargetSetup() {
       </header>
 
       {/* ══ Filter bar ══ */}
-      <div className="shrink-0 border-b border-slate-200/80 bg-white px-5 py-3 dark:border-slate-800/80 dark:bg-slate-900">
+      <div className="shrink-0 border-b border-[var(--line)]/80 bg-[var(--surface)] px-5 py-3 /80">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {/* BU filter pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="tabs">
             <button
               onClick={() => setSelectedBU("All")}
-              className={`shrink-0 rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
-                selectedBU === "All"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                  : "border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              }`}
+              className={`tab ${selectedBU === "All" ? "is-active" : ""}`}
             >
               {t("app.all")}
             </button>
@@ -380,17 +374,9 @@ export default function TargetSetup() {
                   key={bu.name}
                   onClick={() => setSelectedBU(bu.name)}
                   disabled={disabled}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
-                    selectedBU === bu.name
-                      ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-                      : disabled
-                        ? "border border-slate-100 text-slate-300 dark:border-slate-800 dark:text-slate-600"
-                        : "border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  }`}
+                  className={`tab ${selectedBU === bu.name ? "is-active" : ""} ${disabled ? "opacity-45" : ""}`}
                 >
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-lg text-[10px] font-bold ${
-                    selectedBU === bu.name ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                  }`}>
+                  <span className={`flex h-4.5 w-4.5 items-center justify-center rounded-[var(--r-xs)] text-[10px] font-bold ${selectedBU === bu.name ? "bg-white/20 text-white" : "bg-[var(--surface-2)] text-[var(--muted)]"}`}>
                     {bu.name?.charAt(0)?.toUpperCase() || "?"}
                   </span>
                   {bu.name}
@@ -402,21 +388,21 @@ export default function TargetSetup() {
           {/* Right side: search + bulk edit */}
           <div className="flex items-center gap-2">
             {!canEditRows && (
-              <span className="hidden rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 md:inline-flex">
+              <span className="hidden rounded-[var(--r-md)] bg-[var(--surface-2)] px-3 py-2 text-[11px] font-semibold text-[var(--ink-soft)] md:inline-flex">
                 Select one BU to edit monthly targets
               </span>
             )}
-            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800">
-              <Search size={14} className="text-slate-400" />
+            <div className="flex items-center gap-1.5 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 transition-all focus-within:border-[var(--brand)] focus-within:ring-2 focus-within:ring-blue-500/20">
+              <Search size={14} className="text-[var(--muted)]" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={`${t("filter.province")}...`}
-                className="w-28 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200 sm:w-36"
+                className="w-28 bg-transparent text-xs text-[var(--ink-soft)] outline-none placeholder:text-[var(--muted)] sm:w-36"
               />
               {search && (
-                <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600">
+                <button onClick={() => setSearch("")} className="text-[var(--muted)] hover:text-[var(--ink-soft)]">
                   <X size={12} />
                 </button>
               )}
@@ -424,14 +410,14 @@ export default function TargetSetup() {
           </div>
         </div>
         {saveFeedback && (
-          <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium ${
-            saveFeedback.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
-              : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-          }`}>
+          <div className={`mt-3 flex items-center gap-2 rounded-[var(--r-md)] border px-3 py-2 text-xs font-medium ${
+ saveFeedback.type === "success"
+ ? "border-[var(--line)] bg-[var(--pos-bg)] text-[var(--pos)] "
+ : "border-[var(--neg)] bg-[var(--neg-bg)] text-[var(--neg)] dark:border-[var(--neg)]/20 dark:bg-[var(--neg-bg)]0/10 dark:text-rose-300"
+ }`}>
             {saveFeedback.type === "success" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
             <span>{saveFeedback.text}</span>
-            <span className="ml-auto rounded-lg bg-white/70 px-2 py-0.5 text-[10px] font-semibold dark:bg-slate-900/40">
+            <span className="ml-auto rounded-lg bg-[var(--surface)]/70 px-2 py-0.5 text-[10px] font-semibold /40">
               {pendingRowCount > 0 ? `${pendingRowCount} rows pending` : "All changes synced"}
             </span>
           </div>
@@ -443,14 +429,14 @@ export default function TargetSetup() {
         <div className="absolute inset-0 overflow-auto">
           <table className="w-full min-w-max border-collapse">
             <thead className="sticky top-0 z-20">
-              <tr className="bg-slate-900 text-[10px] font-semibold uppercase tracking-wider text-slate-300">
-                <th className="sticky left-0 z-30 w-[240px] border-b border-slate-700 bg-slate-900 px-4 py-3 text-left lg:w-[300px]">
+              <tr className="bg-[var(--brand-deep)] text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+                <th className="sticky left-0 z-30 w-[240px] border-b border-[var(--line)] bg-[var(--brand-deep)] px-4 py-3 text-left lg:w-[300px]">
                   Structure
                 </th>
                 {MONTH_LABELS.map((m, i) => (
-                  <th key={i} className="min-w-[85px] border-b border-slate-700 px-2 py-3 text-center">{m}</th>
+                  <th key={i} className="min-w-[85px] border-b border-[var(--line)] px-2 py-3 text-center">{m}</th>
                 ))}
-                <th className="sticky right-0 z-30 min-w-[120px] border-b border-l border-slate-700 bg-slate-900 px-4 py-3 text-right">
+                <th className="sticky right-0 z-30 min-w-[120px] border-b border-l border-[var(--line)] bg-[var(--brand-deep)] px-4 py-3 text-right">
                   Year Total
                 </th>
               </tr>
@@ -461,15 +447,15 @@ export default function TargetSetup() {
                 <React.Fragment key={buName}>
                   {showBuHeader && (
                     <tr>
-                      <td className="sticky left-0 z-10 border-b border-slate-200 bg-white p-0 dark:border-slate-800 dark:bg-slate-900">
-                        <div className="flex items-center gap-2.5 border-l-4 border-blue-600 bg-slate-50 px-4 py-2.5 dark:bg-slate-800/60">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white shadow-sm">
+                      <td className="sticky left-0 z-10 border-b border-[var(--line)] bg-[var(--surface)] p-0">
+                        <div className="flex items-center gap-2.5 border-l-4 border-blue-600 bg-[var(--surface-2)] px-4 py-2.5">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--brand-deep)] text-xs font-bold text-white shadow-sm">
                             {buName?.charAt(0)?.toUpperCase() || "?"}
                           </span>
-                          <span className="text-sm font-bold text-slate-800 dark:text-white">{buName.toUpperCase()}</span>
+                          <span className="text-sm font-bold text-[var(--ink)]">{buName.toUpperCase()}</span>
                         </div>
                       </td>
-                      <td colSpan={13} className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60" />
+                      <td colSpan={13} className="border-b border-[var(--line)] bg-[var(--surface-2)]" />
                     </tr>
                   )}
 
@@ -489,26 +475,26 @@ export default function TargetSetup() {
                       <React.Fragment key={`${buName}-${chName}`}>
                         {/* Channel header */}
                         <tr>
-                          <td className="sticky left-0 z-10 border-b border-slate-100 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900" style={{ paddingLeft: showBuHeader ? 28 : 16 }}>
+                          <td className="sticky left-0 z-10 border-b border-[var(--line-soft)] bg-[var(--surface)] px-4 py-2" style={{ paddingLeft: showBuHeader ? 28 : 16 }}>
                             <div className="flex items-center gap-2">
-                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-slate-100 to-slate-50 text-[10px] font-bold text-slate-600 shadow-sm dark:from-slate-700 dark:to-slate-800 dark:text-slate-300">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-slate-100 to-slate-50 text-[10px] font-bold text-[var(--ink-soft)] shadow-sm dark:from-slate-700 dark:to-slate-800">
                                 {chLetter}
                               </span>
-                              <span className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">{chName}</span>
+                              <span className="text-xs font-bold uppercase tracking-wide text-[var(--ink-soft)]">{chName}</span>
                             </div>
                           </td>
-                          <td colSpan={13} className="border-b border-slate-100 dark:border-slate-800" />
+                          <td colSpan={13} className="border-b border-[var(--line-soft)]" />
                         </tr>
 
                         {/* Channel total */}
-                        <tr className="bg-slate-50/80 dark:bg-slate-800/30">
-                          <td className="sticky left-0 z-10 border-b border-slate-100 bg-slate-50/80 px-4 py-1.5 dark:border-slate-800 dark:bg-slate-800/30" style={{ paddingLeft: showBuHeader ? 28 : 16 }}>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        <tr className="bg-[var(--surface-2)]/80">
+                          <td className="sticky left-0 z-10 border-b border-[var(--line-soft)] bg-[var(--surface-2)]/80 px-4 py-1.5" style={{ paddingLeft: showBuHeader ? 28 : 16 }}>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
                               Total {chName}
                             </span>
                           </td>
                           <MonthCells months={chMonths} isParent />
-                          <td className="sticky right-0 z-10 border-b border-l border-slate-100 bg-slate-50/80 px-4 py-1.5 text-right text-sm font-bold tabular-nums text-slate-800 dark:border-slate-800 dark:bg-slate-800/30 dark:text-white">
+                          <td className="sticky right-0 z-10 border-b border-l border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-1.5 text-right text-sm font-bold tabular-nums text-[var(--ink)]">
                             {fmtCurrency(chTotal)}
                           </td>
                         </tr>
@@ -518,36 +504,36 @@ export default function TargetSetup() {
                           <>
                             <tr
                               onClick={() => toggleExpand(groupKey)}
-                              className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                              className="cursor-pointer transition-colors hover:bg-[var(--surface-2)]"
                             >
-                              <td className="sticky left-0 z-10 border-b border-slate-100 bg-white px-4 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+                              <td className="sticky left-0 z-10 border-b border-[var(--line-soft)] bg-[var(--surface)] px-4 py-1.5">
                                 <div className="flex items-center gap-2" style={{ marginLeft: showBuHeader ? 24 : 12 }}>
-                                  <ChevronRight size={12} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Vientiane Capital</span>
-                                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                  <ChevronRight size={12} className={`text-[var(--muted)] transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                                  <span className="text-xs font-semibold text-[var(--ink-soft)]">Vientiane Capital</span>
+                                  <span className="rounded-md bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]">
                                     {vientianeRows.length}
                                   </span>
                                 </div>
                               </td>
                               <MonthCells months={vtMonths} isParent />
-                              <td className="sticky right-0 z-10 border-b border-l border-slate-100 bg-slate-50/80 px-4 py-1.5 text-right font-semibold tabular-nums text-slate-800 dark:border-slate-800 dark:bg-slate-800/30 dark:text-white">
+                              <td className="sticky right-0 z-10 border-b border-l border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-1.5 text-right font-semibold tabular-nums text-[var(--ink)]">
                                 {fmtCurrency(vtTotal)}
                               </td>
                             </tr>
                             {isExpanded && vientianeRows.map((row: any) => (
-                              <tr key={row.id} className="transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-900/10">
-                                <td className="sticky left-0 z-10 border-b border-slate-100 bg-white px-4 py-1.5 dark:border-slate-800 dark:bg-slate-900">
-                                  <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400" style={{ marginLeft: showBuHeader ? 48 : 36 }}>
-                                    <span className="text-slate-300 dark:text-slate-600">&#8627;</span>
+                              <tr key={row.id} className="transition-colors hover:bg-[var(--info-bg)]/40 dark:hover:bg-blue-900/10">
+                                <td className="sticky left-0 z-10 border-b border-[var(--line-soft)] bg-[var(--surface)] px-4 py-1.5">
+                                  <div className="flex items-center gap-1.5 text-[var(--muted)]" style={{ marginLeft: showBuHeader ? 48 : 36 }}>
+                                    <span className="text-[var(--muted)] dark:text-[var(--ink-soft)]">&#8627;</span>
                                     <span className="text-xs">{row.district}</span>
                                   </div>
                                 </td>
                                 <MonthCells months={getRowMonths(row, monthOverrides, displayYear)} rowId={row.id} />
-                                <td className={`sticky right-0 z-10 border-b border-l border-slate-100 bg-white px-4 py-1.5 text-right tabular-nums dark:border-slate-800 dark:bg-slate-900 ${
-                                  dirtyRowIds.has(String(row.id))
-                                    ? "font-semibold text-amber-700 dark:text-amber-300"
-                                    : "text-slate-600 dark:text-slate-300"
-                                }`}>
+                                <td className={`sticky right-0 z-10 border-b border-l border-[var(--line-soft)] bg-[var(--surface)] px-4 py-1.5 text-right tabular-nums ${
+ dirtyRowIds.has(String(row.id))
+ ? "font-semibold text-[var(--warn)] dark:text-amber-300"
+ : "text-[var(--ink-soft)]"
+ }`}>
                                   {fmtCurrency(sumMonths(getRowMonths(row, monthOverrides, displayYear)))}
                                 </td>
                               </tr>
@@ -557,18 +543,18 @@ export default function TargetSetup() {
 
                         {/* Other provinces */}
                         {otherRows.map((row: any) => (
-                          <tr key={row.id} className="transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-900/10">
-                            <td className="sticky left-0 z-10 border-b border-slate-100 bg-white px-4 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+                          <tr key={row.id} className="transition-colors hover:bg-[var(--info-bg)]/40 dark:hover:bg-blue-900/10">
+                            <td className="sticky left-0 z-10 border-b border-[var(--line-soft)] bg-[var(--surface)] px-4 py-1.5">
                               <div className="flex items-center gap-2" style={{ marginLeft: showBuHeader ? 36 : 24 }}>
-                                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{row.location}</span>
+                                <span className="text-xs font-medium text-[var(--ink-soft)]">{row.location}</span>
                               </div>
                             </td>
                             <MonthCells months={getRowMonths(row, monthOverrides, displayYear)} rowId={row.id} />
-                            <td className={`sticky right-0 z-10 border-b border-l border-slate-100 bg-white px-4 py-1.5 text-right font-semibold tabular-nums dark:border-slate-800 dark:bg-slate-900 ${
-                              dirtyRowIds.has(String(row.id))
-                                ? "text-amber-700 dark:text-amber-300"
-                                : "text-slate-700 dark:text-slate-200"
-                            }`}>
+                            <td className={`sticky right-0 z-10 border-b border-l border-[var(--line-soft)] bg-[var(--surface)] px-4 py-1.5 text-right font-semibold tabular-nums ${
+ dirtyRowIds.has(String(row.id))
+ ? "text-[var(--warn)] dark:text-amber-300"
+ : "text-[var(--ink-soft)]"
+ }`}>
                               {fmtCurrency(sumMonths(getRowMonths(row, monthOverrides, displayYear)))}
                             </td>
                           </tr>
@@ -584,9 +570,9 @@ export default function TargetSetup() {
 
         {/* Loading overlays */}
         {(loading || navLoading) && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-slate-950/80">
-            <Loader2 className={`h-8 w-8 animate-spin ${navLoading ? "text-emerald-500" : "text-blue-500"}`} />
-            <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--surface)]/80 backdrop-blur-sm /80">
+            <Loader2 className={`h-8 w-8 animate-spin ${navLoading ? "text-[var(--pos)]" : "text-[var(--brand)]"}`} />
+            <p className="mt-3 text-sm font-medium text-[var(--ink-soft)]">
               {navLoading ? "Opening..." : t("app.loading")}
             </p>
           </div>

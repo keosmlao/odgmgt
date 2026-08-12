@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, Check, ClipboardList, Plus, Sparkles, Trash2 } from "lucide-react";
 import api from "@/service/api";
 
 const FALLBACK_CHANNELS = [{ code: "101", name: "Retail" }, { code: "102", name: "Wholesale" }, { code: "103", name: "Technician" }, { code: "106", name: "Project" }];
@@ -35,31 +36,33 @@ export default function TargetCreate() {
   const totalDraftAmount = drafts.reduce((sum, item) => sum + item.target, 0);
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 text-slate-800">
+    <div className="flex min-h-screen flex-col text-[var(--ink)]">
       {/* Header */}
-      <div className="border-b border-slate-200 dark:border-slate-800 bg-white px-4 py-3 flex justify-between items-center shrink-0">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Create Targets</h1>
-          <p className="text-xs text-slate-500">Sales Management - New Entry</p>
+      <div className="shrink-0 border-b border-[var(--line)]/70 bg-[var(--surface)]/75 px-5 py-4 backdrop-blur-xl /75 md:px-8">
+        <div className="mx-auto flex max-w-[1480px] items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-[var(--r-lg)] bg-[var(--brand-deep)] text-white"><Sparkles size={20} /></div>
+          <div><p className="eyebrow">Sales planning</p><h1 className="text-xl font-bold tracking-tight text-[var(--ink)]">Create Targets</h1></div>
         </div>
-        <button onClick={() => router.back()} className="rounded-md px-4 py-2 text-sm font-medium border border-slate-300 hover:bg-slate-50 transition-colors duration-150">Back to List</button>
+        <button onClick={() => router.back()} className="flex items-center gap-2 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--ink-soft)] shadow-sm transition hover:border-[var(--line)] hover:text-[var(--pos)]"><ArrowLeft size={16} /> Back to List</button>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
+      <div className="flex-1 p-5 md:p-8">
+        <div className="mx-auto grid max-w-[1480px] grid-cols-1 gap-5 lg:grid-cols-12">
           {/* Left: Form */}
           <div className="lg:col-span-4 flex flex-col gap-4 overflow-y-auto">
-            <div className="bg-white rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm p-4">
-              <h2 className="font-semibold text-base text-slate-800 mb-4">Target Details</h2>
+            <div className="rounded-[var(--r-lg)] border border-[var(--line)]/80 bg-[var(--surface)] p-5 shadow-sm">
+              <div className="mb-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-[var(--r-md)] bg-[var(--pos-bg)] text-[var(--pos)] dark:bg-[var(--pos-bg)]0/10"><ClipboardList size={18} /></span><div><h2 className="font-bold text-[var(--ink)]">Target Details</h2><p className="page-sub">Add one or more monthly goals</p></div></div>
               <form onSubmit={handleAddDraft} className="space-y-4">
                 {/* Period */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase mb-1.5">Period</label>
+                  <label className="block text-xs font-medium text-[var(--muted)] uppercase mb-1.5">Period</label>
                   <div className="grid grid-cols-3 gap-2">
-                    <input type="number" value={form.year} onChange={(e) => handleChange("year", Number(e.target.value))} className="rounded-md border border-slate-300 px-3 py-2 text-sm text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+                    <input type="number" value={form.year} onChange={(e) => handleChange("year", Number(e.target.value))} className="rounded-md border border-[var(--line)] px-3 py-2 text-sm text-center focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none" />
                     <div className="col-span-2">
-                      <select value={form.month} onChange={(e) => handleChange("month", Number(e.target.value))} disabled={!form.bu || !form.channel} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-400 bg-white">
+                      <select value={form.month} onChange={(e) => handleChange("month", Number(e.target.value))} disabled={!form.bu || !form.channel} className="w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-[var(--surface-2)] disabled:text-[var(--muted)] bg-[var(--surface)]">
                         {availableMonthsForSelection.length === 0 ? <option value="">Full / No Slots</option> : availableMonthsForSelection.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                       </select>
                     </div>
@@ -68,13 +71,13 @@ export default function TargetCreate() {
 
                 {/* Business & Channel */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase mb-1.5">Business & Channel</label>
+                  <label className="block text-xs font-medium text-[var(--muted)] uppercase mb-1.5">Business & Channel</label>
                   <div className="space-y-2">
-                    <select value={form.bu} onChange={(e) => handleChange("bu", e.target.value)} ref={buSelectRef} className={`w-full rounded-md border px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white ${error && !form.bu ? "border-rose-500" : "border-slate-300"}`}>
+                    <select value={form.bu} onChange={(e) => handleChange("bu", e.target.value)} ref={buSelectRef} className={`w-full rounded-md border px-3 py-2 text-sm focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none bg-[var(--surface)] ${error && !form.bu ? "border-[var(--neg)]" : "border-[var(--line)]"}`}>
                       <option value="">Select Business Unit...</option>
                       {buOptions.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
                     </select>
-                    <select value={form.channel} onChange={(e) => handleChange("channel", e.target.value)} disabled={!form.bu} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-400 bg-white">
+                    <select value={form.channel} onChange={(e) => handleChange("channel", e.target.value)} disabled={!form.bu} className="w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-[var(--surface-2)] disabled:text-[var(--muted)] bg-[var(--surface)]">
                       {channelOptions.map((ch) => <option key={ch.code} value={ch.code}>{ch.name}</option>)}
                     </select>
                   </div>
@@ -82,38 +85,38 @@ export default function TargetCreate() {
 
                 {/* Location */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase mb-1.5">Location</label>
+                  <label className="block text-xs font-medium text-[var(--muted)] uppercase mb-1.5">Location</label>
                   <div className="space-y-2">
-                    <select value={form.province} onChange={(e) => handleChange("province", e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white">
+                    <select value={form.province} onChange={(e) => handleChange("province", e.target.value)} className="w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none bg-[var(--surface)]">
                       {provinceOptions.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
                     </select>
                     {isVientianeCapital(form.province) && (
-                      <select value={form.district} onChange={(e) => handleChange("district", e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white">
+                      <select value={form.district} onChange={(e) => handleChange("district", e.target.value)} className="w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none bg-[var(--surface)]">
                         {districtOptions.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
                       </select>
                     )}
                   </div>
                 </div>
 
-                <hr className="border-slate-200 dark:border-slate-800" />
+                <hr className="border-[var(--line)]" />
 
                 {/* Target Value */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase mb-1.5">Target Amount (LAK)</label>
-                  <input type="number" value={form.target} onChange={(e) => handleChange("target", e.target.value)} placeholder="0" min="0" className="w-full rounded-md border border-slate-300 px-3 py-2 text-base font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+                  <label className="block text-xs font-medium text-[var(--muted)] uppercase mb-1.5">Target Amount (LAK)</label>
+                  <input type="number" value={form.target} onChange={(e) => handleChange("target", e.target.value)} placeholder="0" min="0" className="w-full rounded-md border border-[var(--line)] px-3 py-2 text-base font-semibold focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none" />
                 </div>
 
                 {/* Note */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase mb-1.5">Note (Optional)</label>
-                  <textarea value={form.note} onChange={(e) => handleChange("note", e.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none" />
+                  <label className="block text-xs font-medium text-[var(--muted)] uppercase mb-1.5">Note (Optional)</label>
+                  <textarea value={form.note} onChange={(e) => handleChange("note", e.target.value)} rows={2} className="w-full rounded-md border border-[var(--line)] px-3 py-2 text-sm focus:border-[var(--brand)] focus:ring-1 focus:ring-blue-500 outline-none resize-none" />
                 </div>
 
                 {error && (
-                  <div className="p-3 bg-rose-50 text-rose-700 text-sm rounded-lg border border-rose-200">{error}</div>
+                  <div className="p-3 bg-[var(--neg-bg)] text-[var(--neg)] text-sm rounded-lg border border-[var(--neg)]">{error}</div>
                 )}
 
-                <button type="submit" className="w-full rounded-md px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors duration-150">+ Add to List</button>
+                <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-[var(--r-md)] bg-[var(--brand-deep)] px-4 py-3 text-sm font-bold text-white transition hover:brightness-110"><Plus size={16} /> Add to List</button>
               </form>
             </div>
           </div>
@@ -122,74 +125,74 @@ export default function TargetCreate() {
           <div className="lg:col-span-8 flex flex-col h-full gap-4 overflow-hidden">
             {/* Stats */}
             <div className="grid grid-cols-2 gap-4 shrink-0">
-              <div className="bg-white p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
-                <p className="text-xs font-medium text-slate-500">Pending Items</p>
-                <p className="text-xl font-semibold text-slate-800 mt-1">{drafts.length}</p>
+              <div className="rounded-[var(--r-lg)] border border-[var(--line)]/80 bg-[var(--surface)] p-5 shadow-sm">
+                <p className="text-xs font-medium text-[var(--muted)]">Pending Items</p>
+                <p className="text-xl font-semibold text-[var(--ink)] mt-1">{drafts.length}</p>
               </div>
-              <div className="bg-white p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
-                <p className="text-xs font-medium text-emerald-600">Total Value (LAK)</p>
-                <p className="text-xl font-semibold text-slate-800 mt-1">{totalDraftAmount.toLocaleString()}</p>
+              <div className="rounded-[var(--r-lg)] border border-[var(--line)]/80 bg-[var(--surface)] p-5 shadow-sm">
+                <p className="text-xs font-medium text-[var(--pos)]">Total Value (LAK)</p>
+                <p className="text-xl font-semibold text-[var(--ink)] mt-1">{totalDraftAmount.toLocaleString()}</p>
               </div>
             </div>
 
             {/* Draft table */}
-            <div className="flex-1 bg-white rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                <h2 className="font-semibold text-base text-slate-800">Review Drafts</h2>
+            <div className="flex flex-1 flex-col overflow-hidden rounded-[var(--r-lg)] border border-[var(--line)]/80 bg-[var(--surface)] shadow-sm">
+              <div className="px-4 py-3 border-b border-[var(--line)] flex justify-between items-center">
+                <h2 className="font-semibold text-base text-[var(--ink)]">Review Drafts</h2>
                 {drafts.length > 0 && (
-                  <button onClick={() => setDrafts([])} className="text-xs font-medium text-rose-500 hover:text-rose-700 px-2 py-1 hover:bg-rose-50 rounded-md transition-colors duration-150">Clear All</button>
+                  <button onClick={() => setDrafts([])} className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--neg)] transition-colors hover:bg-[var(--neg-bg)] hover:text-[var(--neg)]"><Trash2 size={13} /> Clear All</button>
                 )}
               </div>
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 sticky top-0 text-xs font-medium text-slate-500 uppercase">
+                  <thead className="bg-[var(--surface-2)] sticky top-0 text-xs font-medium text-[var(--muted)] uppercase">
                     <tr>
-                      <th className="px-4 py-2 border-b border-slate-200 dark:border-slate-800">Business & Channel</th>
-                      <th className="px-4 py-2 border-b border-slate-200 dark:border-slate-800">Location</th>
-                      <th className="px-4 py-2 border-b border-slate-200 dark:border-slate-800">Month</th>
-                      <th className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 text-right">Target</th>
-                      <th className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 w-10"></th>
+                      <th className="px-4 py-2 border-b border-[var(--line)]">Business & Channel</th>
+                      <th className="px-4 py-2 border-b border-[var(--line)]">Location</th>
+                      <th className="px-4 py-2 border-b border-[var(--line)]">Month</th>
+                      <th className="px-4 py-2 border-b border-[var(--line)] text-right">Target</th>
+                      <th className="px-4 py-2 border-b border-[var(--line)] w-10"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-[var(--line-soft)]">
                     {drafts.length === 0 ? (
                       <tr>
                         <td colSpan={5}>
-                          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                          <div className="flex flex-col items-center justify-center py-16 text-[var(--muted)]">
                             <p className="font-medium">No targets added yet</p>
                             <p className="text-xs mt-1">Fill the form on the left to start</p>
                           </div>
                         </td>
                       </tr>
                     ) : drafts.map((d) => (
-                      <tr key={d.id} className="group hover:bg-slate-50 transition-colors duration-150">
+                      <tr key={d.id} className="group hover:bg-[var(--surface-2)] transition-colors duration-150">
                         <td className="px-4 py-2">
-                          <div className="font-semibold text-slate-800">{d.buName}</div>
-                          <div className="text-xs text-slate-500">{d.channelName}</div>
+                          <div className="font-semibold text-[var(--ink)]">{d.buName}</div>
+                          <div className="page-sub">{d.channelName}</div>
                         </td>
                         <td className="px-4 py-2">
-                          <div className="text-slate-700">{d.provinceName}</div>
-                          {d.districtName !== "ALL" && d.districtName !== "All" && <div className="text-xs text-blue-600 font-medium">- {d.districtName}</div>}
+                          <div className="text-[var(--ink-soft)]">{d.provinceName}</div>
+                          {d.districtName !== "ALL" && d.districtName !== "All" && <div className="text-xs text-[var(--brand)] font-medium">- {d.districtName}</div>}
                         </td>
                         <td className="px-4 py-2">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{MONTHS.find(m => m.value === d.month)?.label} {d.year}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-[var(--info-bg)] text-[var(--brand)] border border-blue-100">{MONTHS.find(m => m.value === d.month)?.label} {d.year}</span>
                         </td>
-                        <td className="px-4 py-2 text-right font-mono font-semibold text-slate-700">{d.target.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right font-mono font-semibold text-[var(--ink-soft)]">{d.target.toLocaleString()}</td>
                         <td className="px-4 py-2 text-right">
-                          <button onClick={() => setDrafts(prev => prev.filter(x => x.id !== d.id))} className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors duration-150 opacity-0 group-hover:opacity-100">&#10005;</button>
+                          <button onClick={() => setDrafts(prev => prev.filter(x => x.id !== d.id))} className="p-1 text-[var(--muted)] hover:text-[var(--neg)] hover:bg-[var(--neg-bg)] rounded-md transition-colors duration-150 opacity-0 group-hover:opacity-100">&#10005;</button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white">
+              <div className="p-3 border-t border-[var(--line)] bg-[var(--surface)]">
                 <button
                   disabled={saving || drafts.length === 0}
                   onClick={handleSaveAll}
-                  className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-colors duration-150 ${saving || drafts.length === 0 ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                  className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-colors duration-150 ${saving || drafts.length === 0 ? "bg-[var(--surface-2)] text-[var(--muted)] cursor-not-allowed" : "bg-[var(--brand-deep)] text-white hover:brightness-110"}`}
                 >
-                  {saving ? "Saving..." : `Confirm & Save ${drafts.length} Targets`}
+                    <span className="inline-flex items-center justify-center gap-2"><Check size={16} />{saving ? "Saving..." : `Confirm & Save ${drafts.length} Targets`}</span>
                 </button>
               </div>
             </div>

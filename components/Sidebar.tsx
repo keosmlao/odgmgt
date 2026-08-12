@@ -8,91 +8,100 @@ import {
   LayoutDashboard,
   Target,
   BarChart2,
+  CalendarRange,
+  Award,
   Settings,
+  ShieldCheck,
   LogOut,
-  ChevronRight,
   Users,
   Table,
-  Smartphone,
   Menu,
   X,
-  Globe,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useTheme } from "@/context/ThemeContext";
 
-type MenuChild = { path: string; i18nKey: string };
-type MenuItem = {
-  path: string;
-  i18nKey: string;
-  icon: React.ReactNode;
-  children?: MenuChild[];
-};
+type MenuItem = { path: string; i18nKey: string; icon: React.ReactNode };
+type MenuGroup = { key: string; items: MenuItem[] };
 
-const LOCALE_FLAGS: Record<string, string> = {
-  lo: "🇱🇦",
-  th: "🇹🇭",
-  en: "🇬🇧",
-};
+const LOCALE_FLAGS: Record<string, string> = { lo: "🇱🇦", th: "🇹🇭", en: "🇬🇧" };
 
-const MENU_ITEMS: MenuItem[] = [
-  { path: "/dashboard", i18nKey: "sidebar.dashboard", icon: <LayoutDashboard size={20} /> },
-  { path: "/target", i18nKey: "sidebar.target", icon: <Target size={20} /> },
-  { path: "/sales-assignment", i18nKey: "sidebar.assignment", icon: <Users size={20} /> },
-  { path: "/sales-summary", i18nKey: "sidebar.summary", icon: <Table size={20} /> },
-  // { path: "/mobile", i18nKey: "sidebar.mobile", icon: <Smartphone size={20} /> },
-  { path: "/analytics", i18nKey: "sidebar.analytics", icon: <BarChart2 size={20} /> },
-  { path: "/settings", i18nKey: "sidebar.settings", icon: <Settings size={20} /> },
+/** Grouped so the nav reads as sections rather than one long list. */
+const MENU_GROUPS: MenuGroup[] = [
+  {
+    key: "sidebar.groupOverview",
+    items: [
+      { path: "/dashboard", i18nKey: "sidebar.dashboard", icon: <LayoutDashboard size={17} /> },
+      { path: "/analytics", i18nKey: "sidebar.analytics", icon: <BarChart2 size={17} /> },
+    ],
+  },
+  {
+    key: "sidebar.groupReports",
+    items: [
+      { path: "/sales-summary", i18nKey: "sidebar.summary", icon: <Table size={17} /> },
+      { path: "/month-summary", i18nKey: "sidebar.monthSummary", icon: <CalendarRange size={17} /> },
+      { path: "/retail-incentive", i18nKey: "sidebar.incentive", icon: <Award size={17} /> },
+    ],
+  },
+  {
+    key: "sidebar.groupPlanning",
+    items: [
+      { path: "/target", i18nKey: "sidebar.target", icon: <Target size={17} /> },
+      { path: "/sales-assignment", i18nKey: "sidebar.assignment", icon: <Users size={17} /> },
+    ],
+  },
+  {
+    key: "sidebar.groupSystem",
+    items: [
+      { path: "/access", i18nKey: "sidebar.access", icon: <ShieldCheck size={17} /> },
+      { path: "/settings", i18nKey: "sidebar.settings", icon: <Settings size={17} /> },
+    ],
+  },
 ];
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
-  const { t, locale, setLocale, locales: locs, localeLabels } = useLanguage();
+  const { t, locale, setLocale, locales: locs } = useLanguage();
+  const { isDark, toggleTheme } = useTheme() as { isDark: boolean; toggleTheme: () => void };
   const pathname = usePathname();
-  const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
   React.useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
-  const nextLocale = () => {
-    const idx = locs.indexOf(locale);
-    setLocale(locs[(idx + 1) % locs.length]);
-  };
+  const displayName = user?.full_name || user?.username || "User";
 
   return (
     <>
       {/* ── Mobile top bar ── */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-lg md:hidden dark:border-slate-800/80 dark:bg-slate-950/90">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900">
-            <Image src="/ODG.png" alt="ODG" width={20} height={20} />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
-              ODIEN GROUP
-            </p>
-          </div>
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-[var(--brand-deep)] px-3 text-white md:hidden">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-[var(--r-sm)] bg-white/10 ring-1 ring-white/15">
+            <Image src="/ODG.png" alt="ODG" width={18} height={18} />
+          </span>
+          <span className="text-[13px] font-bold tracking-wide">ODIEN GROUP</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={nextLocale}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
-            title={localeLabels[locale]}
-          >
-            {LOCALE_FLAGS[locale]}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileOpen((o) => !o)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          >
-            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setMobileOpen((open) => !open)}
+          className="flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] border border-white/15 text-white/85 transition-colors hover:bg-white/10"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+        >
+          {mobileOpen ? <X size={17} /> : <Menu size={17} />}
+        </button>
       </div>
 
       {/* ── Overlay ── */}
@@ -100,164 +109,113 @@ export default function Sidebar() {
         type="button"
         aria-label="Close sidebar overlay"
         onClick={() => setMobileOpen(false)}
-        className={`fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm transition-opacity md:hidden ${
+        className={`fixed inset-0 z-40 backdrop-blur-sm transition-opacity md:hidden ${
           mobileOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         }`}
+        style={{ background: "rgba(0, 20, 38, 0.5)" }}
       />
 
       {/* ── Sidebar ── */}
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-72 max-w-[86vw] flex-col border-r border-slate-200/80 bg-white transition-transform duration-200 md:w-64 md:max-w-none md:translate-x-0 dark:border-slate-800/80 dark:bg-slate-900 ${
+        className={`fixed left-0 top-0 z-50 flex h-screen w-64 max-w-[84vw] flex-col bg-[var(--brand-deep)] text-white transition-transform duration-200 md:w-60 md:max-w-none md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{ fontFamily: '"Noto Sans Lao","Noto Sans",system-ui,sans-serif' }}
+        style={{ boxShadow: "var(--sh-3)" }}
       >
-        {/* ── Header ── */}
-        <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 px-5 dark:border-slate-800/80">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 shadow-sm">
-              <Image src="/ODG.png" alt="ODG" width={22} height={22} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-base font-bold text-slate-900 dark:text-white">
-                ODIEN GROUP
-              </h1>
-            </div>
+        {/* Brand */}
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/10 px-4">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] bg-white/10 ring-1 ring-white/15">
+            <Image src="/ODG.png" alt="ODG" width={20} height={20} />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-bold leading-tight tracking-[0.06em]">ODIEN GROUP</p>
+            <p className="truncate text-[10px] leading-tight text-white/45">Sales Management</p>
           </div>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 md:hidden dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-[var(--r-sm)] text-white/60 hover:bg-white/10 md:hidden"
             aria-label="Close menu"
           >
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
 
-        {/* ── Navigation ── */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-            {t("sidebar.menu")}
-          </p>
-
-          <div className="space-y-0.5">
-            {MENU_ITEMS.map((item) => {
-              const children = item.children;
-              const isActive = children
-                ? pathname.startsWith(item.path)
-                : pathname === item.path;
-              const hasChildren = Array.isArray(children) && children.length > 0;
-              const isOpen = hasChildren ? !!openMenus[item.path] : true;
-
-              return (
-                <div key={item.path}>
-                  {hasChildren ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setOpenMenus((p) => ({ ...p, [item.path]: !p[item.path] }))
-                      }
-                      className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all ${
-                        isActive
-                          ? "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"
-                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="shrink-0">{item.icon}</span>
-                        <span>{t(item.i18nKey)}</span>
-                      </div>
-                      <ChevronRight
-                        size={14}
-                        className={`text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                      />
-                    </button>
-                  ) : (
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+          {MENU_GROUPS.map((group) => (
+            <div key={group.key} className="mb-3 last:mb-0">
+              <p className="mb-1 px-2.5 text-[9.5px] font-bold uppercase tracking-[0.18em] text-white/35">
+                {t(group.key)}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = pathname === item.path || pathname.startsWith(`${item.path}/`);
+                  return (
                     <Link
+                      key={item.path}
                       href={item.path}
                       onClick={() => setMobileOpen(false)}
-                      className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all ${
-                        isActive
-                          ? "bg-blue-50 text-blue-600 shadow-sm dark:bg-blue-500/10 dark:text-blue-400"
-                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200"
+                      className={`relative flex items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-[12.5px] font-medium transition-colors ${
+                        isActive ? "bg-white/12 text-white" : "text-white/62 hover:bg-white/8 hover:text-white"
                       }`}
                     >
-                      <span className="shrink-0">{item.icon}</span>
-                      <span>{t(item.i18nKey)}</span>
+                      {isActive && (
+                        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-[var(--accent)]" />
+                      )}
+                      <span className={`shrink-0 ${isActive ? "text-[var(--sky)]" : ""}`}>{item.icon}</span>
+                      <span className="truncate">{t(item.i18nKey)}</span>
                     </Link>
-                  )}
-
-                  {hasChildren && isOpen && children && (
-                    <div className="ml-7 mt-0.5 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-800">
-                      {children.map((child) => {
-                        const childActive = pathname === child.path;
-                        return (
-                          <Link
-                            key={child.path}
-                            href={child.path}
-                            onClick={() => setMobileOpen(false)}
-                            className={`flex items-center rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                              childActive
-                                ? "text-blue-600 dark:text-blue-400"
-                                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                            }`}
-                          >
-                            {t(child.i18nKey)}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        {/* ── Language switcher ── */}
-        <div className="border-t border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
+        {/* Preferences */}
+        <div className="border-t border-white/10 px-2.5 py-2.5">
           <div className="flex items-center gap-1">
-            <Globe size={14} className="shrink-0 text-slate-400" />
             {locs.map((l) => (
               <button
                 key={l}
                 type="button"
                 onClick={() => setLocale(l)}
-                className={`flex-1 rounded-lg py-1.5 text-center text-[11px] font-semibold transition-all ${
-                  locale === l
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                className={`flex-1 rounded-[var(--r-xs)] py-1 text-center text-[11px] font-semibold transition-colors ${
+                  locale === l ? "bg-[var(--accent)] text-white" : "text-white/55 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                {LOCALE_FLAGS[l]} {localeLabels[l]}
+                {LOCALE_FLAGS[l]} {l.toUpperCase()}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-xs)] text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
           </div>
         </div>
 
-        {/* ── User profile ── */}
-        <div className="border-t border-slate-200/80 p-4 dark:border-slate-800/80">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-xs font-bold text-white shadow-sm">
-              {(user?.full_name || user?.username || "U").charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
-                {user?.full_name || user?.username || "User"}
-              </p>
-              <p className="truncate text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                {user?.role || "Admin"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={logout}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-500 dark:text-slate-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
-              title={t("sidebar.logout")}
-            >
-              <LogOut size={16} />
-            </button>
+        {/* User */}
+        <div className="flex items-center gap-2.5 border-t border-white/10 px-3 py-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-[var(--warm)]">
+            {initials(displayName)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-semibold leading-tight">{displayName}</p>
+            <p className="truncate text-[10px] uppercase tracking-wider text-white/45">{user?.role || "—"}</p>
           </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="flex h-8 w-8 items-center justify-center rounded-[var(--r-sm)] text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+            title={t("sidebar.logout")}
+          >
+            <LogOut size={15} />
+          </button>
         </div>
       </aside>
     </>

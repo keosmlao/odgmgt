@@ -16,7 +16,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500 dark:bg-slate-950 dark:text-slate-300">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--surface-2)] text-sm font-semibold text-[var(--muted)]">
         Loading session...
       </div>
     );

@@ -126,7 +126,7 @@ export async function GET(request) {
       if (raw == null) return raw;
       const v = String(raw);
       const mapped = c2n[v] || (n2c[v] ? c2n[n2c[v]] : v) || raw;
-      if (["PROJECT", "106", "ຂາຍໂຄງການ", "ໂຄງການ"].includes(String(mapped))) {
+      if (["PROJECT", "103", "ຂາຍໂຄງການ", "ໂຄງການ"].includes(String(mapped))) {
         return "ໂຄງການ";
       }
       return mapped;

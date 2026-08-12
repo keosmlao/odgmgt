@@ -89,6 +89,8 @@ export async function GET(request) {
       topCustomers: (topCustomers || []).map((c) => ({ code: c.customer_code, name: c.customer_name, revenue: Number(c.revenue || 0), orders: Number(c.orders || 0) })),
       bottomCustomers: (bottomCustomers || []).map((c) => ({ code: c.customer_code, name: c.customer_name, revenue: Number(c.revenue || 0), orders: Number(c.orders || 0) })),
       grossProfit: { revenue: Number(gpRow?.revenue || 0), cost: Number(gpRow?.cost || 0), profit: Number(gpRow?.profit || 0), gpPct: Number(gpRow?.gp_pct || 0) },
+      // Cash share of this month's sales — not an AR collection rate; no
+      // payment/receipt data is joined here.
       collection: { totalSales: Number(collectionRow?.total_sales || 0), collected: Number(collectionRow?.collected || 0), rate: Number(collectionRow?.rate || 0) },
       dailyTrend: (dailyTrend || []).map((d) => ({ day: d.day, amount: Number(d.amount || 0), orders: Number(d.orders || 0) })),
       hasDateColumn: !!dateCol,

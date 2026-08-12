@@ -34,7 +34,12 @@ export async function GET(request) {
     let lastMonthYear = year;
     if (lastMonth <= 0) { lastMonth = 12; lastMonthYear = year - 1; }
 
-    const { costCol } = await getSaleDetailSchema();
+    const { costCol, dateCol } = await getSaleDetailSchema();
+    // The running month is only partly done, so month-over-month and churn are
+    // compared against the same slice of days in the previous month.
+    const dayCutoff = year === now.getFullYear() && month === now.getMonth() + 1 ? now.getDate() : 0;
+    const sameDaysClause =
+      dayCutoff && dateCol ? ` AND EXTRACT(DAY FROM ${dateCol}::date) <= ${dayCutoff}` : "";
     const profitExpr = costCol
       ? `COALESCE(SUM(sum_amount),0)::float - COALESCE(SUM(${costCol}),0)::float`
       : `COALESCE(SUM(profit),0)::float`;
@@ -60,9 +65,9 @@ export async function GET(request) {
       one(`SELECT COALESCE(SUM(sum_amount),0)::float AS total, COUNT(DISTINCT doc_no)::int AS orders
            FROM public.odg_sale_detail WHERE ${detailWhere} AND monthdoc=%s`, [...detailParams, month]),
 
-      // 2. Last month total
+      // 2. Last month total, over the same days of the month as this month
       one(`SELECT COALESCE(SUM(sum_amount),0)::float AS total, COUNT(DISTINCT doc_no)::int AS orders
-           FROM public.odg_sale_detail WHERE ${lmWhere}`, lmParams),
+           FROM public.odg_sale_detail WHERE ${lmWhere}${sameDaysClause}`, lmParams),
 
       // 3. AR total for DSO
       one(`SELECT COALESCE(SUM(balance_amount),0)::float AS total FROM public.odg_ar_aging`).catch(() => ({ total: 0 })),
@@ -79,26 +84,27 @@ export async function GET(request) {
             FROM public.odg_sale_detail WHERE ${detailWhere}
             GROUP BY channel ORDER BY revenue DESC`, detailParams),
 
-      // 6. New vs returning customer revenue split (YTD)
-      one(`WITH cust_history AS (
-              SELECT customer_code, MIN(monthdoc) AS first_month
+      // 6. New vs returning: "new" means no purchase in any earlier year, so a
+      //    customer counts once — the old first-month rule made every customer
+      //    new in their first month and returning afterwards.
+      one(`WITH prior AS (
+              SELECT DISTINCT customer_code
               FROM public.odg_sale_detail
-              WHERE yeardoc = %s
-              GROUP BY customer_code
+              WHERE yeardoc < %s AND COALESCE(customer_code,'') <> ''
             )
             SELECT
-              COALESCE(SUM(CASE WHEN ch.first_month = d.monthdoc THEN d.sum_amount ELSE 0 END),0)::float AS new_revenue,
-              COALESCE(SUM(CASE WHEN ch.first_month < d.monthdoc THEN d.sum_amount ELSE 0 END),0)::float AS returning_revenue,
-              COUNT(DISTINCT CASE WHEN ch.first_month = d.monthdoc THEN d.customer_code END)::int AS new_count,
-              COUNT(DISTINCT CASE WHEN ch.first_month < d.monthdoc THEN d.customer_code END)::int AS returning_count
+              COALESCE(SUM(CASE WHEN p.customer_code IS NULL THEN d.sum_amount ELSE 0 END),0)::float AS new_revenue,
+              COALESCE(SUM(CASE WHEN p.customer_code IS NOT NULL THEN d.sum_amount ELSE 0 END),0)::float AS returning_revenue,
+              COUNT(DISTINCT CASE WHEN p.customer_code IS NULL THEN d.customer_code END)::int AS new_count,
+              COUNT(DISTINCT CASE WHEN p.customer_code IS NOT NULL THEN d.customer_code END)::int AS returning_count
             FROM public.odg_sale_detail d
-            JOIN cust_history ch ON ch.customer_code = d.customer_code
+            LEFT JOIN prior p ON p.customer_code = d.customer_code
             WHERE ${detailWhere}`, [year, ...detailParams]),
 
       // 7. Customer churn: active last month but not this month
       one(`WITH last_m AS (
               SELECT DISTINCT customer_code FROM public.odg_sale_detail
-              WHERE yeardoc=%s AND monthdoc=%s ${bu !== "ALL" ? "AND bu_code=%s" : ""}
+              WHERE yeardoc=%s AND monthdoc=%s ${bu !== "ALL" ? "AND bu_code=%s" : ""}${sameDaysClause}
             ),
             this_m AS (
               SELECT DISTINCT customer_code FROM public.odg_sale_detail
@@ -168,6 +174,8 @@ export async function GET(request) {
         thisMonth: thisMonthTotal,
         lastMonth: lastMonthTotal,
         growthPct: momGrowth,
+        // > 0 when both sides are cut to the same day of the month.
+        comparedDays: sameDaysClause ? dayCutoff : 0,
       },
       dso: {
         value: Math.round(dso),

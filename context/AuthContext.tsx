@@ -95,18 +95,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const bootstrap = async (form: any) => {
-    try {
-      const response = await api.post("/auth/bootstrap", form);
-      return response.data || { success: false };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error?.response?.data?.message || "Bootstrap failed",
-      };
-    }
-  };
-
   const logout = async () => {
     try {
       await api.post("/auth/logout");
@@ -124,7 +112,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hydrated,
       isAuthenticated: Boolean(user),
       login,
-      bootstrap,
       logout,
     }),
     [user, hydrated],

@@ -93,81 +93,82 @@ export default function SalesAssignment() {
   // Level styles
   const lvl = [
     {}, // unused
-    { bg: "bg-slate-50 dark:bg-slate-800/50", text: "font-semibold text-slate-900 dark:text-white", badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
-    { bg: "bg-white dark:bg-slate-900", text: "font-medium text-blue-600 dark:text-blue-400", badge: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
-    { bg: "bg-white dark:bg-slate-900", text: "font-medium text-slate-600 dark:text-slate-300", badge: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400" },
-    { bg: "bg-white dark:bg-slate-900", text: "text-slate-500 dark:text-slate-400", badge: "bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500" },
+    { bg: "bg-[var(--surface-2)] /50", text: "font-semibold text-[var(--ink)]", badge: "bg-[var(--info-bg)] text-[var(--brand)] dark:bg-blue-900/30 dark:text-blue-300" },
+    { bg: "bg-[var(--surface)]", text: "font-medium text-[var(--brand)]", badge: "bg-[var(--surface-2)] text-[var(--ink-soft)]  " },
+    { bg: "bg-[var(--surface)]", text: "font-medium text-[var(--ink-soft)]", badge: "bg-[var(--pos-bg)] text-[var(--pos)]  " },
+    { bg: "bg-[var(--surface)]", text: "text-[var(--muted)]", badge: "bg-[var(--surface-2)] text-[var(--muted)]  " },
   ];
   const letters = ["", "B", "S", "P", "D"];
   const indents = ["", "pl-3", "pl-8", "pl-14", "pl-20"];
 
-  const sel = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
+  const sel = "select";
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950" style={{ fontFamily: '"Noto Sans Lao","Noto Sans",system-ui,sans-serif' }}>
+    <div className="min-h-screen bg-transparent" style={{ fontFamily: '"Noto Sans Lao","Noto Sans",system-ui,sans-serif' }}>
 
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/50 bg-white/80 backdrop-blur-xl dark:border-slate-800/50 dark:bg-slate-950/80">
+      <header className="page-hd flex-col !items-stretch !gap-0 !p-0">
         <div className="flex items-center justify-between px-5 py-3 lg:px-6">
           <div>
-            <h1 className="text-base font-semibold text-slate-900 dark:text-white">Sales Assignment</h1>
-            <p className="text-xs text-slate-500">BU → Employee → Province → District</p>
+            <p className="eyebrow">Team operations</p>
+            <h1 className="page-title">Sales Assignment</h1>
+            <p className="page-sub">BU → Employee → Province → District</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={expandAll} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+            <button onClick={expandAll} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:bg-[var(--surface-2)]">
               {expanded.size > 0 ? "Collapse" : "Expand"}
             </button>
-            <button onClick={() => setDrawer(true)} className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+            <button onClick={() => setDrawer(true)} className="flex items-center gap-1 rounded-lg bg-[var(--brand-deep)] px-3 py-1.5 text-xs font-medium text-white hover:brightness-110">
               <Plus size={14} /> Add
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1480px] px-5 py-5 lg:px-6">
+      <main className="mx-auto max-w-[1480px] px-5 py-6 lg:px-8">
 
         {/* Summary cards */}
         <div className="mb-4 grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Assignments</p>
-            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{assignments.length}</p>
+          <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">Total Assignments</p>
+            <p className="mt-1 text-xl font-bold text-[var(--ink)]">{assignments.length}</p>
           </div>
-          <div className="rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Grand Total</p>
-            <p className="mt-1 text-xl font-bold text-blue-600 dark:text-blue-400">{grandTotal.toLocaleString("en-US")}</p>
+          <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">Grand Total</p>
+            <p className="mt-1 text-xl font-bold text-[var(--brand)]">{grandTotal.toLocaleString("en-US")}</p>
           </div>
-          <div className="rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Business Units</p>
-            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{tree.length}</p>
+          <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">Business Units</p>
+            <p className="mt-1 text-xl font-bold text-[var(--ink)]">{tree.length}</p>
           </div>
         </div>
 
         {/* Pivot Table */}
-        <div className="overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-sm dark:border-slate-800/70 dark:bg-slate-900">
+        <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] shadow-sm /70">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-900 text-white dark:bg-slate-800">
-                  <th className="sticky left-0 z-10 bg-slate-900 px-4 py-2.5 text-left font-medium dark:bg-slate-800" style={{ minWidth: 280 }}>Structure</th>
-                  <th className="border-l border-slate-700 px-2 py-2.5 text-right font-medium" style={{ minWidth: 80 }}>Total</th>
+                <tr className="bg-[var(--brand-deep)] text-white">
+                  <th className="sticky left-0 z-10 bg-[var(--brand-deep)] px-4 py-2.5 text-left font-medium" style={{ minWidth: 280 }}>Structure</th>
+                  <th className="border-l border-[var(--line)] px-2 py-2.5 text-right font-medium" style={{ minWidth: 80 }}>Total</th>
                   {MONTHS.map(m => <th key={m.v} className="px-2 py-2.5 text-right font-medium" style={{ minWidth: 64 }}>{m.l}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={14} className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-blue-500" /></td></tr>
+                  <tr><td colSpan={14} className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-[var(--brand)]" /></td></tr>
                 ) : tree.length === 0 ? (
-                  <tr><td colSpan={14} className="py-16 text-center text-slate-400">{t("label.noData")}</td></tr>
+                  <tr><td colSpan={14} className="py-16 text-center text-[var(--muted)]">{t("label.noData")}</td></tr>
                 ) : tree.map((bu: any) => (
                   <TreeRows key={bu.key} node={bu} level={1} expanded={expanded} toggle={toggle} lvl={lvl} letters={letters} indents={indents} />
                 ))}
               </tbody>
               {!loading && tree.length > 0 && (
                 <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-800">
-                    <td className="sticky left-0 z-10 bg-slate-50 px-4 py-3 text-sm text-slate-900 dark:bg-slate-800 dark:text-white">Grand Total</td>
-                    <td className="border-l border-slate-200 px-2 py-3 text-right text-sm font-bold text-blue-600 dark:border-slate-700 dark:text-blue-400">{fmt(grandTotal)}</td>
-                    {MONTHS.map(m => <td key={m.v} className="px-2 py-3 text-right tabular-nums text-slate-500">{fmt(tree.reduce((s: number, b: any) => s + b.months[m.v], 0))}</td>)}
+                  <tr className="border-t-2 border-[var(--line)] bg-[var(--surface-2)] font-semibold">
+                    <td className="sticky left-0 z-10 bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--ink)]">Grand Total</td>
+                    <td className="border-l border-[var(--line)] px-2 py-3 text-right text-sm font-bold text-[var(--brand)]">{fmt(grandTotal)}</td>
+                    {MONTHS.map(m => <td key={m.v} className="px-2 py-3 text-right tabular-nums text-[var(--muted)]">{fmt(tree.reduce((s: number, b: any) => s + b.months[m.v], 0))}</td>)}
                   </tr>
                 </tfoot>
               )}
@@ -180,31 +181,31 @@ export default function SalesAssignment() {
       {drawer && (
         <>
           <div onClick={() => setDrawer(false)} className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" />
-          <div className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl dark:bg-slate-900 md:w-[440px]">
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-[var(--surface)] shadow-2xl md:w-[440px]">
             {/* Drawer header */}
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+            <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
               <div>
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Add Assignment</h2>
-                <p className="text-[11px] text-slate-500">ມອບໝາຍພື້ນທີ່ໃຫ້ພະນັກງານຂາຍ</p>
+                <h2 className="text-sm font-semibold text-[var(--ink)]">Add Assignment</h2>
+                <p className="text-[11px] text-[var(--muted)]">ມອບໝາຍພື້ນທີ່ໃຫ້ພະນັກງານຂາຍ</p>
               </div>
-              <button onClick={() => setDrawer(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={16} /></button>
+              <button onClick={() => setDrawer(false)} className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--surface-2)]"><X size={16} /></button>
             </div>
 
             {/* Drawer form */}
             <form id="assign-form" onSubmit={submit} className="flex-1 space-y-5 overflow-y-auto p-5">
               {/* Section 1: Main */}
               <div>
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400"><Users size={12} /> Main Info</div>
+                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]"><Users size={12} /> Main Info</div>
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Business Unit *</label>
+                    <label className="mb-1 block text-xs font-medium text-[var(--ink-soft)]">Business Unit *</label>
                     <select value={form.buCode} onChange={e => setForm(f => ({ ...f, buCode: e.target.value }))} className={sel}>
                       <option value="">Select...</option>
                       {buList.map((b: any) => <option key={b.code} value={b.code}>{b.name_1 || b.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Sales Person *</label>
+                    <label className="mb-1 block text-xs font-medium text-[var(--ink-soft)]">Sales Person *</label>
                     <select value={form.saleId} onChange={e => { const u = users.find((u: any) => String(u.id) === e.target.value); setForm(f => ({ ...f, saleId: e.target.value, saleName: u?.name || u?.code || "" })); }} className={sel}>
                       <option value="">Select...</option>
                       {users.map((u: any) => <option key={u.id} value={u.id}>{u.name || u.code}</option>)}
@@ -215,17 +216,17 @@ export default function SalesAssignment() {
 
               {/* Section 2: Area */}
               <div>
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400"><MapPin size={12} /> Area</div>
+                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]"><MapPin size={12} /> Area</div>
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Province * <span className="text-slate-400">(Ctrl/Cmd to multi-select)</span></label>
+                    <label className="mb-1 block text-xs font-medium text-[var(--ink-soft)]">Province * <span className="text-[var(--muted)]">(Ctrl/Cmd to multi-select)</span></label>
                     <select multiple value={form.provinceCodes} onChange={e => onProvChange(Array.from(e.target.selectedOptions, o => o.value))} className={`${sel} h-28`}>
                       {provinces.map((p: any) => <option key={p.code} value={p.code}>{p.name_1}</option>)}
                     </select>
                   </div>
                   {districts.length > 0 && (
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">District (Capital)</label>
+                      <label className="mb-1 block text-xs font-medium text-[var(--ink-soft)]">District (Capital)</label>
                       <select multiple value={Array.isArray(form.districtCode) ? form.districtCode : [form.districtCode]} onChange={e => { const v = Array.from(e.target.selectedOptions, o => o.value); setForm(f => ({ ...f, districtCode: v.includes("ALL") ? "ALL" : v as any })); }} className={`${sel} h-20`}>
                         <option value="ALL">{t("app.all")}</option>
                         {districts.map((d: any) => <option key={d.code} value={d.code}>{d.name_1}</option>)}
@@ -237,21 +238,21 @@ export default function SalesAssignment() {
 
               {/* Section 3: Time & Channel */}
               <div>
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400"><Calendar size={12} /> Time & Channel</div>
+                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]"><Calendar size={12} /> Time & Channel</div>
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-slate-600 dark:text-slate-300">Months *</label>
+                    <label className="mb-2 block text-xs font-medium text-[var(--ink-soft)]">Months *</label>
                     <div className="grid grid-cols-6 gap-1.5">
                       {MONTHS.map(m => (
                         <button type="button" key={m.v} onClick={() => setForm(f => ({ ...f, months: f.months.includes(m.v) ? f.months.filter(x => x !== m.v) : [...f.months, m.v] }))}
-                          className={`rounded-lg py-2 text-xs font-medium transition-colors ${form.months.includes(m.v) ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"}`}>
+                          className={`rounded-lg py-2 text-xs font-medium transition-colors ${form.months.includes(m.v) ? "bg-[var(--brand-deep)] text-white" : "border border-[var(--line)] text-[var(--muted)] hover:bg-[var(--surface-2)] "}`}>
                           {m.l}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Sales Channel</label>
+                    <label className="mb-1 block text-xs font-medium text-[var(--ink-soft)]">Sales Channel</label>
                     <select multiple value={form.channelCodes} onChange={e => setForm(f => ({ ...f, channelCodes: Array.from(e.target.selectedOptions, o => o.value) }))} className={`${sel} h-24`}>
                       {channels.map((c: any) => <option key={c.code} value={c.code}>{c.name_1}</option>)}
                     </select>
@@ -261,9 +262,9 @@ export default function SalesAssignment() {
             </form>
 
             {/* Drawer footer */}
-            <div className="border-t border-slate-200 p-5 dark:border-slate-800">
+            <div className="border-t border-[var(--line)] p-5">
               <button form="assign-form" disabled={submitting || !form.saleId || !form.buCode || !form.provinceCodes.length || !form.months.length}
-                className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                className="w-full rounded-lg bg-[var(--brand-deep)] py-2.5 text-sm font-medium text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed">
                 {submitting ? "Processing..." : "Save Assignment"}
               </button>
             </div>
@@ -282,17 +283,17 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents }: any)
 
   return (
     <>
-      <tr onClick={() => hasKids && toggle(node.key)} className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/50 dark:border-slate-800 dark:hover:bg-blue-900/10 ${s.bg}`}>
-        <td className={`sticky left-0 z-10 py-2 pr-4 ${s.bg} border-r border-slate-100 dark:border-slate-800`}>
+      <tr onClick={() => hasKids && toggle(node.key)} className={`cursor-pointer border-b border-[var(--line-soft)] transition-colors hover:bg-[var(--info-bg)]/50 dark:hover:bg-blue-900/10 ${s.bg}`}>
+        <td className={`sticky left-0 z-10 py-2 pr-4 ${s.bg} border-r border-[var(--line-soft)]`}>
           <div className={`flex items-center gap-2 ${indents[level]}`}>
-            {hasKids ? (isOpen ? <ChevronDown size={12} className="text-slate-400" /> : <ChevronRight size={12} className="text-slate-400" />) : <span className="w-3" />}
+            {hasKids ? (isOpen ? <ChevronDown size={12} className="text-[var(--muted)]" /> : <ChevronRight size={12} className="text-[var(--muted)]" />) : <span className="w-3" />}
             <span className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${s.badge}`}>{letters[level]}</span>
             <span className={`truncate text-xs ${s.text}`}>{node.name}</span>
           </div>
         </td>
-        <td className={`border-l border-slate-100 px-2 py-2 text-right tabular-nums font-semibold dark:border-slate-800 ${level === 1 ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-300"}`}>{fmt(node.total)}</td>
+        <td className={`border-l border-[var(--line-soft)] px-2 py-2 text-right tabular-nums font-semibold ${level === 1 ? "text-[var(--ink)]" : "text-[var(--ink-soft)]"}`}>{fmt(node.total)}</td>
         {MONTHS.map(m => (
-          <td key={m.v} className={`px-2 py-2 text-right tabular-nums ${node.months[m.v] > 0 ? "text-slate-700 dark:text-slate-300" : "text-slate-300 dark:text-slate-700"}`}>{fmt(node.months[m.v])}</td>
+          <td key={m.v} className={`px-2 py-2 text-right tabular-nums ${node.months[m.v] > 0 ? "text-[var(--ink-soft)] " : "text-[var(--muted)] dark:text-[var(--ink-soft)]"}`}>{fmt(node.months[m.v])}</td>
         ))}
       </tr>
       {isOpen && hasKids && node.children.map((child: any) => (
