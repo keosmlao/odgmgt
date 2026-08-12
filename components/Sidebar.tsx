@@ -18,25 +18,30 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingCart,
-  LogOut,
   Users,
   Table,
+  Timer,
+  MapPin,
+  Radio,
+  Smartphone,
+  Wrench,
+  Camera,
+  ClipboardList,
+  PackageX,
+  Clock,
+  Boxes,
+  Truck,
+  History,
   Menu,
   X,
-  Moon,
-  Sun,
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { useTheme } from "@/context/ThemeContext";
 
 type MenuItem = { path: string; i18nKey: string; icon: React.ReactNode };
 type MenuGroup = { key: string; items: MenuItem[] };
 
-const LOCALE_FLAGS: Record<string, string> = { lo: "🇱🇦", th: "🇹🇭", en: "🇬🇧" };
-
 /** Grouped so the nav reads as sections rather than one long list. */
-const MENU_GROUPS: MenuGroup[] = [
+export const MENU_GROUPS: MenuGroup[] = [
   {
     key: "sidebar.groupOverview",
     items: [
@@ -53,10 +58,36 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    key: "sidebar.groupTransport",
+    items: [
+      { path: "/transport", i18nKey: "sidebar.transport", icon: <Truck size={17} /> },
+      { path: "/transport/delivery-performance", i18nKey: "sidebar.deliveryPerformance", icon: <Timer size={17} /> },
+      { path: "/transport/gps-monthly", i18nKey: "sidebar.gpsMonthly", icon: <MapPin size={17} /> },
+      { path: "/transport/cars-map", i18nKey: "sidebar.carsMap", icon: <Radio size={17} /> },
+      { path: "/transport/phones-map", i18nKey: "sidebar.phonesMap", icon: <Smartphone size={17} /> },
+      { path: "/transport/pod", i18nKey: "sidebar.pod", icon: <Camera size={17} /> },
+      { path: "/transport/daily-department", i18nKey: "sidebar.dailyDept", icon: <ClipboardList size={17} /> },
+      { path: "/transport/pending-daily", i18nKey: "sidebar.pendingDaily", icon: <PackageX size={17} /> },
+      { path: "/transport/bills-waitingsent", i18nKey: "sidebar.billsWaiting", icon: <Clock size={17} /> },
+      { path: "/transport/bills-inprogress", i18nKey: "sidebar.billsInProgress", icon: <Truck size={17} /> },
+      { path: "/transport/bill-complete", i18nKey: "sidebar.billsComplete", icon: <PackageCheck size={17} /> },
+      { path: "/transport/truck-utilization", i18nKey: "sidebar.truckUtilization", icon: <Boxes size={17} /> },
+    ],
+  },
+  {
     key: "sidebar.groupPlanning",
     items: [
       { path: "/target", i18nKey: "sidebar.target", icon: <Target size={17} /> },
       { path: "/sales-assignment", i18nKey: "sidebar.assignment", icon: <Users size={17} /> },
+    ],
+  },
+  {
+    key: "sidebar.groupService",
+    items: [
+      { path: "/service-center", i18nKey: "sidebar.serviceCenter", icon: <Wrench size={17} /> },
+      { path: "/service-center/schedule", i18nKey: "sidebar.serviceSchedule", icon: <CalendarRange size={17} /> },
+      { path: "/service-center/tracking", i18nKey: "sidebar.serviceTracking", icon: <MapPin size={17} /> },
+      { path: "/service-center/revenue", i18nKey: "sidebar.serviceRevenue", icon: <BadgePercent size={17} /> },
     ],
   },
   {
@@ -74,26 +105,27 @@ const MENU_GROUPS: MenuGroup[] = [
       { path: "/commission", i18nKey: "sidebar.commission", icon: <BadgePercent size={17} /> },
       { path: "/access", i18nKey: "sidebar.access", icon: <ShieldCheck size={17} /> },
       { path: "/settings", i18nKey: "sidebar.settings", icon: <Settings size={17} /> },
+      { path: "/audit-log", i18nKey: "sidebar.auditLog", icon: <History size={17} /> },
     ],
   },
 ];
 
-const isPathActive = (pathname: string, path: string) =>
+const matchesPath = (pathname: string, path: string) =>
   pathname === path || pathname.startsWith(`${path}/`);
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+/**
+ * Only the most specific menu entry lights up. Matching with startsWith alone
+ * highlighted both /transport and /transport/cars-map at the same time, so the
+ * longest matching path wins and everything else stays inactive.
+ */
+const activePathFor = (pathname: string) =>
+  MENU_GROUPS.flatMap((group) => group.items)
+    .map((item) => item.path)
+    .filter((path) => matchesPath(pathname, path))
+    .sort((a, b) => b.length - a.length)[0] ?? null;
 
 export default function Sidebar() {
-  const { user, logout } = useAuth();
-  const { t, locale, setLocale, locales: locs } = useLanguage();
-  const { isDark, toggleTheme } = useTheme() as { isDark: boolean; toggleTheme: () => void };
+  const { t } = useLanguage();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   /** Sections the user folded away — every group starts open. */
@@ -105,12 +137,13 @@ export default function Sidebar() {
 
   /** Never leave the section holding the current page folded. */
   React.useEffect(() => {
-    const active = MENU_GROUPS.find((group) => group.items.some((item) => isPathActive(pathname, item.path)));
+    const current = activePathFor(pathname);
+    const active = MENU_GROUPS.find((group) => group.items.some((item) => item.path === current));
     if (!active) return;
     setCollapsed((prev) => (prev[active.key] ? { ...prev, [active.key]: false } : prev));
   }, [pathname]);
 
-  const displayName = user?.full_name || user?.username || "User";
+  const activePath = activePathFor(pathname);
 
   return (
     <>
@@ -189,7 +222,7 @@ export default function Sidebar() {
               </button>
               <div className={`space-y-0.5 ${isOpen ? "" : "hidden"}`}>
                 {group.items.map((item) => {
-                  const isActive = isPathActive(pathname, item.path);
+                  const isActive = item.path === activePath;
                   return (
                     <Link
                       key={item.path}
@@ -213,50 +246,6 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Preferences */}
-        <div className="border-t border-white/10 px-2.5 py-2.5">
-          <div className="flex items-center gap-1">
-            {locs.map((l) => (
-              <button
-                key={l}
-                type="button"
-                onClick={() => setLocale(l)}
-                className={`flex-1 rounded-[var(--r-xs)] py-1 text-center text-[11px] font-semibold transition-colors ${
-                  locale === l ? "bg-[var(--accent)] text-white" : "text-white/55 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                {LOCALE_FLAGS[l]} {l.toUpperCase()}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-xs)] text-white/55 transition-colors hover:bg-white/10 hover:text-white"
-              aria-label="Toggle theme"
-            >
-              {isDark ? <Sun size={14} /> : <Moon size={14} />}
-            </button>
-          </div>
-        </div>
-
-        {/* User */}
-        <div className="flex items-center gap-2.5 border-t border-white/10 px-3 py-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold text-[var(--warm)]">
-            {initials(displayName)}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-semibold leading-tight">{displayName}</p>
-            <p className="truncate text-[10px] uppercase tracking-wider text-white/45">{user?.role || "—"}</p>
-          </div>
-          <button
-            type="button"
-            onClick={logout}
-            className="flex h-8 w-8 items-center justify-center rounded-[var(--r-sm)] text-white/55 transition-colors hover:bg-white/10 hover:text-white"
-            title={t("sidebar.logout")}
-          >
-            <LogOut size={15} />
-          </button>
-        </div>
       </aside>
     </>
   );
