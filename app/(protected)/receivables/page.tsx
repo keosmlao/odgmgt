@@ -12,7 +12,6 @@ import {
   Page,
   PageHeader,
   Pill,
-  Rank,
   StatTile,
   Table,
   fmtDate,
@@ -36,6 +35,28 @@ type Data = {
     last_purchase: string | null; purchases_after: number; bought_after: number;
   }[];
 };
+
+
+/** Share of a balance that is already overdue — high is bad, unlike an achievement. */
+function OverdueRow({ label, bills, balance, overdue }: { label: string; bills: number; balance: number; overdue: number }) {
+  const pct = balance > 0 ? (overdue / balance) * 100 : 0;
+  const tone = pct >= 75 ? "neg" : pct >= 40 ? "warn" : "pos";
+  return (
+    <div className="mb-2.5 last:mb-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-[12.5px] font-medium" style={{ color: "var(--ink)" }}>{label}</span>
+        <span className="num shrink-0 text-[11.5px]" style={{ color: "var(--muted)" }}>{fmtNum(balance)}</span>
+      </div>
+      <div className="mt-1 flex items-center gap-2">
+        <div className="bar" style={{ height: 4 }}>
+          <div className={`bar-fill is-${tone}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+        </div>
+        <span className="shrink-0"><Pill tone={tone}>{fmtPct(pct, 0)}</Pill></span>
+      </div>
+      <p className="muted mt-0.5 text-[10px]">{bills} · {fmtNum(overdue)}</p>
+    </div>
+  );
+}
 
 const overdueTone = (days: number) => (days > 90 ? "neg" : days > 30 ? "warn" : "muted");
 
@@ -158,26 +179,26 @@ export default function ReceivablesPage() {
               )}
             </Card>
 
-            <Card title={t("ar.byBu")} action={<span className="muted text-[11px]">{t("ar.byBuHint")}</span>}>
-              {(data?.byBu || []).map((row, index) => (
-                <Rank
+            <Card title={t("ar.byBu")} action={<span className="muted text-[11px]">{t("ar.overdueShare")}</span>}>
+              {(data?.byBu || []).map((row) => (
+                <OverdueRow
                   key={row.bu_code}
-                  index={index}
                   label={`${row.bu_name} · ${fmtNum(row.bills)} ${t("approve.pn.items")}`}
-                  value={fmtNum(row.balance)}
-                  pct={row.balance > 0 ? (row.overdue / row.balance) * 100 : 0}
+                  bills={row.bills}
+                  balance={row.balance}
+                  overdue={row.overdue}
                 />
               ))}
             </Card>
 
-            <Card title={t("ar.byBranch")}>
-              {(data?.byBranch || []).map((row, index) => (
-                <Rank
+            <Card title={t("ar.byBranch")} action={<span className="muted text-[11px]">{t("ar.overdueShare")}</span>}>
+              {(data?.byBranch || []).map((row) => (
+                <OverdueRow
                   key={row.branch}
-                  index={index}
                   label={`${row.branch} · ${fmtNum(row.bills)} ${t("approve.pn.items")}`}
-                  value={fmtNum(row.balance)}
-                  pct={row.balance > 0 ? (row.overdue / row.balance) * 100 : 0}
+                  bills={row.bills}
+                  balance={row.balance}
+                  overdue={row.overdue}
                 />
               ))}
             </Card>
