@@ -678,6 +678,7 @@ const dict: Record<string, Record<Locale, string>> = {
   "ar.stillBuying": { lo: "ຊື້ຫຼັງບິນນີ້", th: "ซื้อหลังบิลนี้", en: "Bought since" },
   "ar.times": { lo: "ຄັ້ງ", th: "ครั้ง", en: "×" },
   "ar.noPurchase": { lo: "ບໍ່ໄດ້ຊື້ອີກ", th: "ไม่ได้ซื้ออีก", en: "No purchases since" },
+  "ar.buShareHint": { lo: "ຟ້າ = ສັດສ່ວນຂອງໜີ້ທັງໝົດ · ປ້າຍ = ສ່ວນທີ່ເກີນກຳນົດ", th: "ฟ้า = สัดส่วนของหนี้ทั้งหมด · ป้าย = ส่วนที่เกินกำหนด", en: "Blue = share of all receivables · pill = share overdue" },
   "ar.overdueShare": { lo: "% = ສ່ວນທີ່ເກີນກຳນົດ (ສູງ = ບໍ່ດີ)", th: "% = ส่วนที่เกินกำหนด (สูง = ไม่ดี)", en: "% = share overdue (higher is worse)" },
   "ar.byBranch": { lo: "ຕາມສາຂາ", th: "ตามสาขา", en: "By branch" },
   "ar.salesperson": { lo: "ຜູ້ຮັບຜິດຊອບ", th: "ผู้รับผิดชอบ", en: "Salesperson" },

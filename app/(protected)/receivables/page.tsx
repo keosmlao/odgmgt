@@ -38,14 +38,30 @@ type Data = {
 
 
 /** Share of a balance that is already overdue — high is bad, unlike an achievement. */
-function OverdueRow({ label, bills, balance, overdue }: { label: string; bills: number; balance: number; overdue: number }) {
+function OverdueRow({
+  label,
+  bills,
+  balance,
+  overdue,
+  share,
+}: {
+  label: string;
+  bills: number;
+  balance: number;
+  overdue: number;
+  /** This row's cut of the whole receivables book, when the caller supplies it. */
+  share?: number;
+}) {
   const pct = balance > 0 ? (overdue / balance) * 100 : 0;
   const tone = pct >= 75 ? "neg" : pct >= 40 ? "warn" : "pos";
   return (
     <div className="mb-2.5 last:mb-0">
       <div className="flex items-baseline justify-between gap-2">
         <span className="truncate text-[12.5px] font-medium" style={{ color: "var(--ink)" }}>{label}</span>
-        <span className="num shrink-0 text-[11.5px]" style={{ color: "var(--muted)" }}>{fmtNum(balance)}</span>
+        <span className="shrink-0 whitespace-nowrap text-[11.5px]">
+          {share != null && <span className="num font-semibold" style={{ color: "var(--brand)" }}>{fmtPct(share, 1)}</span>}
+          <span className="num ml-1.5" style={{ color: "var(--muted)" }}>{fmtNum(balance)}</span>
+        </span>
       </div>
       <div className="mt-1 flex items-center gap-2">
         <div className="bar" style={{ height: 4 }}>
@@ -179,7 +195,7 @@ export default function ReceivablesPage() {
               )}
             </Card>
 
-            <Card title={t("ar.byBu")} action={<span className="muted text-[11px]">{t("ar.overdueShare")}</span>}>
+            <Card title={t("ar.byBu")} action={<span className="muted text-[11px]">{t("ar.buShareHint")}</span>}>
               {(data?.byBu || []).map((row) => (
                 <OverdueRow
                   key={row.bu_code}
@@ -187,6 +203,7 @@ export default function ReceivablesPage() {
                   bills={row.bills}
                   balance={row.balance}
                   overdue={row.overdue}
+                  share={summary.total_balance > 0 ? (row.balance / summary.total_balance) * 100 : 0}
                 />
               ))}
             </Card>
