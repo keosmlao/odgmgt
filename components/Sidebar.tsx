@@ -13,6 +13,7 @@ import {
   BadgePercent,
   ChevronDown,
   FileCheck2,
+  Package,
   PackageCheck,
   Settings,
   Settings2,
@@ -76,6 +77,12 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: "/transport/bills-inprogress", i18nKey: "sidebar.billsInProgress", icon: <Truck size={17} /> },
       { path: "/transport/bill-complete", i18nKey: "sidebar.billsComplete", icon: <PackageCheck size={17} /> },
       { path: "/transport/truck-utilization", i18nKey: "sidebar.truckUtilization", icon: <Boxes size={17} /> },
+    ],
+  },
+  {
+    key: "sidebar.groupProduct",
+    items: [
+      { path: "/products", i18nKey: "sidebar.products", icon: <Package size={17} /> },
     ],
   },
   {

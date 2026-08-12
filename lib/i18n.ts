@@ -661,6 +661,8 @@ const dict: Record<string, Record<Locale, string>> = {
   "sidebar.groupReports": { lo: "ລາຍງານ", th: "รายงาน", en: "Reports" },
   "sidebar.groupPlanning": { lo: "ວາງແຜນ", th: "วางแผน", en: "Planning" },
   "sidebar.receivables": { lo: "ບໍລິຫານໜີ້ຕ້ອງຮັບ", th: "บริหารลูกหนี้", en: "Receivables" },
+  "sidebar.groupProduct": { lo: "ສິນຄ້າ", th: "สินค้า", en: "Products" },
+  "sidebar.products": { lo: "ຂໍ້ມູນສິນຄ້າ", th: "ข้อมูลสินค้า", en: "Product data" },
   "sidebar.cashBank": { lo: "ເງິນສົດ ແລະ ທະນາຄານ", th: "เงินสดและธนาคาร", en: "Cash & Bank" },
   "cb.eyebrow": { lo: "ບັນຊີແຍກປະເພດ (GL)", th: "บัญชีแยกประเภท (GL)", en: "General ledger" },
   "cb.subtitle": { lo: "ຍອດຄົງເຫຼືອ ແລະ ການເຄື່ອນໄຫວ ຮັບ-ຈ່າຍ ຂອງບັນຊີເງິນສົດ ແລະ ເງິນຝາກທະນາຄານ", th: "ยอดคงเหลือและการเคลื่อนไหว รับ-จ่าย ของบัญชีเงินสดและเงินฝากธนาคาร", en: "Balances and money in/out across the cash and bank accounts" },
