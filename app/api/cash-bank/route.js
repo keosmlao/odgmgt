@@ -10,7 +10,7 @@ export async function GET(request) {
   const days = Number(request.nextUrl.searchParams.get("days") || 90);
   try {
     const data = await swrCache(
-      `cash-bank:${days}`,
+      `cash-bank:gl:${days}`,
       { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass: request.nextUrl.searchParams.get("nocache") === "1" },
       () => loadCashBank({ days }),
     );
