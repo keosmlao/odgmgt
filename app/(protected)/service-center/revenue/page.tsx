@@ -1,7 +1,8 @@
 // Copied from odss-next (ODSS service app). Namespaced under ods/ so it
 // cannot collide with this app's own lib of the same name; imports rewritten.
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { monthlyRevenueMatrix, REV_CATEGORIES, type RevCategory } from "@/lib/ods/monthly-report";
+import { swrCache } from "@/lib/cache";
+import { monthlyRevenueMatrix, type MonthRevenue, REV_CATEGORIES, type RevCategory } from "@/lib/ods/monthly-report";
 import Link from "next/link";
 
 /**
@@ -44,7 +45,16 @@ export default async function RevenueSummaryPage({ searchParams }: Props) {
   const thisYear = new Date().getFullYear();
   const year = Number(params.year) >= 2020 && Number(params.year) <= thisYear ? Number(params.year) : thisYear;
 
-  const matrix = await monthlyRevenueMatrix(year);
+  // Two years of revenue, rebuilt from scratch on every visit, cost about a
+  // second. It only moves when a job closes, so it is cached like the report
+  // endpoints. The matrix is a Map and the cache stores JSON, so the entries go
+  // in and out.
+  const entries = await swrCache(
+    `ods:revenue-matrix:${year}`,
+    { ttl: 600_000, staleTtl: 24 * 3_600_000 },
+    async () => [...(await monthlyRevenueMatrix(year)).entries()],
+  );
+  const matrix = new Map<string, MonthRevenue>(entries);
   const cell = (y: number, m: number) => matrix.get(`${y}-${String(m + 1).padStart(2, "0")}`);
 
   const nowMonth = new Date().getMonth();

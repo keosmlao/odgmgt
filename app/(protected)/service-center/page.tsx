@@ -5,6 +5,7 @@ import { Elapsed } from "@/components/ods/elapsed";
 import { DashboardAutoRefresh } from "@/components/ods/dashboard-auto-refresh";
 import { LinkPending } from "@/components/ods/link-pending";
 import { RowLink } from "@/components/ods/row-link";
+import { swrCache } from "@/lib/cache";
 import { ALL_ACCESS_SESSION, NO_TECH_FILTER } from "@/lib/ods/session-all";
 import { installStatuses, pipelineOf, repairStatuses, type StatusDef } from "@/lib/ods/dashboard-status";
 import {
@@ -777,7 +778,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   // The QC workflow panel is not ported: its action pulls in ODSS's push /
   // notify / chatter stack, which has side effects that do not belong in a
   // read-only management view. Alerts fall back to "no QC backlog signal".
-  const { data, error } = await getDashboard(tech, days);
+  // Cached per range. This is a read-only management view of ODSS, so a few
+  // minutes behind is fine, and the page auto-refreshes anyway.
+  const { data, error } = await swrCache(
+    `ods:dashboard:${days}`,
+    { ttl: 180_000, staleTtl: 24 * 3_600_000 },
+    () => getDashboard(tech, days),
+  );
   const qc: unknown[] = [];
   const repair: Counts = data?.repair ?? {};
   const install: Counts = data?.install ?? {};
