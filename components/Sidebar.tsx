@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Target,
   BarChart2,
+  CalendarDays,
   CalendarRange,
   Award,
   BadgePercent,
@@ -52,6 +53,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/dashboard", i18nKey: "sidebar.dashboard", icon: <LayoutDashboard size={17} /> },
       { path: "/analytics", i18nKey: "sidebar.analytics", icon: <BarChart2 size={17} /> },
+      { path: "/meeting-schedule", i18nKey: "sidebar.meetingSchedule", icon: <CalendarDays size={17} /> },
     ],
   },
   {

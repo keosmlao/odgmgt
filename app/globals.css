@@ -410,6 +410,284 @@ body {
   .tab.is-active { background: var(--brand-deep); color: #fff; }
   .tab.is-active:hover { background: var(--brand); color: #fff; }
 
+  /* ── Weekly sheet (meeting board) ──
+     The old spreadsheet's frame — full grid, a solid colour block per day,
+     spare lines under each date — drawn with the app's tokens so it follows
+     the theme on screen and still prints light. Each row carries its day
+     colour in --day. */
+  .agenda-sheet-view { box-shadow: var(--sh-2); }
+  .sheet-wrap {
+    overflow: auto;
+    max-height: calc(100vh - 16rem);
+    padding: 0.85rem;
+    background: var(--surface-2);
+  }
+  .sheet {
+    width: 100%;
+    min-width: 1000px;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    overflow: hidden;
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 12px;
+    box-shadow: var(--sh-1);
+  }
+  .sheet th,
+  .sheet td {
+    background: var(--surface);
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+    padding: 0.45rem 0.65rem;
+    text-align: left;
+    vertical-align: middle;
+    white-space: normal;
+  }
+  .sheet tr > :last-child { border-right: 0; }
+  .sheet tbody tr:last-child > td { border-bottom: 0; }
+  .sheet caption { caption-side: top; padding: 0 0 0.65rem; text-align: left; }
+
+  .sheet-title {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    border-radius: var(--r-md);
+    background: linear-gradient(135deg, var(--brand-deep), var(--brand) 92%);
+    padding: 0.55rem 0.75rem;
+    color: #fff;
+    box-shadow: var(--sh-1);
+  }
+  .sheet-title-icon {
+    display: grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: none;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.16);
+  }
+  .sheet-title small { display: block; font-size: 8.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.66; }
+  .sheet-title strong { display: block; margin-top: 0.05rem; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .sheet-title-count {
+    margin-left: auto;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    padding: 0.2rem 0.6rem;
+    font-size: 9.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sheet thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--brand-deep);
+    border-right-color: rgba(255, 255, 255, 0.14);
+    border-bottom-color: var(--brand-deep);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* The day block: a quiet tint of the day's colour with a solid edge, rather
+     than a full fill — the week still reads at a glance without shouting.
+     Its own padding and height keep the block identical on days with no
+     meetings, where the spare row would otherwise flatten it. */
+  .sheet .sheet-day {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    width: 158px;
+    height: 3.4rem;
+    padding: 0.5rem 0.65rem;
+    background: color-mix(in srgb, var(--day, var(--brand)) 13%, var(--surface));
+    color: var(--ink);
+    border-right: 1px solid var(--line);
+    border-left: 3px solid var(--day, var(--brand));
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  .sheet-day-name { display: block; font-size: 12.5px; font-weight: 700; }
+  .sheet-day-date { display: block; margin-top: 0.1rem; font-size: 10.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sheet-day-count { display: inline-block; margin-top: 0.35rem; border-radius: 999px; background: color-mix(in srgb, var(--day, var(--brand)) 20%, transparent); padding: 0.05rem 0.45rem; font-size: 9px; font-weight: 700; color: var(--ink-soft); }
+  .sheet-today { display: inline-flex; margin-left: 0.3rem; border-radius: 999px; background: var(--brand-deep); padding: 0.05rem 0.45rem; color: #fff; font-size: 9px; font-weight: 700; }
+
+  .sheet-row:hover > td:not(.sheet-day) { background: color-mix(in srgb, var(--brand) 5%, var(--surface)); }
+  .sheet-row.is-cancelled .sheet-topic,
+  .sheet-row.is-cancelled .sheet-people { color: var(--muted); text-decoration: line-through; }
+
+  .sheet-time { white-space: nowrap; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .sheet-topic { font-weight: 600; color: var(--ink); }
+  .sheet-note { display: block; margin-top: 0.1rem; font-size: 10.5px; color: var(--muted); }
+  .sheet-people { color: var(--ink-soft); }
+  .sheet-people b { font-weight: 700; color: var(--ink); }
+  .sheet-room { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--ink-soft); font-weight: 600; }
+  .sheet-ok { color: var(--pos); font-weight: 700; }
+  .sheet-update { display: inline-block; margin-left: 0.25rem; border-radius: 999px; background: var(--neg-bg); padding: 0.05rem 0.4rem; color: var(--neg); font-size: 9px; font-weight: 700; white-space: nowrap; }
+  .sheet-empty { color: var(--line); }
+
+  /* Spare lines under each day, as on the paper sheet — and the fastest way
+     to book: they turn into "add a meeting" when pointed at. */
+  .sheet-blank td { height: 1.9rem; background: color-mix(in srgb, var(--brand) 4%, var(--surface)); padding: 0; }
+  .sheet-blank button { display: flex; align-items: center; gap: 0.3rem; width: 100%; padding: 0.3rem 0.65rem; color: transparent; font-size: 11px; font-weight: 600; }
+  .sheet-blank:hover td { background: color-mix(in srgb, var(--brand) 9%, var(--surface)); }
+  .sheet-blank:hover button { color: var(--brand); }
+
+  .sheet-edit {
+    display: inline-grid;
+    place-items: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--muted);
+    transition: 120ms ease;
+  }
+  .sheet-edit:hover { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+
+  /* ── Weekly meeting agenda ── */
+  .agenda-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .agenda-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 0.75rem 0.85rem;
+    background: var(--surface);
+    box-shadow: var(--sh-1);
+  }
+  .agenda-stat-icon {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    border-radius: 9px;
+    color: var(--brand);
+    background: var(--brand-soft);
+  }
+  .agenda-stat strong { display: block; color: var(--ink); font-size: 17px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .agenda-stat span:last-child { display: block; margin-top: 0.15rem; overflow: hidden; color: var(--muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .agenda-stat.is-primary { border-color: transparent; background: linear-gradient(135deg, var(--brand-deep), var(--brand)); }
+  .agenda-stat.is-primary strong, .agenda-stat.is-primary span:last-child { color: #fff; }
+  .agenda-stat.is-primary .agenda-stat-icon { color: #fff; background: rgba(255,255,255,.14); }
+
+  .agenda-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .agenda-view-switch { width: auto; flex: none; }
+  .agenda-filters { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+  .agenda-search {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: min(22rem, 38vw);
+    height: 2rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 0 0.55rem;
+    color: var(--muted);
+    background: var(--surface);
+  }
+  .agenda-search:focus-within { border-color: color-mix(in srgb, var(--brand) 55%, var(--line)); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .agenda-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 11.5px; }
+  .agenda-search button { display: grid; place-items: center; }
+
+  .agenda-board { display: grid; gap: 0.75rem; }
+  .agenda-day {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    box-shadow: var(--sh-1);
+  }
+  .agenda-day.is-today { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .agenda-day-head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 3.3rem;
+    padding: 0.55rem 0.75rem 0.55rem 1rem;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--surface-2);
+  }
+  .agenda-day-marker { position: absolute; inset: 0 auto 0 0; width: 5px; }
+  .agenda-day-head h2 { color: var(--ink); font-size: 13px; font-weight: 700; }
+  .agenda-day-head p { margin-top: 0.05rem; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .agenda-day-count { display: grid; place-items: center; min-width: 1.45rem; height: 1.45rem; margin-left: auto; border-radius: 999px; color: var(--brand); background: var(--brand-soft); font-size: 10px; font-weight: 700; }
+  .agenda-add-day, .agenda-edit { display: grid; place-items: center; border-radius: 7px; color: var(--muted); transition: 120ms ease; }
+  .agenda-add-day { width: 1.8rem; height: 1.8rem; border: 1px solid var(--line); background: var(--surface); }
+  .agenda-edit { width: 2rem; height: 2rem; }
+  .agenda-add-day:hover, .agenda-edit:hover { color: var(--brand); background: var(--brand-soft); }
+
+  .agenda-day-body { padding: 0.25rem 0.7rem; }
+  .agenda-meeting {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(14rem, 1fr) minmax(9rem, 0.35fr) 2rem;
+    align-items: center;
+    gap: 0.85rem;
+    min-height: 4.4rem;
+    padding: 0.65rem 0.2rem;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .agenda-meeting:last-child { border-bottom: 0; }
+  .agenda-meeting.is-cancelled .agenda-time,
+  .agenda-meeting.is-cancelled .agenda-meeting-main > :not(.agenda-meeting-title) { opacity: 0.48; }
+  .agenda-time { display: flex; align-items: center; gap: 0.4rem; color: var(--brand); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .agenda-time strong { color: var(--ink); font-size: 11.5px; }
+  .agenda-meeting-main { min-width: 0; }
+  .agenda-meeting-title { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem; }
+  .agenda-meeting-title h3 { margin-right: 0.2rem; color: var(--ink); font-size: 12.5px; font-weight: 700; }
+  .agenda-meeting-main > p { display: flex; align-items: flex-start; gap: 0.35rem; margin-top: 0.3rem; color: var(--muted); font-size: 10.5px; }
+  .agenda-meeting-main > p svg { margin-top: 0.1rem; flex: none; }
+  .agenda-meeting-main .agenda-note { color: var(--ink-soft); font-style: italic; }
+  .agenda-place { display: grid; gap: 0.25rem; color: var(--muted); font-size: 10.5px; }
+  .agenda-place span { display: flex; align-items: center; gap: 0.3rem; }
+  .agenda-empty { display: grid; place-items: center; width: 100%; min-height: 3.6rem; color: var(--muted); font-size: 11px; }
+  .agenda-empty:not(:disabled):hover { color: var(--brand); background: var(--brand-soft); }
+  .agenda-empty small { display: flex; align-items: center; gap: 0.25rem; margin-top: 0.2rem; color: var(--brand); font-size: 9.5px; font-weight: 700; }
+  .agenda-result-count { color: var(--muted); font-size: 10.5px; text-align: right; }
+
+  @media (max-width: 900px) {
+    .agenda-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .agenda-toolbar { align-items: stretch; flex-direction: column; }
+    .agenda-filters { width: 100%; }
+    .agenda-search { width: 100%; }
+    .agenda-meeting { grid-template-columns: 7.5rem minmax(0, 1fr) 2rem; }
+    .agenda-place { grid-column: 2; }
+    .agenda-edit { grid-column: 3; grid-row: 1 / span 2; }
+  }
+  @media (max-width: 600px) {
+    .agenda-summary { gap: 0.5rem; }
+    .agenda-stat { gap: 0.5rem; padding: 0.65rem; }
+    .agenda-stat-icon { width: 1.8rem; height: 1.8rem; }
+    .agenda-filters { align-items: stretch; flex-direction: column; }
+    .agenda-view-switch { width: 100%; }
+    .agenda-view-switch .tab { flex: 1; justify-content: center; }
+    .agenda-meeting { grid-template-columns: 1fr 2rem; gap: 0.45rem; padding-block: 0.75rem; }
+    .agenda-time, .agenda-meeting-main, .agenda-place { grid-column: 1; }
+    .agenda-edit { grid-column: 2; grid-row: 1 / span 3; }
+  }
+
   /* ── Approval workspace ── */
   .approval-hero {
     display: flex;
@@ -571,6 +849,15 @@ body.tv-mode main { zoom: 1.35; }
   /* Avoid splitting cards across pages */
   .card { break-inside: avoid; box-shadow: none !important; border: 1px solid var(--line) !important; }
   a { text-decoration: none; }
+
+  /* The meeting sheet scrolls and sticks on screen; on paper it just flows. */
+  .sheet-wrap { max-height: none !important; overflow: visible !important; padding: 0 !important; background: #fff !important; }
+  .sheet { min-width: 0 !important; box-shadow: none !important; }
+  .sheet thead th, .sheet .sheet-day { position: static !important; }
+  .sheet th, .sheet td { border-bottom: 1px solid var(--line) !important; }
+  .sheet tr { break-inside: avoid; }
+  /* Spare lines stay on paper (that is what they are for); the button does not. */
+  .sheet-blank button { display: none !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════

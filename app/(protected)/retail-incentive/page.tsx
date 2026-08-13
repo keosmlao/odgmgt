@@ -80,7 +80,7 @@ type Payload = {
     month: number;
     currency: string;
     point_value: number;
-    bands: { low: { max_ratio: number; multiplier: number }; standard: { max_ratio: number; multiplier: number }; high: { multiplier: number } };
+    bands?: { low: { max_ratio: number; multiplier: number }; standard: { max_ratio: number; multiplier: number }; high: { multiplier: number } };
     branch: string;
     excluded_bu: string[];
     people_count: number;
@@ -92,7 +92,7 @@ type Payload = {
     point_reward: number; unit_reward: number; commission: number; reward: number; special_reward: number; grand_total: number;
   };
   people: Person[];
-  managers: Manager[];
+  managers?: Manager[];
   unit_rules: { code: string; description: string; group: string; brand: string | null; low_min_qty: number; low_reward: number; high_min_qty: number; high_reward: number }[];
   special_rewards: Special[];
 };
@@ -155,12 +155,15 @@ export default function RetailIncentivePage() {
         month: Number(month),
         currency: data.meta.currency,
         people: data.people,
-        managers: (data as any).managers || [],
+        managers: data.managers || [],
       });
       if (res.data?.success) await load();
       else setError(res.data?.message || t("app.error"));
-    } catch (err: any) {
-      setError(err?.response?.data?.message || t("app.error"));
+    } catch (err: unknown) {
+      const message = typeof err === "object" && err !== null && "response" in err
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        : undefined;
+      setError(message || t("app.error"));
     } finally {
       setSaving(false);
     }
@@ -366,9 +369,11 @@ export default function RetailIncentivePage() {
             <section className="card">
               <div className="card-hd">
                 <h3 className="card-title"><Award size={14} /> {t("incentive.byPerson")}</h3>
-                <span className="page-sub">
-                  {`≤${Math.round(data.meta.bands.low.max_ratio * 100)}% ×${data.meta.bands.low.multiplier} · ≤${Math.round(data.meta.bands.standard.max_ratio * 100)}% ×${data.meta.bands.standard.multiplier} · >${Math.round(data.meta.bands.standard.max_ratio * 100)}% ×${data.meta.bands.high.multiplier}`}
-                </span>
+                {data.meta.bands && (
+                  <span className="page-sub">
+                    {`≤${Math.round(data.meta.bands.low.max_ratio * 100)}% ×${data.meta.bands.low.multiplier} · ≤${Math.round(data.meta.bands.standard.max_ratio * 100)}% ×${data.meta.bands.standard.multiplier} · >${Math.round(data.meta.bands.standard.max_ratio * 100)}% ×${data.meta.bands.high.multiplier}`}
+                  </span>
+                )}
               </div>
               <div className="card-bd-flush tbl-scroll">
                 <table className="tbl" style={{ minWidth: 900 }}>
