@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/route-auth";
+import { swrCache } from "@/lib/cache";
 import {
   getDashboardSummary,
   getDashboardKpi,
@@ -16,6 +17,14 @@ import {
  *
  * The empty session object is what TMS's own report API passes: these reports
  * are unscoped, covering every branch.
+ *
+ * Cached here as well as in TMS. TMS's own cache is an in-process Map with a
+ * 15-second TTL, so it is empty after every restart and expires while people
+ * are still arriving — which is why a cold delivery slice costs 9.4 seconds and
+ * a cold pending slice 6.5. This layer persists, so a restarted process serves
+ * the stored value and refreshes behind the request.
+ *
+ * force=1 is the page's own refresh and bypasses both.
  */
 const SLICES = {
   summary: (session, force) => getDashboardSummary(session, force),
@@ -39,7 +48,15 @@ export async function GET(request) {
   }
 
   try {
-    const data = await run({}, force);
+    const data = await swrCache(
+      `transport:overview:${slice}`,
+      {
+        ttl: 300_000,
+        staleTtl: 24 * 3_600_000,
+        bypass: force || request.nextUrl.searchParams.get("nocache") === "1",
+      },
+      () => run({}, force),
+    );
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error(`[transport] dashboard slice ${slice} failed:`, error);
