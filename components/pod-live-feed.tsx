@@ -290,7 +290,7 @@ export function PodLiveFeed({
                           <div className="flex gap-1.5">
                             {images.map((img) => (
                               <ProofImage
-                                key={img.src.slice(0, 64)}
+                                key={img.label}
                                 src={img.src}
                                 label={img.label}
                                 size="h-14 w-14"

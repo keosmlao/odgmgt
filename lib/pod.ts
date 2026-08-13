@@ -188,6 +188,15 @@ export interface PodProof {
 }
 
 /** ຮູບທັງໝົດຂອງບິນ ຮຽງແບບທີ່ຄົນເບິ່ງຢາກເຫັນ — ຮູບສົ່ງກ່ອນ ແລ້ວຄ່ອຍລາຍເຊັນ. */
+/**
+ * The proof images for a bill, de-duplicated on the full data URI.
+ *
+ * Each entry gets a distinct label, and that label — not the src — is what
+ * React should key on. Two JPEGs from the same camera share a long identical
+ * prefix (the EXIF header), so keying on a slice of the data URI collided on
+ * every image: React warned about duplicate keys on every render, and warned
+ * with the base64 blob in the message, which flooded the server log.
+ */
 export function podProofImages(proof: PodProof): { src: string; label: string }[] {
   const out: { src: string; label: string }[] = [];
   const seen = new Set<string>();

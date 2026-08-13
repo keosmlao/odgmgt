@@ -274,7 +274,7 @@ export function PodProofDialog({
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {images.map((img) => (
-                    <ProofImage key={img.src.slice(0, 64)} {...img} />
+                    <ProofImage key={img.label} {...img} />
                   ))}
                 </div>
               )}
