@@ -3,6 +3,7 @@ import { rows, one } from "@/lib/db";
 import { parseIntSafe, safeDiv } from "@/lib/helpers";
 import { swrCache } from "@/lib/cache";
 import { ensurePayoutTables } from "@/lib/migrations";
+import { OVERRIDE_JOIN, REPORT_DATE, REPORT_MONTH_FILTER } from "@/lib/sale-month-override";
 
 /**
  * Retail (ຂາຍໜ້າຮ້ານ) staff rewards for one month.
@@ -86,11 +87,11 @@ async function loadMonth(year, month) {
               COALESCE(SUM(d.qty), 0)::float AS bills,
               COALESCE(SUM(d.sum_amount), 0)::float AS amount
        FROM public.odg_sale_detail d
+       ${OVERRIDE_JOIN}
        LEFT JOIN public.odg_employee e ON btrim(e.fullname_lo) = btrim(d.salename)
        LEFT JOIN public.app_incentive_sale_alias a ON btrim(a.salename) = btrim(d.salename)
        LEFT JOIN public.app_incentive_category c ON c.category_code = d.item_category
-       WHERE d.doc_date >= make_date(%s, %s, 1)
-         AND d.doc_date < make_date(%s, %s, 1) + INTERVAL '1 month'
+       WHERE ${REPORT_MONTH_FILTER}
          AND d.branch_code = %s AND d.argroup_main = %s
          AND d.item_code NOT LIKE '97%%'
          AND COALESCE(c.is_active, true)
@@ -102,7 +103,7 @@ async function loadMonth(year, month) {
     rows(
       `
       WITH line AS (
-        SELECT s.employee_code, s.category_name, s.item_code, s.doc_date, s.doc_no,
+        SELECT s.employee_code, s.category_name, s.item_code, s.doc_date, s.report_date, s.doc_no,
                s.brand, s.qty, s.sales_amount,
                CASE WHEN s.pcat = 'Air' AND s.item_name ~ '\\[H\\]\\s*$' THEN 0 ELSE s.qty END AS point_qty,
                CASE s.pcat
@@ -129,7 +130,8 @@ async function loadMonth(year, month) {
                s.pcat
         FROM (
           SELECT COALESCE(a.employee_code, e.employee_code) AS employee_code,
-                 d.doc_date, d.doc_no, d.item_code, d.item_name, d.item_category,
+                 d.doc_date, ${REPORT_DATE} AS report_date,
+                 d.doc_no, d.item_code, d.item_name, d.item_category,
                  d.design_name, d.size_name, d.qty, d.price,
                  d.sum_amount AS sales_amount,
                  COALESCE(NULLIF(d.item_category_name, ''), '-') AS category_name,
@@ -142,11 +144,11 @@ async function loadMonth(year, month) {
                    )
                    ELSE d.price END AS combo_price
           FROM public.odg_sale_detail d
+          ${OVERRIDE_JOIN}
           LEFT JOIN public.app_incentive_category c ON c.category_code = d.item_category
           LEFT JOIN public.app_incentive_sale_alias a ON a.salename = d.salename
           LEFT JOIN public.odg_employee e ON e.fullname_lo = d.salename
-          WHERE d.doc_date >= make_date(%s, %s, 1)
-            AND d.doc_date < make_date(%s, %s, 1) + INTERVAL '1 month'
+          WHERE ${REPORT_MONTH_FILTER}
             AND d.branch_code = %s AND d.argroup_main = %s
             AND d.item_code NOT LIKE '97%%'
             AND COALESCE(c.is_active, true)
@@ -167,7 +169,7 @@ async function loadMonth(year, month) {
             AND r.brand_code = l.brand
             AND r.design_token = l.design_token
             AND r.size_token = l.size_token
-            AND l.doc_date::date BETWEEN r.effective_from AND r.effective_to
+            AND l.report_date BETWEEN r.effective_from AND r.effective_to
           ORDER BY r.is_special DESC,
                    (r.effective_to - r.effective_from) ASC,
                    r.updated_at DESC, r.id DESC
@@ -177,7 +179,7 @@ async function loadMonth(year, month) {
           SELECT ps.status_code
           FROM public.app_incentive_product_status_rule ps
           WHERE ps.item_code = l.item_code
-            AND l.doc_date::date BETWEEN ps.effective_from AND ps.effective_to
+            AND l.report_date BETWEEN ps.effective_from AND ps.effective_to
           ORDER BY (ps.effective_to - ps.effective_from) ASC, ps.updated_at DESC
           LIMIT 1
         ) ps ON TRUE
@@ -223,13 +225,14 @@ async function loadMonth(year, month) {
               COALESCE(SUM(d.qty), 0)::float AS qty,
               COALESCE(SUM(d.sum_amount), 0)::float AS amount
        FROM public.odg_sale_detail d
+       ${OVERRIDE_JOIN}
        LEFT JOIN public.odg_employee e ON btrim(e.fullname_lo) = btrim(d.salename)
        LEFT JOIN public.app_incentive_sale_alias a ON btrim(a.salename) = btrim(d.salename)
-       WHERE d.yeardoc = %s AND d.monthdoc = %s
+       WHERE ${REPORT_MONTH_FILTER}
          AND d.branch_code = %s AND d.argroup_main = %s
          AND COALESCE(d.bu_code, '') <> ALL (%s)
        GROUP BY 1, 2, 3`,
-      [Number(year), Number(month), RETAIL_BRANCH, RETAIL_AR_GROUP, EXCLUDED_BU],
+      [Number(year), Number(month), Number(year), Number(month), RETAIL_BRANCH, RETAIL_AR_GROUP, EXCLUDED_BU],
     ),
     rows(
       `SELECT emp_code, item_brand, product_group, COALESCE(SUM(target::numeric), 0)::float AS target
@@ -740,7 +743,7 @@ export async function GET(request) {
     }
 
     const data = await swrCache(
-      `retail-incentive:v6:${year}|${month}`,
+      `retail-incentive:v7:${year}|${month}`,
       { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass: sp.get("nocache") === "1" },
       () => loadMonth(year, month),
     );
