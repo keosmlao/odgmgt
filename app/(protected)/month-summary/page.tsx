@@ -149,9 +149,12 @@ export default function MonthSummary() {
 
   const sel =
     "rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--brand)]   ";
-  const cellCls = "whitespace-nowrap border-l border-[var(--line)] px-3 py-1.5 text-right tabular-nums ";
+  // ຕົວເລກໃຫຍ່ກວ່າຫົວຕາຕະລາງໜຶ່ງຂັ້ນ (14px ທຽບກັບ 12px) — ຕົວເລກຄືສິ່ງທີ່ຄົນອ່ານ,
+  // ຫົວຄໍລຳເປັນພຽງປ້າຍກຳກັບ. ຕາຕະລາງຢູ່ໃນ overflow-x-auto ຢູ່ແລ້ວ ຈຶ່ງກວ້າງຂຶ້ນໄດ້.
+  const cellCls =
+    "whitespace-nowrap border-l border-[var(--line)] px-3 py-2 text-right text-sm tabular-nums ";
   const labelCls =
-    "sticky left-0 z-10 whitespace-nowrap px-3 py-1.5 text-left text-xs font-medium text-[var(--ink-soft)]";
+    "sticky left-0 z-10 whitespace-nowrap px-3 py-2 text-left text-sm font-medium text-[var(--ink-soft)]";
 
   /** One report block: target, actual/forecast, %, last year, growth. */
   const renderSection = (section: Section) => {
@@ -194,7 +197,7 @@ export default function MonthSummary() {
       <tbody key={section.key} className="text-xs">
         <tr>
           <td
-            className={`sticky left-0 z-10 whitespace-nowrap px-3 py-2 text-left text-xs font-bold ${SECTION_HEAD[section.key] || ""}`}
+            className={`sticky left-0 z-10 whitespace-nowrap px-3 py-2 text-left text-sm font-bold ${SECTION_HEAD[section.key] || ""}`}
           >
             {section.label}
           </td>

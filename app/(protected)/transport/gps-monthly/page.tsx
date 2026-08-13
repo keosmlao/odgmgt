@@ -417,7 +417,18 @@ export default function GpsMonthlySummaryPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-        <MetricCard icon={<FaCarSide />} label="ລົດມີ GPS" value={`${totals.activeCars}/${totals.cars}`} hint={`ເດືອນ ${monthTitle(monthly)}`} tone="teal" />
+        {/* ຕົວຫານ = ລົດທຸກຄັນໃນທະບຽນ app_car_vehicles ທີ່ລົງ GPS ໄວ້, ບໍ່ແມ່ນສະເພາະຄັນທີ່ມີສັນຍານ. */}
+        <MetricCard
+          icon={<FaCarSide />}
+          label="ລົດແລ່ນ / ທະບຽນລົດ"
+          value={`${totals.activeCars}/${totals.cars}`}
+          hint={
+            totals.cars > totals.activeCars
+              ? `ເດືອນ ${monthTitle(monthly)} · ບໍ່ມີສັນຍານ ${totals.cars - totals.activeCars} ຄັນ`
+              : `ເດືອນ ${monthTitle(monthly)}`
+          }
+          tone="teal"
+        />
         <MetricCard icon={<FaRoute />} label="Actual distance" value={fmtKm(totals.distance)} hint="ລວມລະຍະທາງ GPS" tone="sky" />
         <MetricCard icon={<FaClock />} label="Driving hours" value={fmtHours(totals.moving)} hint={`Idle/Stopped ${fmtHours(totals.stopped)}`} tone="emerald" />
         <MetricCard icon={<FaChartLine />} label="Utilization" value={pct(totals.utilization)} hint={`${n(totals.activeDays)} active days / ${n(totals.days)} days`} tone="amber" />

@@ -50,7 +50,9 @@ export async function GET(request) {
     // refresh=1 is the page's own "rebuild the rollup" button, so it must not
     // be answered from cache.
     const data = await swrCache(
-      `transport:gps-monthly:${fromDate}:${toDate}:${windowDays}`,
+      // v2 = ປ່ຽນທະບຽນລົດຕົວຕັ້ງເປັນ app_car_vehicles. ຂຶ້ນເລກໃໝ່ເພື່ອບໍ່ໃຫ້
+      // ຄ່າເກົ່າ (21 ຄັນ) ທີ່ຄ້າງໃນຕາຕະລາງ cache ຖືກສົ່ງອອກໄປອີກ 24 ຊົ່ວໂມງ.
+      `transport:gps-monthly:v2:${fromDate}:${toDate}:${windowDays}`,
       { ttl: 600_000, staleTtl: 24 * 3_600_000, bypass: refresh || request.nextUrl.searchParams.get("nocache") === "1" },
       async () => {
         const [rows, fuel, efficiency] = await Promise.all([
