@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/route-auth";
+import { swrCache } from "@/lib/cache";
 import {
   getReportDailyDepartment,
   getReportDailyActivityBills,
@@ -15,7 +16,12 @@ import { addDays, getLaoToday } from "@/lib/tms/lib/lao-date";
  * department, and the daily pending-bill report. Each case mirrors TMS's own
  * report API, including its defaults — the live POD feed in particular is
  * called with no dates, so it falls back to the last three days.
+ *
+ * The day-scoped reports are cached; pod-live and pod-proof are not. A live
+ * feed that lags is worse than one that takes a moment, and pod-proof is a
+ * single-bill lookup that is already fast.
  */
+const CACHEABLE = new Set(["pod", "daily-department", "daily-bills", "pending-daily"]);
 export async function GET(request) {
   const user = getCurrentUser(request);
   if (!user) {
@@ -29,7 +35,7 @@ export async function GET(request) {
   const branch = (p.get("branch") || "").trim();
   const doc = (p.get("doc") || "").trim();
 
-  try {
+  const run = async () => {
     let data;
     switch (report) {
       case "pod": {
@@ -87,9 +93,25 @@ export async function GET(request) {
         data = await getAvailableBillProducts(doc);
         break;
       default:
-        return NextResponse.json({ success: false, message: "unknown report" }, { status: 400 });
+        return null;
     }
-    return NextResponse.json({ success: true, data });
+    return { data };
+  };
+
+  try {
+    const key = `transport:logistics:${request.nextUrl.searchParams.toString()}`;
+    const result = CACHEABLE.has(report)
+      ? await swrCache(
+          key,
+          { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass: request.nextUrl.searchParams.get("nocache") === "1" },
+          run,
+        )
+      : await run();
+    if (result === null) {
+      return NextResponse.json({ success: false, message: "unknown report" }, { status: 400 });
+    }
+    if (result instanceof NextResponse) return result;
+    return NextResponse.json({ success: true, data: result.data });
   } catch (error) {
     console.error(`[transport] logistics ${report} failed:`, error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

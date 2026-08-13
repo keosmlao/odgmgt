@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/route-auth";
+import { swrCache } from "@/lib/cache";
 import { buildUtilizationReport } from "@/lib/tms/actions/trip-volume";
 
 /**
@@ -22,7 +23,11 @@ export async function GET(request) {
   }
 
   try {
-    const data = await buildUtilizationReport(from, to);
+    const data = await swrCache(
+      `transport:truck-utilization:${from}:${to}`,
+      { ttl: 600_000, staleTtl: 24 * 3_600_000, bypass: request.nextUrl.searchParams.get("nocache") === "1" },
+      () => buildUtilizationReport(from, to),
+    );
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("[transport] truck-utilization failed:", error);

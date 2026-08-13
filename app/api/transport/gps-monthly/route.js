@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/route-auth";
+import { swrCache } from "@/lib/cache";
 import {
   getGpsUsageSummary,
   getGpsUsageSummaryCached,
@@ -46,14 +47,23 @@ export async function GET(request) {
   }
 
   try {
-    const [rows, fuel, efficiency] = await Promise.all([
-      refresh
-        ? getGpsUsageSummary(fromDate, toDate, undefined, { fillMissing: true })
-        : getGpsUsageSummaryCached(fromDate, toDate),
-      getFuelByCar({ fromDate, toDate, session: ALL_BRANCHES }),
-      buildFuelEfficiency(ALL_BRANCHES, toDate, windowDays),
-    ]);
-    return NextResponse.json({ success: true, data: { rows, fuel, efficiency } });
+    // refresh=1 is the page's own "rebuild the rollup" button, so it must not
+    // be answered from cache.
+    const data = await swrCache(
+      `transport:gps-monthly:${fromDate}:${toDate}:${windowDays}`,
+      { ttl: 600_000, staleTtl: 24 * 3_600_000, bypass: refresh || request.nextUrl.searchParams.get("nocache") === "1" },
+      async () => {
+        const [rows, fuel, efficiency] = await Promise.all([
+          refresh
+            ? getGpsUsageSummary(fromDate, toDate, undefined, { fillMissing: true })
+            : getGpsUsageSummaryCached(fromDate, toDate),
+          getFuelByCar({ fromDate, toDate, session: ALL_BRANCHES }),
+          buildFuelEfficiency(ALL_BRANCHES, toDate, windowDays),
+        ]);
+        return { rows, fuel, efficiency };
+      },
+    );
+    return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("[transport] gps-monthly failed:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
