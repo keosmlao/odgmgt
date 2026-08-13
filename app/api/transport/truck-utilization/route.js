@@ -1,37 +1,31 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/route-auth";
+import { buildUtilizationReport } from "@/lib/tms/actions/trip-volume";
 
-/** Proxies the truck-utilization report from TMS, which owns the calculation. */
+/**
+ * Truck space utilisation. buildUtilizationReport is the session-free core of
+ * TMS's getUtilizationReport — item dimensions, truck capacity and the
+ * distribution bands are all worked out there.
+ */
 export async function GET(request) {
   const user = getCurrentUser(request);
   if (!user) {
     return NextResponse.json({ success: false, message: "unauthorized" }, { status: 401 });
   }
 
-  const base = (process.env.TMS_API_URL || process.env.NEXT_PUBLIC_TMS_URL || "").replace(/\/$/, "");
-  if (!base) {
-    return NextResponse.json({ success: false, message: "TMS_API_URL is not configured" }, { status: 503 });
+  const params = request.nextUrl.searchParams;
+  const from = params.get("from") || "";
+  const to = params.get("to") || "";
+  const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (!isDate(from) || !isDate(to)) {
+    return NextResponse.json({ success: false, message: "from/to must be YYYY-MM-DD" }, { status: 400 });
   }
 
   try {
-    const response = await fetch(
-      `${base}/api/reports/truck-utilization?${request.nextUrl.searchParams.toString()}`,
-      {
-        headers: process.env.TMS_API_SECRET
-          ? { authorization: `Bearer ${process.env.TMS_API_SECRET}` }
-          : {},
-        cache: "no-store",
-      },
-    );
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) {
-      return NextResponse.json(
-        { success: false, message: payload?.error || `TMS responded ${response.status}` },
-        { status: response.status === 401 ? 502 : response.status },
-      );
-    }
-    return NextResponse.json({ success: true, data: payload.data });
+    const data = await buildUtilizationReport(from, to);
+    return NextResponse.json({ success: true, data });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 502 });
+    console.error("[transport] truck-utilization failed:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/route-auth";
+import {
+  getBillsWaitingSent,
+  getBillsWaitingSentDetails,
+  getBillsInProgress,
+  getBillCompleteList,
+} from "@/lib/tms/queries/bills.js";
+import { getJobBillsWithProducts } from "@/lib/tms/queries/jobs.js";
+import { getTransportBranches } from "@/lib/tms/queries/master-data.js";
 
 /**
- * Proxies the TMS bill lists (waiting to send, in progress, completed).
- * Read-only: TMS deliberately does not expose the mutating actions here, so the
- * copied pages send those operations back to TMS instead.
+ * The TMS bill lists — waiting to send, in progress, completed — from TMS's own
+ * queries. Read-only: the pages send every mutating action back to TMS itself.
  */
 export async function GET(request) {
   const user = getCurrentUser(request);
@@ -12,27 +19,41 @@ export async function GET(request) {
     return NextResponse.json({ success: false, message: "unauthorized" }, { status: 401 });
   }
 
-  const base = (process.env.TMS_API_URL || process.env.NEXT_PUBLIC_TMS_URL || "").replace(/\/$/, "");
-  if (!base) {
-    return NextResponse.json({ success: false, message: "TMS_API_URL is not configured" }, { status: 503 });
-  }
+  const params = request.nextUrl.searchParams;
+  const list = params.get("list") || "";
+  const doc = params.get("doc") || "";
+  const from = params.get("from") || "";
+  const to = params.get("to") || "";
 
   try {
-    const response = await fetch(`${base}/api/reports/bills?${request.nextUrl.searchParams.toString()}`, {
-      headers: process.env.TMS_API_SECRET
-        ? { authorization: `Bearer ${process.env.TMS_API_SECRET}` }
-        : {},
-      cache: "no-store",
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) {
-      return NextResponse.json(
-        { success: false, message: payload?.error || `TMS responded ${response.status}` },
-        { status: response.status === 401 ? 502 : response.status },
-      );
+    let data;
+    switch (list) {
+      case "waiting-sent":
+        data = await getBillsWaitingSent({});
+        break;
+      case "in-progress":
+        data = await getBillsInProgress({});
+        break;
+      case "complete":
+        data = await getBillCompleteList({}, from || undefined, to || undefined);
+        break;
+      case "branches":
+        data = await getTransportBranches();
+        break;
+      case "details":
+        if (!doc) return NextResponse.json({ success: false, message: "doc required" }, { status: 400 });
+        data = await getBillsWaitingSentDetails(doc);
+        break;
+      case "job-products":
+        if (!doc) return NextResponse.json({ success: false, message: "doc required" }, { status: 400 });
+        data = await getJobBillsWithProducts(doc);
+        break;
+      default:
+        return NextResponse.json({ success: false, message: "unknown list" }, { status: 400 });
     }
-    return NextResponse.json({ success: true, data: payload.data });
+    return NextResponse.json({ success: true, data });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 502 });
+    console.error(`[transport] bills ${list} failed:`, error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -1,14 +1,29 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/route-auth";
+import {
+  getDashboardSummary,
+  getDashboardKpi,
+  getDashboardDeliveryPerformance,
+  getDashboardPending,
+  getDashboardActivity,
+} from "@/lib/tms/queries/dashboard.js";
 
 /**
- * Proxies one slice of the TMS dashboard. The page loads the slices separately
- * (summary is fast, pending is slow) so each section can paint as it lands —
- * the same staggering TMS itself does.
+ * One slice of the TMS transport dashboard, computed here from TMS's own code
+ * (lib/tms/) against the database TMS itself reads. The page loads the slices
+ * separately — summary is fast, pending is slow — so each section paints as it
+ * lands, the same staggering TMS does.
  *
- * Needs TMS_API_URL (and TMS_API_SECRET when TMS sets REPORT_API_SECRET).
+ * The empty session object is what TMS's own report API passes: these reports
+ * are unscoped, covering every branch.
  */
-const SLICES = new Set(["summary", "kpi", "delivery", "pending", "activity"]);
+const SLICES = {
+  summary: (session, force) => getDashboardSummary(session, force),
+  kpi: (session, force) => getDashboardKpi(session, force),
+  delivery: (session, force) => getDashboardDeliveryPerformance(session, force),
+  pending: (session, force) => getDashboardPending(session, force),
+  activity: (session) => getDashboardActivity(session),
+};
 
 export async function GET(request) {
   const user = getCurrentUser(request);
@@ -17,32 +32,17 @@ export async function GET(request) {
   }
 
   const slice = request.nextUrl.searchParams.get("slice") || "summary";
-  const force = request.nextUrl.searchParams.get("force") === "1" ? "&force=1" : "";
-  if (!SLICES.has(slice)) {
+  const force = request.nextUrl.searchParams.get("force") === "1";
+  const run = SLICES[slice];
+  if (!run) {
     return NextResponse.json({ success: false, message: "unknown slice" }, { status: 400 });
   }
 
-  const base = (process.env.TMS_API_URL || process.env.NEXT_PUBLIC_TMS_URL || "").replace(/\/$/, "");
-  if (!base) {
-    return NextResponse.json({ success: false, message: "TMS_API_URL is not configured" }, { status: 503 });
-  }
-
   try {
-    const response = await fetch(`${base}/api/reports/dashboard?slice=${slice}${force}`, {
-      headers: process.env.TMS_API_SECRET
-        ? { authorization: `Bearer ${process.env.TMS_API_SECRET}` }
-        : {},
-      cache: "no-store",
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) {
-      return NextResponse.json(
-        { success: false, message: payload?.error || `TMS responded ${response.status}` },
-        { status: response.status === 401 ? 502 : response.status },
-      );
-    }
-    return NextResponse.json({ success: true, data: payload.data });
+    const data = await run({}, force);
+    return NextResponse.json({ success: true, data });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 502 });
+    console.error(`[transport] dashboard slice ${slice} failed:`, error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
