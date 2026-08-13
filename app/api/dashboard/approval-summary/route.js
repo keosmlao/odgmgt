@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server";
 import { one } from "@/lib/db";
+import { swrCache } from "@/lib/cache";
 import { requireUser } from "@/lib/approvals";
 
-/** Compact approval workload for the executive dashboard. */
+/**
+ * Compact approval workload for the executive dashboard.
+ *
+ * The notification bell lives in the topbar, so this is polled every 60 seconds
+ * by every open tab on every page, and the dashboard asks for it too. It was
+ * running its three queries every time — 2.8 to 4 seconds each on the server —
+ * which is a standing load that grows with the number of people signed in.
+ *
+ * Cached for a minute, matching the poll interval: the bell cannot show
+ * anything staler than it already would between two polls, and one process now
+ * runs the queries once a minute regardless of how many tabs are open.
+ */
 export async function GET(request) {
   const auth = requireUser(request);
   if (!auth.ok) {
@@ -10,7 +22,10 @@ export async function GET(request) {
   }
 
   try {
-    const [pr, po, product] = await Promise.all([
+    const [pr, po, product] = await swrCache(
+      "dashboard:approval-summary",
+      { ttl: 60_000, staleTtl: 6 * 3_600_000, bypass: request.nextUrl.searchParams.get("nocache") === "1" },
+      () => Promise.all([
       one(`
         SELECT count(*)::int AS pending,
                coalesce(sum(coalesce(l.est_total, 0)), 0)::float AS value,
@@ -52,7 +67,8 @@ export async function GET(request) {
               + (SELECT count(*) FROM public.odg_product_draft WHERE coalesce(approve_status, 0) = 0 AND created_date_time_now < now() - interval '2 days') AS overdue
         ) q
       `),
-    ]);
+      ]),
+    );
 
     const queues = {
       pr: { pending: Number(pr?.pending || 0), overdue: Number(pr?.overdue || 0), value: Number(pr?.value || 0) },
