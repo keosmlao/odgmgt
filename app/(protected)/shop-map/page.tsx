@@ -125,18 +125,25 @@ export default function ShopMapPage() {
         .on("click", () => setSelected(shop))
         .addTo(layer);
     }
-    if (shops.length > 0 && shops.length < (data?.shops.length ?? 0)) {
+    // Fit whatever is on screen, including the unfiltered first load. Without
+    // this the map stayed at its default zoom over Vientiane, where the 1,600
+    // shops in the capital overlap into what looks like a single dot and the
+    // provinces are off-screen entirely.
+    if (shops.length > 0) {
       map.fitBounds(L.latLngBounds(shops.map((shop) => [shop.lat, shop.lng] as L.LatLngTuple)), {
         padding: [40, 40],
         maxZoom: 14,
       });
     }
-  }, [shops, data]);
+  }, [shops]);
 
   const totals = data?.totals;
 
+  // The topbar (min-height 3.25rem) sits above this, so the map takes what is
+  // left of the viewport. Not h-screen: that is taller than the space the shell
+  // leaves, which squeezed the map and pushed the rest of the page down.
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] flex-col md:h-screen">
+    <div className="-m-4 flex h-[calc(100vh-3.5rem)] flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
         <span className="flex items-center gap-1.5 text-[13px] font-bold">
           <Store size={15} style={{ color: "var(--brand)" }} />
