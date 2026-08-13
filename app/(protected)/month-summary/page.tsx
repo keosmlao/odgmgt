@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Download } from "lucide-react";
 import api from "@/service/api";
+import { downloadCsv } from "@/lib/csv";
 import { useLanguage } from "@/context/LanguageContext";
 
 type Cell = {
@@ -118,6 +119,34 @@ export default function MonthSummary() {
       .filter((group) => group.span > 0);
   }, [data]);
 
+  /** One row per section × metric, columns spread wide like the table. */
+  const exportCsv = () => {
+    if (!data) return;
+    const headers = ["section", "metric", t("monthSummary.totalCompany"), ...data.columns.map((c) => c.label)];
+    const rows: (string | number)[][] = [];
+    data.sections.forEach((section) => {
+      const metrics: [string, (c: Cell) => number, number][] = [
+        ["Target", (c) => c.target, section.total.target],
+        [section.value_label, (c) => c.value, section.total.value],
+        ["%", (c) => c.pct, section.total.pct],
+        ["Last year", (c) => c.last_year, section.total.last_year],
+        ["Growth", (c) => c.growth, section.total.growth],
+      ];
+      metrics.forEach(([metric, pick, totalValue]) => {
+        rows.push([
+          section.label,
+          metric,
+          Math.round(totalValue * 100) / 100,
+          ...data.columns.map((column) => {
+            const cell = section.cells[column.key];
+            return cell ? Math.round(pick(cell) * 100) / 100 : 0;
+          }),
+        ]);
+      });
+    });
+    downloadCsv(`month-summary-${data.meta.year}-${String(data.meta.month).padStart(2, "0")}`, headers, rows);
+  };
+
   const sel =
     "rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--brand)]   ";
   const cellCls = "whitespace-nowrap border-l border-[var(--line)] px-3 py-1.5 text-right tabular-nums ";
@@ -231,6 +260,13 @@ export default function MonthSummary() {
                 ))}
               </select>
             </div>
+            <button
+              onClick={exportCsv}
+              className="btn"
+              disabled={!data}
+            >
+              <Download size={13} /> {t("app.exportCsv")}
+            </button>
             <button
               onClick={load}
               className="btn"

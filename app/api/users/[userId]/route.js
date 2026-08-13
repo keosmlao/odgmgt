@@ -3,6 +3,7 @@ import { one, query } from "@/lib/db";
 import { generatePasswordHash } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/route-auth";
 import { ensureAuthTable } from "@/lib/migrations";
+import { auditLog, requestIp } from "@/lib/audit";
 
 export async function PUT(request, { params }) {
   try {
@@ -69,6 +70,7 @@ export async function PUT(request, { params }) {
     if (!data) {
       return NextResponse.json({ success: false, message: "not found" }, { status: 404 });
     }
+    auditLog(user.username, "user_updated", `#${userId}${payload.password ? " +password" : ""}${"is_active" in payload ? ` active=${payload.is_active}` : ""}`, requestIp(request));
     return NextResponse.json({ success: true, data });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -111,6 +113,7 @@ export async function DELETE(request, { params }) {
     if (!deleted) {
       return NextResponse.json({ success: false, message: "not found" }, { status: 404 });
     }
+    auditLog(user.username, "user_deleted", `#${userIdNum}`, requestIp(request));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

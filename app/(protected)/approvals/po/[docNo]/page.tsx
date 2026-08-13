@@ -202,8 +202,8 @@ export default function PoDetailPage() {
       ) : !doc ? (
         <Empty text={t("approve.empty")} />
       ) : (
-        <div className="space-y-4">
-          <Card className="approval-card po-document-card" title={t("approve.po.header")}>
+        <div className="flex flex-col gap-4">
+          <Card className="approval-card po-document-card order-1" title={t("approve.po.header")}>
             <div className="po-document-grid">
               <div className="po-supplier-block">
                 <span className="po-supplier-icon"><ShoppingBag size={20} /></span>
@@ -250,7 +250,7 @@ export default function PoDetailPage() {
             )}
           </Card>
 
-          <Card className="approval-card" title={t("approve.po.items")} action={<span className="approval-card-hint">{items.length} {t("approve.pn.items")}</span>} flush>
+          <Card className="approval-card order-2" title={t("approve.po.items")} action={<span className="approval-card-hint">{items.length} {t("approve.pn.items")}</span>} flush>
             {items.length === 0 ? (
               <Empty text={t("approve.empty")} />
             ) : (
@@ -298,25 +298,6 @@ export default function PoDetailPage() {
             </div>
           </Card>
 
-          <Card className="approval-card" title={t("approve.po.activity")}>
-            {(data?.activity || []).length === 0 ? (
-              <Empty text={t("approve.empty")} />
-            ) : (
-              <ol className="space-y-2">
-                {(data?.activity || []).map((entry) => (
-                  <li key={entry.id} className="flex gap-2.5 text-[12px]">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--brand)" }} />
-                    <div className="min-w-0">
-                      <p style={{ color: "var(--ink)" }}>{entry.body}</p>
-                      <p className="muted text-[11px]">
-                        {entry.author_name || entry.created_by || "-"} · {fmtDate(entry.created_at)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </Card>
         </div>
       )}
     </Page>

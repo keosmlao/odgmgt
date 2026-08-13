@@ -3,6 +3,7 @@ import { rows, one, query } from "@/lib/db";
 import { generatePasswordHash } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/route-auth";
 import { ensureAuthTable } from "@/lib/migrations";
+import { auditLog, requestIp } from "@/lib/audit";
 
 export async function GET(request) {
   try {
@@ -78,6 +79,7 @@ export async function POST(request) {
       ],
     );
 
+    auditLog(user.username, "user_created", `${username} (${role})`, requestIp(request));
     return NextResponse.json({ success: true, data });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

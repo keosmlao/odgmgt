@@ -3,9 +3,10 @@
 
 import { useState, useEffect, useRef, cloneElement, isValidElement } from "react";
 import {
-  Users, Package, Wallet, Loader2, UserPlus, UserMinus, TrendingDown, PieChart as PieIcon,
+  Users, Package, Wallet, Loader2, UserPlus, UserMinus, TrendingDown, PieChart as PieIcon, Download,
 } from "lucide-react";
 import api from "@/service/api";
+import { downloadCsv } from "@/lib/csv";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts";
@@ -232,6 +233,36 @@ export default function AnalyticsPage() {
   const cs = customers.data?.summary;
   const cmpMonth = customers.data?.cmp_month || products.data?.cmp_month || new Date().getMonth() + 1;
 
+  /** Exports whatever the active tab currently shows. */
+  const exportCsv = () => {
+    const stamp = `${year}-b${bu}-c${channel}-p${province}`;
+    if (tab === "customers" && customers.data) {
+      const d = customers.data;
+      const headers = ["list", "customer", "cur_rev", "prev_rev", "orders", "share_pct", "last_buy"];
+      const rows: (string | number)[][] = [];
+      (d.lost || []).forEach((r: any) => rows.push(["lost", r.name, "", r.prev_rev ?? 0, "", "", r.last_buy || ""]));
+      (d.declining || []).forEach((r: any) => rows.push(["declining", r.name, r.cur_rev ?? 0, r.prev_rev ?? 0, "", "", ""]));
+      (d.topCustomers || []).forEach((r: any) => rows.push(["top", r.name, r.cur_rev ?? 0, "", "", r.share_pct ?? 0, ""]));
+      (d.newCustomers || []).forEach((r: any) => rows.push(["new", r.name, r.cur_rev ?? 0, "", r.orders ?? 0, "", r.last_buy || ""]));
+      downloadCsv(`analytics-customers-${stamp}`, headers, rows);
+    } else if (tab === "products" && products.data) {
+      const d = products.data;
+      const headers = ["list", "name", "group", "cur_rev", "prev_rev", "profit", "margin_pct"];
+      const rows: (string | number)[][] = [];
+      (d.groups || []).forEach((r: any) => rows.push(["group", r.grp, "", r.cur_rev ?? 0, r.prev_rev ?? 0, "", ""]));
+      (d.brands || []).forEach((r: any) => rows.push(["brand", r.brand, "", r.revenue ?? 0, "", r.profit ?? 0, r.margin_pct ?? 0]));
+      (d.dropped || []).forEach((r: any) => rows.push(["dropped", r.name, "", r.cur_rev ?? 0, r.prev_rev ?? 0, "", ""]));
+      (d.topProfit || []).forEach((r: any) => rows.push(["top_profit", r.name, r.brand || "", "", "", r.profit ?? 0, r.margin_pct ?? 0]));
+      downloadCsv(`analytics-products-${stamp}`, headers, rows);
+    } else if (tab === "ar" && ar.data) {
+      const headers = ["list", "name", "bucket", "balance", "bills", "salesperson", "max_overdue_days"];
+      const rows: (string | number)[][] = [];
+      (ar.data.buckets || []).forEach((b: any) => rows.push(["bucket", "", b.bucket, b.balance ?? 0, b.bills ?? 0, "", ""]));
+      (ar.data.topDebtors || []).forEach((r: any) => rows.push(["debtor", r.name, "", r.balance ?? 0, r.bills ?? 0, r.sale_name || "", r.max_overdue_days ?? 0]));
+      downloadCsv("analytics-ar", headers, rows);
+    }
+  };
+
   return (
     <div className="min-h-screen px-4 pb-10 md:px-8" style={font}>
       {/* Header */}
@@ -263,16 +294,21 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="tabs mb-4">
-        {tabs.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => setTab(item.key)}
-            className={`tab ${tab === item.key ? "is-active" : ""}`}
-          >
-            {item.icon}{item.label}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="tabs">
+          {tabs.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setTab(item.key)}
+              className={`tab ${tab === item.key ? "is-active" : ""}`}
+            >
+              {item.icon}{item.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={exportCsv} className="btn">
+          <Download size={13} /> {t("app.exportCsv")}
+        </button>
       </div>
 
       {/* ── Customers ── */}

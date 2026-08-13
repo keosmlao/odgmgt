@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { rows, query } from "@/lib/db";
+import { auditLog, requestIp } from "@/lib/audit";
 import { mineWhere, numericStatusWhere, readAction, readFilter, readScope, requireUser } from "@/lib/approvals";
 
 /**
@@ -104,6 +105,7 @@ export async function POST(request) {
       if (!result.rowCount) {
         return NextResponse.json({ success: false, message: "already handled" }, { status: 409 });
       }
+      auditLog(auth.code, action === "approve" ? "product_approved" : "product_rejected", `doc ${docNo}`, requestIp(request));
       return NextResponse.json({ success: true });
     }
 
@@ -123,6 +125,7 @@ export async function POST(request) {
       if (!result.rowCount) {
         return NextResponse.json({ success: false, message: "already handled" }, { status: 409 });
       }
+      auditLog(auth.code, action === "approve" ? "product_approved" : "product_rejected", `draft #${rowOrder}`, requestIp(request));
       return NextResponse.json({ success: true });
     }
 

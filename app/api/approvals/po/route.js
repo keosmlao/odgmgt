@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { rows, one, query } from "@/lib/db";
+import { auditLog, requestIp } from "@/lib/audit";
 import {
   PO_BASE,
   PO_ITEMS,
@@ -109,6 +110,7 @@ export async function POST(request) {
       [docNo, action === "approve" ? "ອະນຸມັດ PO" : `ປະຕິເສດ PO${reason ? ` · ${reason}` : ""}`, auth.code],
     );
 
+    auditLog(auth.code, action === "approve" ? "po_approved" : "po_rejected", `${docNo}${reason ? ` · ${reason}` : ""}`, requestIp(request));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, RefreshCw, ChevronDown, ChevronRight, Download } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import api from "@/service/api";
+import { downloadCsv } from "@/lib/csv";
 import { useLanguage } from "@/context/LanguageContext";
 
 const C = { blue: "#2b70b5", emerald: "#17876d", amber: "#f5911f", rose: "#d0453f" };
@@ -92,6 +93,28 @@ export default function SalesSummary() {
 
   const toggle = (key: string) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
+  /** Flattens every visible section (rows + totals) into one CSV. */
+  const exportCsv = () => {
+    if (!data) return;
+    const sections: [string, any][] = [
+      ["overall", data.overall],
+      ["by_area", data.by_area],
+      ["collection", data.collection],
+    ];
+    const headers = ["section", "label", "target", "actual", "ach_pct", "days_left", "req_per_day", "ytd_target", "ytd_actual", "ytd_ach_pct"];
+    const rows: (string | number)[][] = [];
+    const pushRow = (section: string, label: string, r: any) => {
+      rows.push([section, displayLabel(label), num(r.target), num(r.actual), num(r.ach_pct), num(r.working_days_left), num(r.daily_remind), num(r.ytd_target), num(r.ytd_actual), num(r.ytd_ach_pct)]);
+    };
+    sections.forEach(([name, section]) => {
+      if (!section?.rows?.length) return;
+      section.rows.forEach((r: any) => pushRow(name, r.label, r));
+      if (section.total) pushRow(`${name} · total`, "TOTAL", section.total);
+    });
+    if (!rows.length) return;
+    downloadCsv(`sales-summary-${year}-${month}`, headers, rows);
+  };
+
   const sel = "select";
 
   return (
@@ -108,6 +131,9 @@ export default function SalesSummary() {
             </p>
           </div>
           <div className="flex gap-2">
+            <button onClick={exportCsv} className="btn" disabled={!data}>
+              <Download size={13} /> {t("app.exportCsv")}
+            </button>
             <button onClick={load} className="btn">
               <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
             </button>

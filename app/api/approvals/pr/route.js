@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { rows, query } from "@/lib/db";
+import { auditLog, requestIp } from "@/lib/audit";
 import { mineWhere, readAction, readFilter, readReason, readScope, requireUser, textStatusWhere } from "@/lib/approvals";
 
 /** Purchase requisitions — odg_pm_pr with its lines in odg_pm_pr_line. */
@@ -94,6 +95,8 @@ export async function POST(request) {
     if (!result.rowCount) {
       return NextResponse.json({ success: false, message: "already handled" }, { status: 409 });
     }
+    const reason = action === "approve" ? null : readReason(body);
+    auditLog(auth.code, action === "approve" ? "pr_approved" : "pr_rejected", `PR #${id}${reason ? ` · ${reason}` : ""}`, requestIp(request));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
