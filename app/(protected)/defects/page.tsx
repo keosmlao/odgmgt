@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Pagination from "@/components/pm/Pagination";
+import { swrCache } from "@/lib/cache";
 import { getDefectsByBrand, getRecentDefects } from "@/lib/pm/analytics";
 import { getUserGroupCount } from "@/lib/pm/products";
 import { getCurrentUser } from "@/lib/pm/session";
@@ -17,10 +18,20 @@ export default async function DefectsPage({ searchParams }: { searchParams: Prom
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number((await searchParams).page ?? "1") || 1);
 
-  const [byBrand, recentFetched] = await Promise.all([
-    getDefectsByBrand(mineOf, 15),
-    getRecentDefects(mineOf, PAGE_SIZE + 1, (page - 1) * PAGE_SIZE),
-  ]);
+  // Cached per page of results. Defect records are written by the service
+  // workflow, not here, so minutes behind costs nothing.
+  const [byBrand, recentFetched] = (await swrCache(
+    `pm:defects:${mineOf}:${page}`,
+    { ttl: 300_000, staleTtl: 24 * 3_600_000 },
+    () =>
+      Promise.all([
+        getDefectsByBrand(mineOf, 15),
+        getRecentDefects(mineOf, PAGE_SIZE + 1, (page - 1) * PAGE_SIZE),
+      ]),
+  )) as [
+    Awaited<ReturnType<typeof getDefectsByBrand>>,
+    Awaited<ReturnType<typeof getRecentDefects>>,
+  ];
   const hasNext = recentFetched.length > PAGE_SIZE;
   const recent = recentFetched.slice(0, PAGE_SIZE);
   const pageHref = (pg: number) => `/defects${pg > 1 ? `?page=${pg}` : ""}`;

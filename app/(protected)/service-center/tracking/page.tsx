@@ -2,6 +2,7 @@
 // cannot collide with this app's own lib of the same name; imports rewritten.
 import { TrackingMap } from "@/components/ods/map/tracking-map";
 import { ALL_ACCESS_SESSION } from "@/lib/ods/session-all";
+import { swrCache } from "@/lib/cache";
 import { mapLocations } from "@/lib/ods/map-locations";
 import { CLAIM_SIDE, roleOf } from "@/lib/ods/roles";
 import { MapPin } from "lucide-react";
@@ -18,7 +19,11 @@ export default async function MapPage() {
   // so the role gate that TMS/ODSS applies is replaced by full access.
   const session = ALL_ACCESS_SESSION;
 
-  const markers = await mapLocations();
+  // Cached: every pin on the map comes from one query, and this is a read-only
+  // management view — a few minutes behind is fine.
+  const markers = (await swrCache("ods:map-locations", { ttl: 180_000, staleTtl: 24 * 3_600_000 }, () =>
+    mapLocations(),
+  )) as Awaited<ReturnType<typeof mapLocations>>;
   const ih = markers.filter((m) => m.service_type === "IH").length;
   const ps = markers.filter((m) => m.service_type === "PS").length;
   const inst = markers.filter((m) => m.kind === "install").length;

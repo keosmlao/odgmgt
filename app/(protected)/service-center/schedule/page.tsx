@@ -2,6 +2,7 @@
 // cannot collide with this app's own lib of the same name, and imports are
 // rewritten to match. Only the db helper and the session/role gate differ.
 import { Empty } from "@/components/ods/ui";
+import { swrCache } from "@/lib/cache";
 import { ALL_ACCESS_SESSION, NO_TECH_FILTER } from "@/lib/ods/session-all";
 import { query } from "@/lib/ods/db";
 import { getDictionary } from "@/lib/ods/i18n/dictionaries";
@@ -78,66 +79,71 @@ export default async function SchedulePage({ searchParams }: Props) {
   const values = tech ? [day, tech] : [day];
   const monthValues = tech ? [monthStart, monthEnd, tech] : [monthStart, monthEnd];
 
-  const [jobsResult, countResult, technicians] = await Promise.all([
+  // Cached: three queries per visit on a read-only management view of ODSS.
+  const [jobsResult, countResult, technicians] = (await swrCache(
+    `ods:schedule:${day}:${monthStart}`,
+    { ttl: 180_000, staleTtl: 24 * 3_600_000 },
+    () => Promise.all([
     query<Row>(
-      `select 'install' as workflow, a.code,
-          nullif(a.tech_code,'') as tech,
-          c.name_1 as customer, c.tel,
-          coalesce(nullif(a.location_inst,''), c.address) as location,
-          a.item_name as item,
-          (${INSTALL_STAGE_SQL}) as stage,
-          (${INSTALL_STAGE_LABEL_SQL}) as stage_label,
-          nullif(a.remark,'') as remark,
-          a.location_lat as lat, a.location_lng as lng
-        from ods_tb_install a
-        left join ar_customer c on c.code = a.cust_code
-       where a.appoint_date = $1::date
-         and a.cancel_date is null
-         and a.job_finish is null
-         ${tech ? "and a.tech_code = $2" : ""}
-
-       union all
-
-       select 'repair' as workflow, a.code,
-          nullif(a.emp_code,'') as tech,
-          c.name_1 as customer, c.tel,
-          coalesce(nullif(a.location_repair,''), c.address) as location,
-          a.name_1 as item,
-          (${STAGE_SQL}) as stage,
-          (${STAGE_LABEL_SQL}) as stage_label,
-          nullif(a.remark,'') as remark,
-          a.location_lat as lat, a.location_lng as lng
-        from tb_product a
-        left join ar_customer c on c.code = a.cust_code
-       where a.appoint_date = $1::date
-         and a.cancel_start is null
-         and a.return_complete is null
-         ${tech ? "and a.emp_code = $2" : ""}
-
-       order by tech nulls last, code`,
-      values,
-    ),
-    query<DayCount>(
-      `select to_char(q.appoint_date,'YYYY-MM-DD') as day, count(*)::int as jobs
-         from (
-           select a.appoint_date
-             from ods_tb_install a
-            where a.appoint_date >= $1::date and a.appoint_date < $2::date
-              and a.cancel_date is null and a.job_finish is null
-              ${tech ? "and a.tech_code = $3" : ""}
+          `select 'install' as workflow, a.code,
+              nullif(a.tech_code,'') as tech,
+              c.name_1 as customer, c.tel,
+              coalesce(nullif(a.location_inst,''), c.address) as location,
+              a.item_name as item,
+              (${INSTALL_STAGE_SQL}) as stage,
+              (${INSTALL_STAGE_LABEL_SQL}) as stage_label,
+              nullif(a.remark,'') as remark,
+              a.location_lat as lat, a.location_lng as lng
+            from ods_tb_install a
+            left join ar_customer c on c.code = a.cust_code
+           where a.appoint_date = $1::date
+             and a.cancel_date is null
+             and a.job_finish is null
+             ${tech ? "and a.tech_code = $2" : ""}
+    
            union all
-           select a.appoint_date
-             from tb_product a
-            where a.appoint_date >= $1::date and a.appoint_date < $2::date
-              and a.cancel_start is null and a.return_complete is null
-              ${tech ? "and a.emp_code = $3" : ""}
-         ) q
-        group by q.appoint_date
-        order by q.appoint_date`,
-      monthValues,
-    ),
-    listTechnicians(),
-  ]);
+    
+           select 'repair' as workflow, a.code,
+              nullif(a.emp_code,'') as tech,
+              c.name_1 as customer, c.tel,
+              coalesce(nullif(a.location_repair,''), c.address) as location,
+              a.name_1 as item,
+              (${STAGE_SQL}) as stage,
+              (${STAGE_LABEL_SQL}) as stage_label,
+              nullif(a.remark,'') as remark,
+              a.location_lat as lat, a.location_lng as lng
+            from tb_product a
+            left join ar_customer c on c.code = a.cust_code
+           where a.appoint_date = $1::date
+             and a.cancel_start is null
+             and a.return_complete is null
+             ${tech ? "and a.emp_code = $2" : ""}
+    
+           order by tech nulls last, code`,
+          values,
+        ),
+        query<DayCount>(
+          `select to_char(q.appoint_date,'YYYY-MM-DD') as day, count(*)::int as jobs
+             from (
+               select a.appoint_date
+                 from ods_tb_install a
+                where a.appoint_date >= $1::date and a.appoint_date < $2::date
+                  and a.cancel_date is null and a.job_finish is null
+                  ${tech ? "and a.tech_code = $3" : ""}
+               union all
+               select a.appoint_date
+                 from tb_product a
+                where a.appoint_date >= $1::date and a.appoint_date < $2::date
+                  and a.cancel_start is null and a.return_complete is null
+                  ${tech ? "and a.emp_code = $3" : ""}
+             ) q
+            group by q.appoint_date
+            order by q.appoint_date`,
+          monthValues,
+        ),
+        listTechnicians(),
+    ]),
+  )) as [{ rows: Row[] }, { rows: DayCount[] }, Awaited<ReturnType<typeof listTechnicians>>];
 
   const rows = jobsResult.rows;
   const counts = new Map(countResult.rows.map((row) => [row.day, Number(row.jobs)]));

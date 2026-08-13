@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import Pagination from "@/components/pm/Pagination";
+import { swrCache } from "@/lib/cache";
 import { getFilterOptions, getProducts, getUserGroupCount, getUserGroups, type ProductFilters } from "@/lib/pm/products";
 import { getCurrentUser } from "@/lib/pm/session";
 import FilterSelect from "./FilterSelect";
@@ -67,10 +68,16 @@ export default async function ProductsPage({
   const page = Number(sp.page ?? "1") || 1;
   const groupBy = filters.groupBy ?? "";
 
-  const [{ rows, total, page: current, totalPages }, options] = await Promise.all([
-    getProducts(filters, page),
-    getFilterOptions(),
-  ]);
+  // Cached on the whole filter set, so the common views — no filter, one brand,
+  // one category — are instant while an unusual combination still works.
+  const [{ rows, total, page: current, totalPages }, options] = (await swrCache(
+    `pm:products:${JSON.stringify(filters)}:${page}`,
+    { ttl: 300_000, staleTtl: 24 * 3_600_000 },
+    () => Promise.all([getProducts(filters, page), getFilterOptions()]),
+  )) as [
+    Awaited<ReturnType<typeof getProducts>>,
+    Awaited<ReturnType<typeof getFilterOptions>>,
+  ];
   const activeFilterCount = [
     filters.groupMain,
     filters.groupSub,
