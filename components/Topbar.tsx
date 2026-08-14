@@ -3,7 +3,7 @@
 import React from "react";
 import { usePathname } from "next/navigation";
 import { LogOut, Moon, Sun } from "lucide-react";
-import { MENU_GROUPS } from "@/components/Sidebar";
+import { NAVIGATION_ITEMS } from "@/components/Sidebar";
 import NotificationBell from "@/components/NotificationBell";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -23,7 +23,7 @@ const initials = (name: string) =>
 /**
  * Header for the signed-in app: where you are on the left, who you are and the
  * app-wide preferences on the right. The page name is resolved from the same
- * MENU_GROUPS the sidebar renders, so a new menu entry needs no change here.
+ * leaf links the sidebar renders, so a new menu entry needs no change here.
  */
 export default function Topbar() {
   const pathname = usePathname();
@@ -33,7 +33,7 @@ export default function Topbar() {
 
   // Longest matching path wins, so /transport/pod beats /transport — the same
   // rule the sidebar uses to decide which entry is highlighted.
-  const current = MENU_GROUPS.flatMap((group) => group.items)
+  const current = NAVIGATION_ITEMS
     .filter((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))
     .sort((a, b) => b.path.length - a.path.length)[0];
 

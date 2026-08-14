@@ -6,6 +6,16 @@ import api from "@/service/api";
 import { useLanguage } from "@/context/LanguageContext";
 
 type Brand = { group: string; brand: string; qty: number; amount: number; target: number };
+type PointLine = {
+  doc_no: string; doc_date: string; item_code: string; item_name: string;
+  qty: number; amount: number; unit_points: number; points: number; unmatched_qty: number;
+  /** Why the line scored nothing; null when it did score. */
+  no_point_reason: string | null;
+};
+type PointBrand = { brand: string; qty: number; amount: number; points: number; lines: PointLine[] };
+/** Bill level of the drill — the lines of one brand that sit on one invoice. */
+type PointBill = { doc_no: string; doc_date: string; qty: number; amount: number; points: number; lines: PointLine[] };
+type PointCategory = { category: string; pcat: string; qty: number; amount: number; points: number; brands: PointBrand[] };
 type UnitLine = { code: string; description: string; group: string; brand: string | null; qty: number; rate: number; amount: number };
 
 type Person = {
@@ -29,10 +39,7 @@ type Person = {
   target_groups: { group: string; target: number }[];
   brands: Brand[];
   point_categories: { category: string; points: number }[];
-  invoices: {
-    doc_no: string; doc_date: string; qty: number; amount: number; points: number; unmatched_qty: number;
-    categories: { category: string; qty: number; amount: number; points: number; unmatched_qty: number }[];
-  }[];
+  categories?: PointCategory[];
   no_point: { amount: number; lines: number };
   unmatched?: boolean;
 };
@@ -107,6 +114,37 @@ const fmtDate = (value: string) => value
   ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Vientiane", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value))
   : "—";
 const achColor = (value: number) => (value >= 100 ? "var(--pos)" : value >= 90 ? "var(--warn)" : "var(--neg)");
+/**
+ * Group a brand's point lines into invoices, oldest first.
+ *
+ * The API returns the lines flat; a bill row lets the reader tie a person's
+ * points back to the document the cashier issued. The totals are the brand's
+ * share of that bill, not the whole bill — the same invoice appears under every
+ * brand and category it carries.
+ */
+function billsOf(lines: PointLine[]): PointBill[] {
+  const bills = new Map<string, PointBill>();
+  for (const line of lines) {
+    const bill = bills.get(line.doc_no)
+      ?? { doc_no: line.doc_no, doc_date: line.doc_date, qty: 0, amount: 0, points: 0, lines: [] };
+    bill.qty += Number(line.qty || 0);
+    bill.amount += Number(line.amount || 0);
+    bill.points += Number(line.points || 0);
+    bill.lines.push(line);
+    bills.set(line.doc_no, bill);
+  }
+  return [...bills.values()].sort(
+    (a, b) => a.doc_date.localeCompare(b.doc_date) || a.doc_no.localeCompare(b.doc_no),
+  );
+}
+/** One colour per point-map group, so a category reads the same everywhere. */
+const PCAT_TONE: Record<string, string> = {
+  REF: "pill-pos",
+  Washer: "pill-pos",
+  AV: "",
+  Air: "",
+  SDA: "pill-warn",
+};
 const bandTone = (band: string) =>
   band === "high" ? "pill-pos" : band === "low" ? "pill-neg" : band === "no_target" ? "pill-muted" : "pill-warn";
 
@@ -397,9 +435,7 @@ export default function RetailIncentivePage() {
                       const key = row.employee_code || row.name;
                       const expanded = open === key;
                       const startsGroup = index === 0 || data.people[index - 1]?.group !== row.group;
-                      const invoiceCategories = [...new Set(
-                        (row.invoices ?? []).flatMap((invoice) => invoice.categories.map((category) => category.category)),
-                      )].sort();
+                      const pointCategories = row.categories ?? [];
                       return (
                         <Fragment key={key}>
                           {startsGroup && (
@@ -437,82 +473,94 @@ export default function RetailIncentivePage() {
                             <tr>
                               <td colSpan={11} style={{ background: "var(--surface-2)", padding: "0.75rem" }}>
                                 <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-                                  {/* group targets */}
-                                  <details>
-                                    <summary className="field-label inline-flex cursor-pointer list-none items-center gap-1.5">
-                                      <ChevronRight size={12} className="details-chevron" /> {t("incentive.byGroup")}
-                                    </summary>
-                                    <div className="mt-1.5 pl-5">
-                                    {row.target_groups.length ? row.target_groups.map((group) => (
-                                      <p key={group.group} className="num text-[11.5px]" style={{ color: "var(--ink-soft)" }}>
-                                        {groupLabel(group.group)}: {fmt(group.target)}
-                                      </p>
-                                    )) : <p className="page-sub">—</p>}
-                                    </div>
-                                  </details>
-
-                                  {/* brands */}
-                                  <details>
-                                    <summary className="field-label inline-flex cursor-pointer list-none items-center gap-1.5">
-                                      <ChevronRight size={12} className="details-chevron" /> {t("incentive.byBrand")}
-                                    </summary>
-                                    <div className="mt-1.5 pl-5">
-                                    {row.brands.length ? row.brands.slice(0, 8).map((brand) => (
-                                      <p key={`${brand.group}-${brand.brand}`} className="num text-[11.5px]" style={{ color: "var(--ink-soft)" }}>
-                                        {brand.brand} · {fmt(brand.qty)} {t("incentive.units")} · {fmt(brand.amount)}
-                                        {brand.target ? ` / ${fmt(brand.target)}` : ""}
-                                      </p>
-                                    )) : <p className="page-sub">—</p>}
-                                    </div>
-                                  </details>
-
-                                  {/* point categories */}
+                                  {/* point categories — the drill-down IS the
+                                      per-person breakdown, so the group-target
+                                      and brand summaries that used to sit above
+                                      it only repeated what it already shows. */}
                                   <details open className="lg:col-span-2 xl:col-span-4">
                                     <summary className="field-label inline-flex cursor-pointer list-none items-center gap-1.5">
                                       <ChevronRight size={12} className="details-chevron" /> {t("incentive.byCategory")}
                                     </summary>
                                     <div className="mt-1.5 space-y-1 pl-5">
-                                      {invoiceCategories.length ? invoiceCategories.map((categoryName) => {
-                                        const categoryInvoices = row.invoices.flatMap((invoice) => {
-                                          const category = invoice.categories.find((item) => item.category === categoryName);
-                                          return category ? [{ ...category, doc_no: invoice.doc_no, doc_date: invoice.doc_date }] : [];
-                                        });
-                                        const categoryPoints = categoryInvoices.reduce((sum, invoice) => sum + invoice.points, 0);
-                                        return (
-                                          <details key={categoryName}>
-                                            <summary className="num inline-flex cursor-pointer list-none items-center gap-1.5 text-[11.5px]" style={{ color: "var(--ink-soft)" }}>
-                                              <ChevronRight size={11} className="details-chevron" />
-                                              {categoryName}: {fmt(categoryPoints)} {t("incentive.points")} · {t("incentive.invoiceSource")} {categoryInvoices.length} {t("incentive.invoiceCount")}
-                                            </summary>
-                                            <div className="mt-1.5 tbl-scroll rounded-[var(--r-md)] border" style={{ borderColor: "var(--border)" }}>
-                                              <table className="tbl" style={{ minWidth: 620 }}>
-                                                <thead>
-                                                  <tr>
-                                                    <th>{t("incentive.invoiceNo")}</th>
-                                                    <th>{t("incentive.invoiceDate")}</th>
-                                                    <th>{t("label.qty")}</th>
-                                                    <th>{t("incentive.sales")}</th>
-                                                    <th>{t("incentive.points")}</th>
-                                                    <th>{t("incentive.noPoint")}</th>
-                                                  </tr>
-                                                </thead>
-                                                <tbody>
-                                                  {categoryInvoices.map((invoice) => (
-                                                    <tr key={`${categoryName}:${invoice.doc_no}`}>
-                                                      <td style={{ color: "var(--ink)", fontWeight: 600 }}>{invoice.doc_no}</td>
-                                                      <td>{fmtDate(invoice.doc_date)}</td>
-                                                      <td>{fmt(invoice.qty)}</td>
-                                                      <td>{fmt(invoice.amount)}</td>
-                                                      <td>{fmt(invoice.points)}</td>
-                                                      <td>{invoice.unmatched_qty ? fmt(invoice.unmatched_qty) : "—"}</td>
-                                                    </tr>
+                                      {pointCategories.length ? pointCategories.map((category) => (
+                                        <details key={category.category} className="drill">
+                                          <summary className="drill-row">
+                                            <ChevronRight size={12} className="details-chevron" />
+                                            <span className={`pill ${PCAT_TONE[category.pcat] ?? "pill-muted"}`}>{category.category}</span>
+                                            <span className="drill-meta num">
+                                              {category.brands.length} {t("incentive.brands")} · {fmt(category.qty)} {t("incentive.units")}
+                                            </span>
+                                            <span className="drill-points num">{fmt(category.points)} {t("incentive.points")}</span>
+                                          </summary>
+                                          <div className="drill-body">
+                                            {category.brands.map((brand) => {
+                                              const bills = billsOf(brand.lines);
+                                              return (
+                                              <details key={brand.brand} className="drill">
+                                                <summary className="drill-row">
+                                                  <ChevronRight size={11} className="details-chevron" />
+                                                  <span className="font-semibold" style={{ color: "var(--ink)" }}>{brand.brand}</span>
+                                                  <span className="drill-meta num">
+                                                    {bills.length} {t("incentive.invoiceCount")} · {brand.lines.length} {t("incentive.lines")} · {fmt(brand.qty)} {t("incentive.units")}
+                                                  </span>
+                                                  <span className="drill-points num">{fmt(brand.points)} {t("incentive.points")}</span>
+                                                </summary>
+                                                <div className="drill-body">
+                                                  {bills.map((bill) => (
+                                                    <details key={bill.doc_no} className="drill">
+                                                      <summary className="drill-row">
+                                                        <ChevronRight size={11} className="details-chevron" />
+                                                        <span className="num" style={{ color: "var(--muted)" }}>{fmtDate(bill.doc_date)}</span>
+                                                        <span className="font-semibold" style={{ color: "var(--ink)" }}>{bill.doc_no}</span>
+                                                        <span className="drill-meta num">
+                                                          {bill.lines.length} {t("incentive.lines")} · {fmt(bill.qty)} {t("incentive.units")} · {fmt(bill.amount)}
+                                                        </span>
+                                                        <span className="drill-points num">{fmt(bill.points)} {t("incentive.points")}</span>
+                                                      </summary>
+                                                      <div className="tbl-scroll">
+                                                        <table className="tbl" style={{ minWidth: 560 }}>
+                                                          <thead>
+                                                            <tr>
+                                                              <th style={{ textAlign: "left" }}>{t("incentive.product")}</th>
+                                                              <th>{t("label.qty")}</th>
+                                                              <th>{t("incentive.pointsPerUnit")}</th>
+                                                              <th>{t("incentive.points")}</th>
+                                                              <th style={{ textAlign: "left" }}>{t("incentive.noPointReason")}</th>
+                                                              <th>{t("incentive.sales")}</th>
+                                                            </tr>
+                                                          </thead>
+                                                          <tbody>
+                                                            {bill.lines.map((line, lineIndex) => (
+                                                              <tr key={`${line.doc_no}:${line.item_code}:${lineIndex}`}>
+                                                                <td style={{ textAlign: "left", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }} title={line.item_name}>
+                                                                  {line.item_name || line.item_code}
+                                                                </td>
+                                                                <td>{fmt(line.qty)}</td>
+                                                                <td style={{ color: line.unit_points ? undefined : "var(--warn)" }}>
+                                                                  {line.unit_points ? fmt(line.unit_points) : "—"}
+                                                                </td>
+                                                                <td style={{ color: "var(--ink)", fontWeight: 700 }}>{fmt(line.points)}</td>
+                                                                <td
+                                                                  style={{ textAlign: "left", maxWidth: 320, color: line.no_point_reason ? "var(--warn)" : "var(--muted)" }}
+                                                                  title={line.no_point_reason ?? undefined}
+                                                                >
+                                                                  {line.no_point_reason ?? "—"}
+                                                                </td>
+                                                                <td>{fmt(line.amount)}</td>
+                                                              </tr>
+                                                            ))}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
+                                                    </details>
                                                   ))}
-                                                </tbody>
-                                              </table>
-                                            </div>
-                                          </details>
-                                        );
-                                      }) : <p className="page-sub">—</p>}
+                                                </div>
+                                              </details>
+                                              );
+                                            })}
+                                          </div>
+                                        </details>
+                                      )) : <p className="page-sub">—</p>}
                                     </div>
                                   </details>
 

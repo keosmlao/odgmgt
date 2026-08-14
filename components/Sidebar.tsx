@@ -43,7 +43,15 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 
-type MenuItem = { path: string; i18nKey: string; icon: React.ReactNode };
+const EXPANDED_MENUS_KEY = "odg_sidebar_expanded_menus";
+
+type SubMenuItem = { path: string; i18nKey: string };
+type MenuItem = {
+  path: string;
+  i18nKey: string;
+  icon: React.ReactNode;
+  children?: SubMenuItem[];
+};
 type MenuGroup = { key: string; items: MenuItem[] };
 
 /** Grouped so the nav reads as sections rather than one long list. */
@@ -118,7 +126,17 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     key: "sidebar.groupSystem",
     items: [
-      { path: "/incentive-config", i18nKey: "sidebar.incentiveCfg", icon: <Settings2 size={17} /> },
+      {
+        path: "/incentive-config",
+        i18nKey: "sidebar.incentiveCfg",
+        icon: <Settings2 size={17} />,
+        children: [
+          { path: "/incentive-config", i18nKey: "incentiveCfg.points" },
+          { path: "/incentive-config/rewards", i18nKey: "incentiveCfg.rewards" },
+          { path: "/incentive-config/product", i18nKey: "incentiveCfg.product" },
+          { path: "/incentive-config/mapping", i18nKey: "incentiveCfg.mapping" },
+        ],
+      },
       { path: "/commission", i18nKey: "sidebar.commission", icon: <BadgePercent size={17} /> },
       { path: "/access", i18nKey: "sidebar.access", icon: <ShieldCheck size={17} /> },
       { path: "/settings", i18nKey: "sidebar.settings", icon: <Settings size={17} /> },
@@ -130,13 +148,18 @@ export const MENU_GROUPS: MenuGroup[] = [
 const matchesPath = (pathname: string, path: string) =>
   pathname === path || pathname.startsWith(`${path}/`);
 
+/** Leaf links are shared with the top bar so both surfaces resolve the same page. */
+export const NAVIGATION_ITEMS = MENU_GROUPS.flatMap((group) =>
+  group.items.flatMap((item) => item.children ?? [item]),
+);
+
 /**
  * Only the most specific menu entry lights up. Matching with startsWith alone
  * highlighted both /transport and /transport/cars-map at the same time, so the
  * longest matching path wins and everything else stays inactive.
  */
 const activePathFor = (pathname: string) =>
-  MENU_GROUPS.flatMap((group) => group.items)
+  NAVIGATION_ITEMS
     .map((item) => item.path)
     .filter((path) => matchesPath(pathname, path))
     .sort((a, b) => b.length - a.length)[0] ?? null;
@@ -147,6 +170,21 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   /** Sections the user folded away — every group starts open. */
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
+  const [expandedMenus, setExpandedMenus] = React.useState<Record<string, boolean>>({});
+
+  /** Restore submenus the user left open before a browser refresh. */
+  React.useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(EXPANDED_MENUS_KEY) || "[]");
+      if (!Array.isArray(saved)) return;
+      setExpandedMenus((prev) => ({
+        ...Object.fromEntries(saved.map((path) => [String(path), true])),
+        ...prev,
+      }));
+    } catch {
+      localStorage.removeItem(EXPANDED_MENUS_KEY);
+    }
+  }, []);
 
   React.useEffect(() => {
     setMobileOpen(false);
@@ -155,12 +193,30 @@ export default function Sidebar() {
   /** Never leave the section holding the current page folded. */
   React.useEffect(() => {
     const current = activePathFor(pathname);
-    const active = MENU_GROUPS.find((group) => group.items.some((item) => item.path === current));
+    const active = MENU_GROUPS.find((group) =>
+      group.items.some((item) => item.path === current || item.children?.some((child) => child.path === current)),
+    );
     if (!active) return;
     setCollapsed((prev) => (prev[active.key] ? { ...prev, [active.key]: false } : prev));
+
+    const parent = active.items.find((item) => item.children?.some((child) => child.path === current));
+    if (parent) {
+      setExpandedMenus((prev) => (prev[parent.path] ? prev : { ...prev, [parent.path]: true }));
+    }
   }, [pathname]);
 
   const activePath = activePathFor(pathname);
+
+  const toggleSubmenu = (path: string, defaultOpen: boolean) => {
+    setExpandedMenus((prev) => {
+      const next = { ...prev, [path]: !(prev[path] ?? defaultOpen) };
+      const openPaths = Object.entries(next)
+        .filter(([, open]) => open)
+        .map(([menuPath]) => menuPath);
+      localStorage.setItem(EXPANDED_MENUS_KEY, JSON.stringify(openPaths));
+      return next;
+    });
+  };
 
   return (
     <>
@@ -240,6 +296,57 @@ export default function Sidebar() {
               <div className={`space-y-0.5 ${isOpen ? "" : "hidden"}`}>
                 {group.items.map((item) => {
                   const isActive = item.path === activePath;
+                  if (item.children) {
+                    const hasActiveChild = item.children.some((child) => child.path === activePath);
+                    const isSubmenuOpen = expandedMenus[item.path] ?? hasActiveChild;
+
+                    return (
+                      <div key={item.path}>
+                        <button
+                          type="button"
+                          aria-expanded={isSubmenuOpen}
+                          onClick={() => toggleSubmenu(item.path, hasActiveChild)}
+                          className={`relative flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-[12.5px] font-medium transition-colors ${
+                            hasActiveChild ? "bg-white/12 text-white" : "text-white/62 hover:bg-white/8 hover:text-white"
+                          }`}
+                        >
+                          {hasActiveChild && (
+                            <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-[var(--accent)]" />
+                          )}
+                          <span className={`shrink-0 ${hasActiveChild ? "text-[var(--sky)]" : ""}`}>{item.icon}</span>
+                          <span className="min-w-0 flex-1 truncate text-left">{t(item.i18nKey)}</span>
+                          <ChevronDown
+                            size={13}
+                            className={`shrink-0 transition-transform ${isSubmenuOpen ? "" : "-rotate-90"}`}
+                          />
+                        </button>
+
+                        <div className={`ml-4 border-l border-white/10 pl-2 pt-0.5 ${isSubmenuOpen ? "" : "hidden"}`}>
+                          {item.children.map((child) => {
+                            const isChildActive = child.path === activePath;
+                            return (
+                              <Link
+                                key={child.path}
+                                href={child.path}
+                                onClick={() => setMobileOpen(false)}
+                                className={`relative flex items-center rounded-[var(--r-sm)] px-2.5 py-1.5 text-[11.5px] font-medium transition-colors ${
+                                  isChildActive
+                                    ? "bg-white/10 text-white"
+                                    : "text-white/52 hover:bg-white/8 hover:text-white"
+                                }`}
+                              >
+                                {isChildActive && (
+                                  <span className="absolute -left-[11px] h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                                )}
+                                <span className="truncate">{t(child.i18nKey)}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <Link
                       key={item.path}

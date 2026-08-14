@@ -89,8 +89,9 @@ const DAYS = [
   { key: "mtg.dayWed", bg: "#3f8f6b" },
   { key: "mtg.dayThu", bg: "#c07f3a" },
   { key: "mtg.dayFri", bg: "#2b70b5" },
-  { key: "mtg.daySat", bg: "#6f66b8" },
-  { key: "mtg.daySun", bg: "#6b7f94" },
+  { key: "mtg.daySat", bg: "#43889b" },
+  // Saturday is a working day here; only Sunday is marked as the day off.
+  { key: "mtg.daySun", bg: "#94a3b8", off: true },
 ];
 
 /** Spare lines kept under every day, as on the paper sheet. */
@@ -530,7 +531,7 @@ export default function MeetingSchedulePage() {
                         >
                           {index === 0 && (
                             <td
-                              className="sheet-day"
+                              className={`sheet-day ${day.off ? "is-off" : ""}`}
                               rowSpan={rows.length}
                               style={{ ["--day" as string]: day.bg }}
                             >

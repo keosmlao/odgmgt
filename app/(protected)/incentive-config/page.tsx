@@ -22,13 +22,6 @@ type Payload = {
   sections: { key: string; tables: TableBlock[] }[];
 };
 
-const SECTION_LABEL: Record<string, string> = {
-  points: "incentiveCfg.points",
-  rewards: "incentiveCfg.rewards",
-  product: "incentiveCfg.product",
-  mapping: "incentiveCfg.mapping",
-};
-
 /** Human titles + the columns worth showing first for each config table. */
 const TABLE_META: Record<string, { title: string; hint?: string; hide?: string[]; groupBy?: string }> = {
   app_incentive_category: { title: "ໝວດສິນຄ້າ ແລະ ນ້ຳໜັກ", hint: "ໝວດໃດຢູ່ກຸ່ມໃດ ແລະ ນັບຄະແນນແນວໃດ" },
@@ -106,6 +99,8 @@ const COLUMN_LABEL: Record<string, string> = {
   status_code: "ສະຖານະ",
   multiplier: "ຕົວຄູນ",
   item_code: "ລະຫັດສິນຄ້າ",
+  item_name: "ຊື່ສິນຄ້າ",
+  item_brand: "ແບຣນ",
   note: "ໝາຍເຫດ",
   salename: "ຊື່ຜູ້ຂາຍ",
   employee_code: "ລະຫັດພະນັກງານ",
@@ -139,6 +134,14 @@ const MODE_LABEL: Record<string, string> = {
   exact: "ໃຊ້ % ຜົນງານຈິງ",
 };
 
+/** Product status codes, with the tone that matches how the multiplier pays. */
+const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
+  current: { label: "ປົກກະຕິ", tone: "pill-muted" },
+  special_no_bonus: { label: "ບໍ່ໃຫ້ຄະແນນ", tone: "pill-neg" },
+  special_min_bonus: { label: "ໃຫ້ຄະແນນເຄິ່ງດຽວ", tone: "pill-warn" },
+  special_promo_max: { label: "ໂປຣໂມຊັນ ເພີ່ມຄະແນນ", tone: "pill-pos" },
+};
+
 function renderCell(column: string, value: unknown) {
   if (value === null || value === undefined || value === "") return <span style={{ color: "var(--muted)" }}>—</span>;
 
@@ -149,6 +152,10 @@ function renderCell(column: string, value: unknown) {
   if (column === "position_code") return POSITION_LABEL[String(value)] || String(value);
   if (column === "group_code") return GROUP_LABEL[String(value)] || String(value);
   if (column === "mode") return MODE_LABEL[String(value)] || String(value);
+  if (column === "status_code") {
+    const status = STATUS_LABEL[String(value)];
+    return status ? <span className={`pill ${status.tone}`}>{status.label}</span> : String(value);
+  }
   if (column === "multiplier") return `×${num(value)}`;
   if (PCT_COLUMNS.has(column)) return `${(num(value) * 100).toFixed(0)}%`;
 
@@ -283,12 +290,13 @@ function CategoryCards({ rows, t }: { rows: Record<string, unknown>[]; t: (key: 
   );
 }
 
-export default function IncentiveConfigPage() {
+type IncentiveSection = "points" | "rewards" | "product" | "mapping";
+
+export function IncentiveConfigPage({ sectionKey = "points" }: { sectionKey?: IncentiveSection }) {
   const { t } = useLanguage();
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("points");
   const now = new Date();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState(String(now.getMonth() + 1));
@@ -296,21 +304,26 @@ export default function IncentiveConfigPage() {
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState<Record<string, boolean>>({});
   const [groupPick, setGroupPick] = useState<Record<string, string>>({});
+  const [tablePick, setTablePick] = useState<Partial<Record<IncentiveSection, string>>>({});
+  const [statusPick, setStatusPick] = useState<Record<string, string>>({});
+  const [brandPick, setBrandPick] = useState<Record<string, string>>({});
 
-  const load = async () => {
+  /** The endpoint is cached for 5 minutes, so the refresh button skips it. */
+  const load = async (fresh = false) => {
     setLoading(true);
     setError("");
     try {
       const res = await api.get("/incentive-config", {
-        params: { year, month, ...(allPeriods ? { all: 1 } : {}) },
+        params: { year, month, ...(allPeriods ? { all: 1 } : {}), ...(fresh ? { nocache: 1 } : {}) },
       });
       if (res.data?.success) setData(res.data.data);
       else {
-        setData(null);
+        // A manual refresh should not blank a valid screen on a transient error.
+        if (!fresh) setData(null);
         setError(res.data?.error || t("app.error"));
       }
     } catch {
-      setData(null);
+      if (!fresh) setData(null);
       setError(t("app.error"));
     } finally {
       setLoading(false);
@@ -322,7 +335,13 @@ export default function IncentiveConfigPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month, allPeriods]);
 
-  const section = useMemo(() => data?.sections.find((item) => item.key === tab) || null, [data, tab]);
+  const section = useMemo(
+    () => data?.sections.find((item) => item.key === sectionKey) || null,
+    [data, sectionKey],
+  );
+  const selectedTable = section?.tables.some((block) => block.table === tablePick[sectionKey])
+    ? tablePick[sectionKey]
+    : section?.tables[0]?.table;
   const config = data?.config || {};
   const currency = String(config.currency_code || "THB");
 
@@ -378,7 +397,7 @@ export default function IncentiveConfigPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <button onClick={load} className="btn">
+          <button onClick={() => load(true)} className="btn">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> {t("monthSummary.refresh")}
           </button>
         </div>
@@ -428,17 +447,30 @@ export default function IncentiveConfigPage() {
               </div>
             </div>
 
-            {/* ── Section tabs ── */}
-            <div className="tabs mb-3">
-              {data.sections.map((item) => (
-                <button key={item.key} className={`tab ${tab === item.key ? "is-active" : ""}`} onClick={() => setTab(item.key)}>
-                  {t(SECTION_LABEL[item.key] || item.key)}
-                </button>
-              ))}
-            </div>
+            {section && section.tables.length > 0 && (
+              <div className="tabs mb-3" role="tablist" aria-label={t(`incentiveCfg.${sectionKey}`)}>
+                {section.tables.map((block) => {
+                  const meta = TABLE_META[block.table] || { title: block.table };
+                  const isSelected = block.table === selectedTable;
+                  return (
+                    <button
+                      key={block.table}
+                      type="button"
+                      role="tab"
+                      aria-selected={isSelected}
+                      className={`tab ${isSelected ? "is-active" : ""}`}
+                      onClick={() => setTablePick((prev) => ({ ...prev, [sectionKey]: block.table }))}
+                    >
+                      {meta.title}
+                      <span className={`pill ${isSelected ? "" : "pill-muted"}`}>{block.total}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-            <div className="space-y-3">
-              {section?.tables.map((block) => {
+            <div>
+              {section?.tables.filter((block) => block.table === selectedTable).map((block) => {
                 const meta = TABLE_META[block.table] || { title: block.table };
                 const expanded = showAll[block.table];
                 const hidden = new Set(expanded ? [] : meta.hide || []);
@@ -449,15 +481,36 @@ export default function IncentiveConfigPage() {
                 const groups = meta.groupBy
                   ? [...new Set(block.rows.map((row) => String(row[meta.groupBy!] ?? "")))].sort()
                   : [];
+                const statuses = [...new Set(block.rows.map((row) => String(row.status_code ?? "")))]
+                  .filter(Boolean)
+                  .sort((a, b) => {
+                    const order = Object.keys(STATUS_LABEL);
+                    const aIndex = order.indexOf(a);
+                    const bIndex = order.indexOf(b);
+                    return (aIndex < 0 ? order.length : aIndex) - (bIndex < 0 ? order.length : bIndex);
+                  });
+                const selectedStatus = statuses.includes(statusPick[block.table]) ? statusPick[block.table] : "";
+                const brands = [...new Set(block.rows.map((row) => String(row.item_brand ?? "")))]
+                  .filter(Boolean)
+                  .sort((a, b) => a.localeCompare(b));
+                const selectedBrand = brands.includes(brandPick[block.table]) ? brandPick[block.table] : "";
+                const statusRows = selectedBrand
+                  ? block.rows.filter((row) => String(row.item_brand ?? "") === selectedBrand)
+                  : block.rows;
 
                 const visible = block.rows.filter((row) => {
+                  if (selectedStatus && String(row.status_code ?? "") !== selectedStatus) return false;
+                  if (selectedBrand && String(row.item_brand ?? "") !== selectedBrand) return false;
                   if (groupValue && String(row[meta.groupBy!] ?? "") !== groupValue) return false;
                   if (!term) return true;
+                  // The status shows in Lao, so searching in Lao has to find it too.
+                  const status = STATUS_LABEL[String(row.status_code ?? "")]?.label ?? "";
+                  if (status.includes(term)) return true;
                   return Object.values(row).some((value) => String(value ?? "").toLowerCase().includes(term));
                 });
 
                 return (
-                  <section key={block.table} className="card">
+                  <section key={block.table} className="card" role="tabpanel">
                     <div className="card-hd">
                       <div className="min-w-0">
                         <h3 className="card-title">{meta.title}</h3>
@@ -473,6 +526,19 @@ export default function IncentiveConfigPage() {
                             <option value="">{t("app.all")} ({groups.length})</option>
                             {groups.map((group) => (
                               <option key={group} value={group}>{group}</option>
+                            ))}
+                          </select>
+                        )}
+                        {brands.length > 1 && (
+                          <select
+                            className="select w-40"
+                            value={selectedBrand}
+                            aria-label="Filter by brand"
+                            onChange={(e) => setBrandPick((prev) => ({ ...prev, [block.table]: e.target.value }))}
+                          >
+                            <option value="">ທຸກແບຣນ ({brands.length})</option>
+                            {brands.map((brand) => (
+                              <option key={brand} value={brand}>{brand}</option>
                             ))}
                           </select>
                         )}
@@ -495,6 +561,40 @@ export default function IncentiveConfigPage() {
                         ) : null}
                       </div>
                     </div>
+                    {statuses.length > 1 && (
+                      <div className="border-b px-[var(--pad-card)] py-2" style={{ borderColor: "var(--line-soft)" }}>
+                        <div className="tabs" role="tablist" aria-label="ແຍກຕາມສະຖານະ">
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={!selectedStatus}
+                            className={`tab ${!selectedStatus ? "is-active" : ""}`}
+                            onClick={() => setStatusPick((prev) => ({ ...prev, [block.table]: "" }))}
+                          >
+                            {t("app.all")}
+                            <span className={`pill ${!selectedStatus ? "" : "pill-muted"}`}>{statusRows.length}</span>
+                          </button>
+                          {statuses.map((statusCode) => {
+                            const status = STATUS_LABEL[statusCode];
+                            const count = statusRows.filter((row) => String(row.status_code ?? "") === statusCode).length;
+                            const isSelected = selectedStatus === statusCode;
+                            return (
+                              <button
+                                key={statusCode}
+                                type="button"
+                                role="tab"
+                                aria-selected={isSelected}
+                                className={`tab ${isSelected ? "is-active" : ""}`}
+                                onClick={() => setStatusPick((prev) => ({ ...prev, [block.table]: statusCode }))}
+                              >
+                                {status?.label || statusCode}
+                                <span className={`pill ${isSelected ? "" : status?.tone || "pill-muted"}`}>{count}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {block.table === "app_incentive_category" && !expanded ? (
                       <div className="card-bd">
                         <CategoryCards rows={visible} t={t} />
@@ -509,7 +609,9 @@ export default function IncentiveConfigPage() {
                         <thead>
                           <tr>
                             {columns.map((column) => (
-                              <th key={column}>{COLUMN_LABEL[column] || column}</th>
+                              <th key={column} style={column === "item_name" ? { textAlign: "left" } : undefined}>
+                                {COLUMN_LABEL[column] || column}
+                              </th>
                             ))}
                           </tr>
                         </thead>
@@ -517,7 +619,17 @@ export default function IncentiveConfigPage() {
                           {visible.map((row, index) => (
                             <tr key={index}>
                               {columns.map((column) => (
-                                <td key={column}>{renderCell(column, row[column])}</td>
+                                <td
+                                  key={column}
+                                  {...(column === "item_name"
+                                    ? {
+                                        title: String(row[column] ?? ""),
+                                        style: { textAlign: "left" as const, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis" },
+                                      }
+                                    : {})}
+                                >
+                                  {renderCell(column, row[column])}
+                                </td>
                               ))}
                             </tr>
                           ))}
@@ -525,6 +637,12 @@ export default function IncentiveConfigPage() {
                             <tr>
                               <td colSpan={columns.length || 1} style={{ textAlign: "center", color: "var(--muted)", padding: "1.25rem" }}>
                                 {t("label.noData")}
+                                {/* An empty month usually means the rules expired, not that there are none. */}
+                                {block.scoped && block.total > 0 && !term && (
+                                  <button className="btn btn-ghost ml-2" onClick={() => setAllPeriods(true)}>
+                                    <CalendarClock size={12} /> ມີ {block.total} ແຖວໃນຊ່ວງອື່ນ · ເບິ່ງທຸກຊ່ວງເວລາ
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           )}
@@ -550,4 +668,8 @@ export default function IncentiveConfigPage() {
       </div>
     </div>
   );
+}
+
+export default function IncentiveConfigIndexPage() {
+  return <IncentiveConfigPage />;
 }

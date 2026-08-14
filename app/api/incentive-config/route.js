@@ -42,8 +42,8 @@ const SECTIONS = [
     key: "product",
     tables: [
       { table: "app_incentive_status_multiplier", order: "status_code" },
-      { table: "app_incentive_product_status", order: "item_code", limit: 300, period: "range" },
-      { table: "app_incentive_product_status_rule", order: "item_code", limit: 300, period: "range" },
+      { table: "app_incentive_product_status", order: "item_code", limit: 300, period: "range", itemName: "item_code" },
+      { table: "app_incentive_product_status_rule", order: "item_code", limit: 300, period: "range", itemName: "item_code" },
     ],
   },
   {
@@ -62,23 +62,46 @@ const SECTIONS = [
  */
 function periodClause(period, monthDate, monthEnd) {
   if (period === "range") {
-    return { where: `WHERE %s::date BETWEEN effective_from AND effective_to`, params: [monthDate] };
+    return { where: `WHERE %s::date BETWEEN t.effective_from AND t.effective_to`, params: [monthDate] };
   }
   if (period === "month") {
-    return { where: `WHERE effect_month <= %s::date`, params: [monthEnd] };
+    return { where: `WHERE t.effect_month <= %s::date`, params: [monthEnd] };
   }
   return { where: "", params: [] };
+}
+
+/** Reads better with the product name next to its code, not tacked on at the end. */
+function orderColumns(data, spec) {
+  const columns = data.length ? Object.keys(data[0]) : [];
+  if (!spec.itemName) return columns;
+  const rest = columns.filter((column) => !["item_name", "item_brand"].includes(column));
+  const at = rest.indexOf(spec.itemName);
+  if (at < 0) return columns;
+  return [...rest.slice(0, at + 1), "item_name", "item_brand", ...rest.slice(at + 1)];
 }
 
 async function loadTable(spec, { monthDate, monthEnd, all }) {
   const scoped = Boolean(spec.period) && !all;
   const { where, params } = scoped ? periodClause(spec.period, monthDate, monthEnd) : { where: "", params: [] };
 
+  // The config tables only store the item code — the name lives in the product master.
+  const select = spec.itemName
+    ? `SELECT t.*,
+              COALESCE(NULLIF(i.name_1, ''), NULLIF(i.name_eng_1, '')) AS item_name,
+              COALESCE(NULLIF(i.item_brand, ''), 'UNKNOWN') AS item_brand
+         FROM public."${spec.table}" t
+         LEFT JOIN public.ic_inventory i ON i.code = t."${spec.itemName}"`
+    : `SELECT t.* FROM public."${spec.table}" t`;
+  const order = spec.order
+    .split(",")
+    .map((column) => `t.${column.trim()}`)
+    .join(", ");
+
   const [data, count] = await Promise.all([
-    rows(
-      `SELECT * FROM public."${spec.table}" ${where} ORDER BY ${spec.order} LIMIT ${spec.limit || 500}`,
-      params,
-    ).catch(() => []),
+    rows(`${select} ${where} ORDER BY ${order} LIMIT ${spec.limit || 500}`, params).catch((error) => {
+      console.error(`incentive-config: ${spec.table} failed:`, error.message);
+      return [];
+    }),
     one(`SELECT COUNT(*)::int AS n FROM public."${spec.table}"`).catch(() => ({ n: 0 })),
   ]);
 
@@ -88,7 +111,7 @@ async function loadTable(spec, { monthDate, monthEnd, all }) {
     scoped,
     total: Number(count?.n || 0),
     shown: data.length,
-    columns: data.length ? Object.keys(data[0]) : [],
+    columns: orderColumns(data, spec),
     rows: data,
   };
 }
@@ -125,7 +148,9 @@ export async function GET(request) {
     const all = sp.get("all") === "1";
 
     const data = await swrCache(
-      `incentive-config:${year}|${month}|${all ? "all" : "month"}`,
+      // The version tag is part of the key so a change in the payload shape
+      // (extra columns, new joins) is not masked by the persisted cache.
+      `incentive-config:v3:${year}|${month}|${all ? "all" : "month"}`,
       { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass: sp.get("nocache") === "1" },
       () => loadConfig({ year, month, all }),
     );

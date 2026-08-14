@@ -40,6 +40,38 @@ const BU_GROUP = { 11: "CE_SDA", 15: "CE_SDA", 12: "AIR", 13: "PIPE", 16: "SERVI
 
 const DEFAULT_COMMISSION_RULE = { minPct: 0.8, step: 0.05, pivotPct: 1 };
 
+/**
+ * Why a sold line earned nothing — null when it did earn.
+ *
+ * A zero is data, not an error: without the reason a manager cannot tell a
+ * mis-configured point map from a product the scheme deliberately excludes.
+ * Kept word-for-word in step with the sales application's bill audit
+ * (web_sale_order api/reports/incentives/breakdown) so the same line reads the
+ * same in both.
+ */
+function noPointReason(row, points, qty) {
+  if (points !== 0) return null;
+  if (String(row.pcat) === "Air" && Number(row.point_qty || 0) === 0 && /\[H\]\s*$/.test(String(row.item_name || ""))) {
+    return "ສ່ວນ [H] ຂອງຊຸດ AIR — ຄະແນນຖືກນັບຢູ່ສ່ວນ [C]";
+  }
+  if (row.raw_multiplier != null && Number(row.raw_multiplier) === 0) {
+    const note = String(row.status_note || "").trim();
+    return note ? `ຕັ້ງຄ່າບໍ່ໃຫ້ໂບນັດ: ${note}` : `ສະຖານະ ${row.status_code ?? "no-bonus"} ບໍ່ໃຫ້ຄະແນນ`;
+  }
+  if (row.configured_points == null) {
+    const dimensions = [
+      String(row.pcat || "SDA"),
+      String(row.brand || "").trim() || "ບໍ່ມີຍີ່ຫໍ້",
+      String(row.design_token || "").trim() || "—",
+      String(row.size_token || "").trim() || "—",
+    ].join(" / ");
+    return `ບໍ່ມີກົດຄະແນນທີ່ກົງ: ${dimensions}`;
+  }
+  if (Number(row.configured_points) === 0) return "ກົດ Incentive ຂອງເດືອນນີ້ກຳນົດເປັນ 0 ຄະແນນ";
+  if (qty === 0) return "ຈຳນວນໃນລາຍການເປັນ 0";
+  return "ຜົນຄຳນວນຄະແນນເປັນ 0";
+}
+
 function roundToStep(value, step, up) {
   const safeStep = step > 0 ? step : 0.05;
   const units = Math.round((value / safeStep) * 1e6) / 1e6;
@@ -82,7 +114,11 @@ async function loadMonth(year, month) {
     // Same sales basis as the sales application's incentive report: Khua
     // Luang walk-in sales, excluding service/fee pseudo-items (97xxxx).
     rows(
-      `SELECT COALESCE(e.employee_code, a.employee_code) AS employee_code,
+      // The alias table wins over the roster name: an alias is an explicit
+      // decision about who a spelling belongs to, a fullname_lo match is a
+      // guess. The point query below resolves the same way, so a seller's
+      // sales and their points can never land on different people.
+      `SELECT COALESCE(a.employee_code, e.employee_code) AS employee_code,
               d.salename,
               COALESCE(SUM(d.qty), 0)::float AS bills,
               COALESCE(SUM(d.sum_amount), 0)::float AS amount
@@ -103,7 +139,7 @@ async function loadMonth(year, month) {
     rows(
       `
       WITH line AS (
-        SELECT s.employee_code, s.category_name, s.item_code, s.doc_date, s.report_date, s.doc_no,
+        SELECT s.employee_code, s.category_name, s.item_code, s.item_name, s.doc_date, s.report_date, s.doc_no,
                s.brand, s.qty, s.sales_amount,
                CASE WHEN s.pcat = 'Air' AND s.item_name ~ '\\[H\\]\\s*$' THEN 0 ELSE s.qty END AS point_qty,
                CASE s.pcat
@@ -113,7 +149,22 @@ async function loadMonth(year, month) {
                  ELSE COALESCE(dt.design_token, '')
                END AS design_token,
                CASE
-                 WHEN s.pcat IN ('REF', 'Washer') THEN COALESCE(st.size_token, '')
+                 WHEN s.pcat = 'REF' THEN COALESCE(st.size_token, '')
+                 -- ERP occasionally introduces a new spelling such as
+                 -- "10.0ກິໂລ" before it is added to the token table. Washer
+                 -- rules are numeric bands, so derive the band as a safe
+                 -- fallback instead of silently dropping the sale.
+                 WHEN s.pcat = 'Washer' THEN COALESCE(
+                   st.size_token,
+                   CASE
+                     WHEN (substring(replace(s.size_name, ',', '.') from '([0-9]+([.][0-9]+)?)'))::numeric < 6 THEN '<5'
+                     WHEN (substring(replace(s.size_name, ',', '.') from '([0-9]+([.][0-9]+)?)'))::numeric <= 11 THEN '6-11'
+                     WHEN (substring(replace(s.size_name, ',', '.') from '([0-9]+([.][0-9]+)?)'))::numeric <= 14 THEN '12-14'
+                     WHEN (substring(replace(s.size_name, ',', '.') from '([0-9]+([.][0-9]+)?)'))::numeric <= 19 THEN '15-19'
+                     WHEN (substring(replace(s.size_name, ',', '.') from '([0-9]+([.][0-9]+)?)'))::numeric IS NOT NULL THEN '>20'
+                     ELSE ''
+                   END
+                 )
                  WHEN s.pcat = 'AV' AND s.item_category = '008' THEN COALESCE(st.size_token, '')
                  WHEN s.pcat IN ('AV', 'Air') THEN
                    CASE WHEN s.combo_price <= 10000 THEN '<=10000'
@@ -138,16 +189,40 @@ async function loadMonth(year, month) {
                  UPPER(COALESCE(d.item_brand, '')) AS brand,
                  COALESCE(c.pointmap_category, 'SDA') AS pcat,
                  COALESCE(c.sda_subtype, 'OTH') AS sda_subtype,
-                 CASE WHEN COALESCE(c.pointmap_category, 'SDA') = 'Air'
-                   THEN SUM(d.price) OVER (
-                     PARTITION BY d.doc_no, d.salename, UPPER(COALESCE(d.item_brand, '')), d.qty, d.price
-                   )
-                   ELSE d.price END AS combo_price
+                 -- Price band of a split air conditioner. The ERP stores it as
+                 -- equal-priced [C] indoor and [H] outdoor component lines, and
+                 -- the band is set on the price of the whole set. Summing every
+                 -- equal-priced line would inflate two identical sets on one
+                 -- bill to four component prices, so find the OPPOSITE
+                 -- component instead: exactly two component prices per set,
+                 -- however many sets the bill carries. Standalone/portable
+                 -- units and unmatched components keep their own price.
+                 CASE
+                   WHEN COALESCE(c.pointmap_category, 'SDA') = 'Air'
+                     AND d.item_name ~ '\\[[CH]\\]\\s*$'
+                     AND EXISTS (
+                       SELECT 1
+                       FROM public.odg_sale_detail pair
+                       WHERE pair.doc_no = d.doc_no
+                         AND pair.branch_code IS NOT DISTINCT FROM d.branch_code
+                         AND pair.salename IS NOT DISTINCT FROM d.salename
+                         AND UPPER(COALESCE(pair.item_brand, '')) = UPPER(COALESCE(d.item_brand, ''))
+                         AND pair.qty IS NOT DISTINCT FROM d.qty
+                         AND pair.price IS NOT DISTINCT FROM d.price
+                         AND (
+                           (d.item_name ~ '\\[C\\]\\s*$' AND pair.item_name ~ '\\[H\\]\\s*$')
+                           OR
+                           (d.item_name ~ '\\[H\\]\\s*$' AND pair.item_name ~ '\\[C\\]\\s*$')
+                         )
+                     )
+                     THEN d.price * 2
+                   ELSE d.price
+                 END AS combo_price
           FROM public.odg_sale_detail d
           ${OVERRIDE_JOIN}
           LEFT JOIN public.app_incentive_category c ON c.category_code = d.item_category
-          LEFT JOIN public.app_incentive_sale_alias a ON a.salename = d.salename
-          LEFT JOIN public.odg_employee e ON e.fullname_lo = d.salename
+          LEFT JOIN public.app_incentive_sale_alias a ON btrim(a.salename) = btrim(d.salename)
+          LEFT JOIN public.odg_employee e ON btrim(e.fullname_lo) = btrim(d.salename)
           WHERE ${REPORT_MONTH_FILTER}
             AND d.branch_code = %s AND d.argroup_main = %s
             AND d.item_code NOT LIKE '97%%'
@@ -157,9 +232,15 @@ async function loadMonth(year, month) {
         LEFT JOIN public.app_incentive_size_token st ON st.size_name = s.size_name
       ),
       scored AS (
-        SELECT l.employee_code, l.category_name, l.doc_no, l.doc_date,
+        SELECT l.employee_code, l.category_name, l.pcat, l.brand, l.item_code, l.item_name, l.doc_no, l.doc_date,
                l.qty, l.point_qty, l.sales_amount,
+               l.design_token, l.size_token,
                r.points AS rule_points,
+               ps.status_code, ps.note AS status_note,
+               -- The raw multiplier stays NULL when the item has no status
+               -- rule, which is what tells "no rule" apart from "a rule that
+               -- pays zero" when explaining a zero-point line.
+               m.multiplier AS raw_multiplier,
                COALESCE(m.multiplier, 1) AS status_multiplier
         FROM line l
         LEFT JOIN LATERAL (
@@ -176,7 +257,7 @@ async function loadMonth(year, month) {
           LIMIT 1
         ) r ON TRUE
         LEFT JOIN LATERAL (
-          SELECT ps.status_code
+          SELECT ps.status_code, ps.note
           FROM public.app_incentive_product_status_rule ps
           WHERE ps.item_code = l.item_code
             AND l.report_date BETWEEN ps.effective_from AND ps.effective_to
@@ -185,14 +266,25 @@ async function loadMonth(year, month) {
         ) ps ON TRUE
         LEFT JOIN public.app_incentive_status_multiplier m ON m.status_code = ps.status_code
       )
-      SELECT employee_code, category_name, doc_no, doc_date,
+      -- One row per sold item per bill, so the report can be drilled down
+      -- category → brand → the bills that earned the points.
+      SELECT employee_code, category_name, MAX(pcat) AS pcat, brand, item_code, item_name, doc_no, doc_date,
              COALESCE(SUM(qty), 0)::float AS qty,
              COALESCE(SUM(sales_amount), 0)::float AS amount,
              COALESCE(SUM(rule_points * point_qty * status_multiplier), 0)::float AS points,
+             COALESCE(MAX(rule_points * status_multiplier), 0)::float AS unit_points,
              COALESCE(SUM(point_qty) FILTER (WHERE rule_points IS NOT NULL), 0)::float AS matched_qty,
-             COALESCE(SUM(point_qty) FILTER (WHERE rule_points IS NULL), 0)::float AS unmatched_qty
+             COALESCE(SUM(point_qty) FILTER (WHERE rule_points IS NULL), 0)::float AS unmatched_qty,
+             -- Everything the client needs to say WHY a line scored nothing.
+             COALESCE(SUM(point_qty), 0)::float AS point_qty,
+             MAX(design_token) AS design_token,
+             MAX(size_token) AS size_token,
+             MAX(status_code) AS status_code,
+             MAX(status_note) AS status_note,
+             MAX(raw_multiplier)::float AS raw_multiplier,
+             MAX(rule_points)::float AS configured_points
       FROM scored
-      GROUP BY employee_code, category_name, doc_no, doc_date
+      GROUP BY employee_code, category_name, brand, item_code, item_name, doc_no, doc_date
       `,
       [
         Number(year), Number(month), Number(year), Number(month), RETAIL_BRANCH, RETAIL_AR_GROUP,
@@ -219,7 +311,7 @@ async function loadMonth(year, month) {
     rows(`SELECT employee_code, fullname_lo, fullname_en, position_code FROM public.odg_employee`).catch(() => []),
     // Brand-level sales (qty drives the unit rewards, amount the brand targets)
     rows(
-      `SELECT COALESCE(e.employee_code, a.employee_code) AS employee_code,
+      `SELECT COALESCE(a.employee_code, e.employee_code) AS employee_code,
               COALESCE(NULLIF(d.item_brand, ''), '-') AS brand,
               d.bu_code,
               COALESCE(SUM(d.qty), 0)::float AS qty,
@@ -241,12 +333,69 @@ async function loadMonth(year, month) {
        GROUP BY 1, 2, 3`,
       [String(year), monthVariants],
     ),
+    // Unit rewards, counted per rule per roster member.
+    //
+    // A rule either names an item (item_match, matched on code or name) or
+    // covers a brand's air conditioners; it pays only to the roster group it
+    // is written for. A split AC is an indoor "… [C]" plus an outdoor "… [H]"
+    // line, so [H] is dropped to count each SET once — counting both lines
+    // paid every air-conditioner spiff twice.
     rows(
-      `SELECT reward_code, description, group_code, brand_code, item_match,
-              low_min_qty, low_reward, high_min_qty, high_reward
-       FROM public.app_incentive_unit_reward
-       WHERE is_active AND %s::date BETWEEN effective_from AND effective_to`,
-      [`${year}-${String(month).padStart(2, "0")}-15`],
+      `WITH roster AS (
+         SELECT DISTINCT ON (t.emp_code)
+                t.emp_code,
+                CASE WHEN t.product_group = 'AC' THEN 'AIR' ELSE 'CE_SDA' END AS group_code
+         FROM public.odg_retail_target_employee t
+         JOIN public.odg_employee re ON re.employee_code = t.emp_code AND re.department_code = '205'
+         WHERE t.year::text = %s AND t.month::text = ANY(%s)
+         ORDER BY t.emp_code, t.roworder DESC
+       ),
+       names AS (
+         SELECT r.emp_code, btrim(e.fullname_lo) AS salename
+         FROM roster r
+         JOIN public.odg_employee e ON e.employee_code = r.emp_code
+         WHERE COALESCE(e.fullname_lo, '') <> ''
+         UNION
+         SELECT r.emp_code, btrim(a.salename)
+         FROM roster r
+         JOIN public.app_incentive_sale_alias a ON a.employee_code = r.emp_code
+       )
+       SELECT ur.reward_code, ur.description, ur.group_code, ur.brand_code, ur.item_match,
+              ur.low_min_qty, ur.low_reward, ur.high_min_qty, ur.high_reward,
+              r.emp_code,
+              COALESCE(s.units, 0)::float AS units
+       FROM public.app_incentive_unit_reward ur
+       JOIN roster r ON r.group_code = ur.group_code
+       LEFT JOIN LATERAL (
+         SELECT SUM(d.qty) AS units
+         FROM public.odg_sale_detail d
+         ${OVERRIDE_JOIN}
+         JOIN names n ON n.salename = btrim(d.salename)
+         LEFT JOIN public.app_incentive_category c ON c.category_code = d.item_category
+         WHERE n.emp_code = r.emp_code
+           AND ${REPORT_MONTH_FILTER}
+           AND d.branch_code = %s AND d.argroup_main = %s
+           AND d.item_code NOT LIKE '97%%'
+           AND d.item_name !~ '\\[H\\]\\s*$'
+           AND (
+             CASE
+               WHEN COALESCE(ur.item_match, '') <> '' THEN
+                 d.item_code = ur.item_match OR d.item_name ILIKE '%%' || ur.item_match || '%%'
+               ELSE
+                 COALESCE(c.pointmap_category, '') = 'Air'
+                 AND UPPER(COALESCE(d.item_brand, '')) = UPPER(COALESCE(ur.brand_code, ''))
+             END
+           )
+       ) s ON TRUE
+       WHERE ur.is_active
+         AND ur.effective_from < make_date(%s, %s, 1) + INTERVAL '1 month'
+         AND ur.effective_to >= make_date(%s, %s, 1)`,
+      [
+        String(year), monthVariants,
+        Number(year), Number(month), Number(year), Number(month),
+        RETAIL_BRANCH, RETAIL_AR_GROUP,
+        Number(year), Number(month), Number(year), Number(month),
+      ],
     ).catch(() => []),
     rows(
       `SELECT position_code, group_code, base_amount
@@ -304,7 +453,7 @@ async function loadMonth(year, month) {
 
   const pointsByCode = new Map();
   const categoryPoints = new Map();
-  const invoicesByCode = new Map();
+  const treeByCode = new Map();
   const unmatchedByCode = new Map();
   for (const row of points) {
     const code = String(row.employee_code ?? "").trim();
@@ -316,28 +465,39 @@ async function loadMonth(year, month) {
       const categories = categoryPoints.get(code);
       categories.set(row.category_name, (categories.get(row.category_name) || 0) + value);
     }
-    if (!invoicesByCode.has(code)) invoicesByCode.set(code, new Map());
-    const invoiceKey = String(row.doc_no || "—");
-    const invoice = invoicesByCode.get(code).get(invoiceKey) || {
-      doc_no: invoiceKey,
-      doc_date: row.doc_date,
-      qty: 0,
-      amount: 0,
-      points: 0,
-      unmatched_qty: 0,
-      categories: new Map(),
+    // category → brand → the individual sold lines behind the points
+    if (!treeByCode.has(code)) treeByCode.set(code, new Map());
+    const categoryName = String(row.category_name || "-");
+    const brandName = String(row.brand || "").trim() || "—";
+    const qty = Number(row.qty || 0);
+    const amount = Number(row.amount || 0);
+
+    const categoryNode = treeByCode.get(code).get(categoryName) || {
+      category: categoryName, pcat: String(row.pcat || ""), qty: 0, amount: 0, points: 0, brands: new Map(),
     };
-    invoice.qty += Number(row.qty || 0);
-    invoice.amount += Number(row.amount || 0);
-    invoice.points += value;
-    invoice.unmatched_qty += Number(row.unmatched_qty || 0);
-    const invoiceCategory = invoice.categories.get(row.category_name) || { category: row.category_name, qty: 0, amount: 0, points: 0, unmatched_qty: 0 };
-    invoiceCategory.qty += Number(row.qty || 0);
-    invoiceCategory.amount += Number(row.amount || 0);
-    invoiceCategory.points += value;
-    invoiceCategory.unmatched_qty += Number(row.unmatched_qty || 0);
-    invoice.categories.set(row.category_name, invoiceCategory);
-    invoicesByCode.get(code).set(invoiceKey, invoice);
+    const brandNode = categoryNode.brands.get(brandName) || {
+      brand: brandName, qty: 0, amount: 0, points: 0, lines: [],
+    };
+    brandNode.lines.push({
+      doc_no: String(row.doc_no || "—"),
+      doc_date: row.doc_date,
+      item_code: String(row.item_code || ""),
+      item_name: String(row.item_name || ""),
+      qty,
+      amount,
+      unit_points: Number(row.unit_points || 0),
+      points: value,
+      unmatched_qty: Number(row.unmatched_qty || 0),
+      no_point_reason: noPointReason(row, value, qty),
+    });
+    brandNode.qty += qty;
+    brandNode.amount += amount;
+    brandNode.points += value;
+    categoryNode.qty += qty;
+    categoryNode.amount += amount;
+    categoryNode.points += value;
+    categoryNode.brands.set(brandName, brandNode);
+    treeByCode.get(code).set(categoryName, categoryNode);
     const miss = unmatchedByCode.get(code) || { qty: 0, matched: 0 };
     miss.qty += Number(row.unmatched_qty || 0);
     miss.matched += Number(row.matched_qty || 0);
@@ -401,42 +561,41 @@ async function loadMonth(year, month) {
     else bucket.set(`?|${brand}`, { group: row.product_group || "-", brand, qty: 0, amount: 0, target: Number(row.target || 0) });
   }
 
-  /** Unit rewards: qty of a brand within a group, matched to the rule tiers. */
-  const unitRewardFor = (code) => {
-    const bucket = brandByCode.get(code);
-    if (!bucket) return { total: 0, lines: [] };
-    const lines = [];
-    for (const rule of unitRules) {
-      const ruleGroup = String(rule.group_code || "").toUpperCase();
-      const ruleBrand = rule.brand_code ? String(rule.brand_code).toUpperCase() : null;
-      let qty = 0;
-      for (const entry of bucket.values()) {
-        if (ruleGroup && ruleGroup !== "ALL" && entry.group.toUpperCase() !== ruleGroup) continue;
-        if (ruleBrand && entry.brand.toUpperCase() !== ruleBrand) continue;
-        qty += entry.qty;
-      }
-      if (qty <= 0) continue;
-      const highMin = Number(rule.high_min_qty || 0);
-      const lowMin = Number(rule.low_min_qty || 0);
-      const rate =
-        highMin && qty >= highMin
-          ? Number(rule.high_reward || 0)
-          : lowMin && qty >= lowMin
-            ? Number(rule.low_reward || 0)
-            : 0;
-      if (!rate) continue;
-      lines.push({
-        code: rule.reward_code,
-        description: rule.description,
-        group: rule.group_code,
-        brand: rule.brand_code,
-        qty,
-        rate,
-        amount: qty * rate,
-      });
-    }
-    return { total: lines.reduce((sum, line) => sum + line.amount, 0), lines };
-  };
+  /**
+   * Unit rewards per seller. The qualifying set count comes from the query
+   * above (one row per rule per roster member); reaching high_min_qty pays
+   * high_reward on EVERY set, else low_min_qty pays low_reward on every set,
+   * else the rule pays nothing.
+   */
+  const unitRewardByCode = new Map();
+  for (const rule of unitRules) {
+    const code = String(rule.emp_code ?? "").trim();
+    const qty = Number(rule.units || 0);
+    if (!code || qty <= 0) continue;
+    const highMin = Number(rule.high_min_qty || 0);
+    const lowMin = Number(rule.low_min_qty || 0);
+    const rate =
+      highMin && qty >= highMin
+        ? Number(rule.high_reward || 0)
+        : lowMin && qty >= lowMin
+          ? Number(rule.low_reward || 0)
+          : 0;
+    if (!rate) continue;
+    const entry = unitRewardByCode.get(code) || { total: 0, lines: [] };
+    entry.lines.push({
+      code: rule.reward_code,
+      description: rule.description,
+      group: rule.group_code,
+      brand: rule.brand_code,
+      qty,
+      min_qty: highMin && qty >= highMin ? highMin : lowMin,
+      rate,
+      amount: qty * rate,
+    });
+    entry.total += qty * rate;
+    unitRewardByCode.set(code, entry);
+  }
+  const unitRewardFor = (code) => unitRewardByCode.get(code) || { total: 0, lines: [] };
 
   const people = [...byKey.values()]
     .map((entry) => {
@@ -497,11 +656,21 @@ async function loadMonth(year, month) {
         point_categories: (code ? [...(categoryPoints.get(code)?.entries() || [])].map(([category, points]) => ({ category, points })) : []).sort(
           (left, right) => right.points - left.points,
         ),
-        invoices: (code ? [...(invoicesByCode.get(code)?.values() || [])].map((invoice) => ({
-          ...invoice,
-          categories: [...invoice.categories.values()].sort((left, right) => right.points - left.points),
-        })) : [])
-          .sort((left, right) => String(right.doc_date || "").localeCompare(String(left.doc_date || "")) || left.doc_no.localeCompare(right.doc_no)),
+        categories: (code ? [...(treeByCode.get(code)?.values() || [])] : [])
+          .map((category) => ({
+            ...category,
+            brands: [...category.brands.values()]
+              .map((brand) => ({
+                ...brand,
+                lines: brand.lines.sort(
+                  (left, right) =>
+                    String(left.doc_date || "").localeCompare(String(right.doc_date || "")) ||
+                    left.doc_no.localeCompare(right.doc_no),
+                ),
+              }))
+              .sort((left, right) => right.points - left.points || right.amount - left.amount),
+          }))
+          .sort((left, right) => right.points - left.points || right.amount - left.amount),
         // Units sold that no point rule covers (rules only exist for CE/SDA lines).
         no_point: code
           ? { amount: 0, lines: (unmatchedByCode.get(code) || { qty: 0 }).qty }
@@ -630,16 +799,19 @@ async function loadMonth(year, month) {
     },
     people,
     managers,
-    unit_rules: unitRules.map((row) => ({
+    // One row per rule — the query returns it once per roster member, so the
+    // reference table below has to collapse them back.
+    unit_rules: [...new Map(unitRules.map((row) => [row.reward_code, {
       code: row.reward_code,
       description: row.description,
       group: row.group_code,
       brand: row.brand_code,
+      item_match: row.item_match || null,
       low_min_qty: Number(row.low_min_qty || 0),
       low_reward: Number(row.low_reward || 0),
       high_min_qty: Number(row.high_min_qty || 0),
       high_reward: Number(row.high_reward || 0),
-    })),
+    }])).values()],
     special_rewards: specials,
   };
 }
@@ -699,6 +871,7 @@ export async function GET(request) {
         target_groups: [],
         brands: [],
         point_categories: [],
+        categories: [],
         no_point: { qty: 0, matched: 0 },
       }));
 
@@ -743,7 +916,7 @@ export async function GET(request) {
     }
 
     const data = await swrCache(
-      `retail-incentive:v7:${year}|${month}`,
+      `retail-incentive:v11:${year}|${month}`,
       { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass: sp.get("nocache") === "1" },
       () => loadMonth(year, month),
     );

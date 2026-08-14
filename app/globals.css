@@ -513,6 +513,10 @@ body {
     vertical-align: middle;
     white-space: nowrap;
   }
+  /* Sunday is the only day off — it sits back rather than reading as a slot. */
+  .sheet .sheet-day.is-off { background: color-mix(in srgb, var(--day, var(--brand)) 6%, var(--surface)); }
+  .sheet .sheet-day.is-off .sheet-day-name { color: var(--muted); font-weight: 600; }
+
   .sheet-day-name { display: block; font-size: 12.5px; font-weight: 700; }
   .sheet-day-date { display: block; margin-top: 0.1rem; font-size: 10.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
   .sheet-day-count { display: inline-block; margin-top: 0.35rem; border-radius: 999px; background: color-mix(in srgb, var(--day, var(--brand)) 20%, transparent); padding: 0.05rem 0.45rem; font-size: 9px; font-weight: 700; color: var(--ink-soft); }
@@ -809,6 +813,26 @@ details[open] > summary .details-chevron {
 .details-chevron {
   transition: transform 0.15s ease;
 }
+
+/* ══════ Drill-down rows (category → brand → sold lines) ══════ */
+.drill { border-radius: var(--r-md); }
+.drill > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  list-style: none;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.drill > summary::-webkit-details-marker { display: none; }
+.drill > summary:hover { background: var(--surface-2); }
+.drill[open] > summary { background: var(--surface-2); }
+.drill-meta { color: var(--muted); font-size: 11px; }
+.drill-points { margin-left: auto; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.drill-body { padding-left: 1.1rem; border-left: 1px solid var(--line-soft); margin-left: 0.65rem; }
 
 /* ══════ TV / presentation mode (toggled on <body> by the dashboard) ══════ */
 body.tv-mode aside,          /* sidebar            */
