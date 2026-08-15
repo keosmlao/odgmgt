@@ -5,9 +5,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
+  Ban,
+  Waypoints,
   LayoutDashboard,
   Target,
   BarChart2,
+  CalendarCheck,
   CalendarDays,
   CalendarRange,
   Award,
@@ -17,8 +20,8 @@ import {
   Package,
   PackageCheck,
   Settings,
-  Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   ShieldAlert,
   ShoppingCart,
   Users,
@@ -70,6 +73,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: "/sales-summary", i18nKey: "sidebar.summary", icon: <Table size={17} /> },
       { path: "/month-summary", i18nKey: "sidebar.monthSummary", icon: <CalendarRange size={17} /> },
       { path: "/retail-incentive", i18nKey: "sidebar.incentive", icon: <Award size={17} /> },
+      { path: "/incentive-daily", i18nKey: "sidebar.incentiveDaily", icon: <CalendarCheck size={17} /> },
       { path: "/receivables", i18nKey: "sidebar.receivables", icon: <Wallet size={17} /> },
       { path: "/cash-bank", i18nKey: "sidebar.cashBank", icon: <Landmark size={17} /> },
     ],
@@ -126,17 +130,9 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     key: "sidebar.groupSystem",
     items: [
-      {
-        path: "/incentive-config",
-        i18nKey: "sidebar.incentiveCfg",
-        icon: <Settings2 size={17} />,
-        children: [
-          { path: "/incentive-config", i18nKey: "incentiveCfg.points" },
-          { path: "/incentive-config/rewards", i18nKey: "incentiveCfg.rewards" },
-          { path: "/incentive-config/product", i18nKey: "incentiveCfg.product" },
-          { path: "/incentive-config/mapping", i18nKey: "incentiveCfg.mapping" },
-        ],
-      },
+      { path: "/incentive-config", i18nKey: "sidebar.incentiveCfg", icon: <SlidersHorizontal size={17} /> },
+      { path: "/incentive-exclude", i18nKey: "sidebar.incentiveExclude", icon: <Ban size={17} /> },
+      { path: "/incentive-mapping", i18nKey: "sidebar.incentiveMapping", icon: <Waypoints size={17} /> },
       { path: "/commission", i18nKey: "sidebar.commission", icon: <BadgePercent size={17} /> },
       { path: "/access", i18nKey: "sidebar.access", icon: <ShieldCheck size={17} /> },
       { path: "/settings", i18nKey: "sidebar.settings", icon: <Settings size={17} /> },

@@ -409,6 +409,10 @@ body {
   .tab:hover { background: var(--surface-2); color: var(--ink); }
   .tab.is-active { background: var(--brand-deep); color: #fff; }
   .tab.is-active:hover { background: var(--brand); color: #fff; }
+  /* A count riding inside a tab borrows the tab's own ground, so it stays
+     readable once the tab turns solid. */
+  .tab .pill { background: var(--surface-2); color: var(--muted); }
+  .tab.is-active .pill { background: rgba(255, 255, 255, 0.18); color: #fff; }
 
   /* ── Weekly sheet (meeting board) ──
      The old spreadsheet's frame — full grid, a solid colour block per day,
@@ -1025,4 +1029,598 @@ body.tv-mode main { zoom: 1.35; }
   color: var(--brand-deep);
   font-size: 10.5px;
   font-weight: 800;
+}
+
+/* The point-condition cell in the reward drill-down links to the rule behind
+   it. Underlined on hover only, so a table of them does not read as a wall of
+   links, but still obviously clickable once the pointer lands. */
+.rule-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted color-mix(in srgb, currentColor 45%, transparent);
+}
+.rule-link:hover {
+  color: var(--brand);
+  border-bottom-color: currentColor;
+}
+
+/* .rule-link is used on a <button> too, so it must shed the button chrome. */
+button.rule-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Incentive configuration — point grids and lookup cards.
+
+   These screens are hundreds of near-identical rows (one category
+   and one brand repeated down the page), which reads as a wall of
+   text. The panel, the tinted category header and the heat ramp
+   below exist to break that wall into blocks the eye can land on.
+   ══════════════════════════════════════════════════════════════ */
+
+/* One category = one panel. The tint is decoration only — it tells
+   blocks apart while scrolling; it never encodes a value. */
+.cfg-cat {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+}
+.cfg-cat + .cfg-cat { margin-top: 0.7rem; }
+
+.cfg-cat-hd {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--cat, var(--brand)) 13%, var(--surface)),
+    var(--surface) 62%
+  );
+}
+.cfg-cat-hd::before {
+  content: "";
+  align-self: stretch;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--cat, var(--brand));
+}
+.cfg-cat-code {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.3rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--cat, var(--brand)) 18%, transparent);
+  color: color-mix(in srgb, var(--cat, var(--brand)) 72%, var(--ink));
+  font-size: 11px;
+  font-weight: 800;
+}
+.cfg-cat-meta {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cfg-cat-body { padding: 0.2rem 0.35rem 0.4rem; }
+
+/* Size bands and price bands are two different scales, so each grid
+   says which one it is without stealing a full heading. */
+.cfg-band-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.4rem 0.25rem;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.cfg-band-label::after {
+  content: "";
+  order: 1;
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+/* The scale sits at the far end of the rule, after the hairline. */
+.cfg-band-label .heat-scale { order: 2; }
+/* The band editor stays next to the label it edits, before the hairline. */
+.cfg-band-label .band-edit {
+  order: 0;
+  min-height: 0;
+  padding: 0.1rem 0.4rem;
+  font-size: 9.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+.cfg-band-label .band-edit:hover { color: var(--brand); background: var(--brand-soft); }
+
+.cfg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.9rem;
+  margin-top: 0.6rem;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  padding: 0.45rem 0.6rem;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.cfg-legend > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+/* ── Incentive ladder ──────────────────────────────────────────────
+   A rule's bands are a ladder, so they are drawn as one: steps seated in a
+   single track, ascending, each carrying the range it covers above the rate it
+   pays. Reading across a row is then reading the scheme itself — "under 5 pays
+   12, up to 11.9 pays nothing, up to 14.9 pays 14.4" — which a line of loose
+   chips never quite says. */
+/* The design a run of rows shares, said once above them instead of repeated on
+   every row. It is deliberately quiet: it separates the ladders, it does not
+   compete with them. */
+.cfg-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  padding: 0.3rem 0.8rem;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.cfg-group + .cfg-line { border-top: 0; }
+
+.cfg-line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line-soft);
+  padding: 0.55rem 0.8rem;
+  transition: background 140ms ease;
+}
+.cfg-line:last-child { border-bottom: 0; }
+.cfg-line:hover { background: color-mix(in srgb, var(--brand) 4%, transparent); }
+/* A quiet marker for the row under the pointer, rather than a heavier fill. */
+.cfg-line::before {
+  content: "";
+  position: absolute;
+  inset: 0.35rem auto 0.35rem 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--brand);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.cfg-line:hover::before { opacity: 1; }
+
+/* The brand, which is all a row still has to name itself — its design is the
+   group heading above it. */
+/* Wide enough for the longest brand, and no wider — the name holds the left
+   edge while the ladder is pushed to the right one, so both columns line up
+   down the card instead of drifting with each row's number of steps. */
+
+/* One track holding every step, so a row's ladder reads as a single object.
+   It rides the right edge: every row's ladder then ends in the same place, so
+   the last step of one sits directly above the last step of the next. */
+/* ── The point map, drawn as a grid ──────────────────────────────
+   Brands down the side, bands across the top, one rate per cell. Within a
+   design the brands nearly always share the same steps, so the comparison that
+   actually gets made — what SAMSUNG pays at 12 kg against what LG pays at 12 kg
+   — is reading straight down a column. Chips on a per-row track could not do
+   that: with a different number of steps per row, nothing lined up.
+
+   One grid per measurement. A row priced by both — a television by the inch,
+   the rest of its group by price — gets two, because a ceiling of 34 is 34
+   inches on one and 34 kip on the other. */
+.matrix-wrap { overflow-x: auto; padding: 0.35rem 0.8rem 0.55rem; }
+.matrix-cfg { width: 100%; border-collapse: separate; border-spacing: 3px; }
+.matrix-cfg th {
+  padding: 0.1rem 0.3rem;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+}
+.matrix-cfg th.brand-col,
+.matrix-cfg td.brand-col { min-width: 7.5rem; text-align: left; }
+.matrix-cfg td.brand-col b { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -0.012em; }
+.matrix-cfg td { padding: 0; text-align: center; vertical-align: middle; }
+.matrix-cfg tbody tr:hover td.brand-col b { color: var(--brand-deep); }
+.matrix-cfg th.act-col, .matrix-cfg td.act-col { width: 1%; white-space: nowrap; }
+
+/* The rate itself. Sized for the number, not the heading above it — a column is
+   as wide as its band label needs, and the cells simply fill it. */
+.cfg-cell {
+  display: block;
+  width: 100%;
+  min-width: 3.4rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--surface);
+  padding: 0.3rem 0.4rem;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.cfg-cell:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--brand-deep) 45%, transparent);
+}
+/* The heat ramp carries the rate, so a row is read before it is read. */
+.cfg-cell.heat-1, .cfg-cell.heat-2, .cfg-cell.heat-3 { color: var(--ink); }
+.cfg-cell.heat-4, .cfg-cell.heat-5 { color: #fff; }
+/* A rate of zero is a decision, and has to look different from a gap. */
+.cfg-cell.is-zero {
+  background: var(--neg-bg);
+  color: var(--neg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--neg) 28%, transparent);
+}
+/* No rule at all — a step this brand can be given a rate at. It must not read
+   as a zero: a zero pays nothing on purpose, a gap has never been decided. */
+.cfg-cell.is-none {
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  opacity: 0.65;
+}
+.cfg-cell.is-none:hover {
+  border-style: solid;
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+  opacity: 1;
+}
+/* Showing through from a longer-running rule rather than set for this month. */
+.cfg-cell.is-inherited { opacity: 0.42; }
+
+/* A cell opened for editing: the ceiling and the rate on one line, the three
+   ways out on the next, so an open cell widens its column as little as it can. */
+.cell-edit {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--brand);
+  border-radius: 9px;
+  background: var(--surface);
+  padding: 3px;
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
+.cell-edit-row { display: flex; gap: 2px; }
+.cell-edit .input {
+  width: 3rem;
+  min-width: 0;
+  padding: 0.1rem 0.2rem;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.cell-edit-act { display: flex; justify-content: center; gap: 2px; }
+.cell-edit-act > button {
+  display: inline-flex;
+  height: 1.3rem;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--muted);
+  transition: 140ms ease;
+}
+.cell-edit-act > button:hover {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.cell-edit-act > button.is-danger:hover {
+  border-color: var(--neg);
+  background: var(--neg-bg);
+  color: var(--neg);
+}
+.cell-edit-act > button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* The row's own controls, out of the way until the row is pointed at. */
+.row-act { display: inline-flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 140ms ease; }
+.matrix-cfg tbody tr:hover .row-act, .row-act:focus-within { opacity: 1; }
+/* The one control that is not an afterthought: a band this design has no
+   column for yet. */
+.row-act .ladder-add { opacity: 1; }
+@media (hover: none) { .row-act { opacity: 1; } }
+
+/* The heat ramp colours the step, so the rate is legible before it is read. */
+/* A rate of zero is a decision, and has to look different from a gap. */
+/* No rule at all: a step the row can be given a rate at, drawn as the gap it
+   is. Dashed like the "add" control beside it, because it does the same job —
+   the difference is only that this gap already knows which ceiling it covers.
+   It must not read as a zero: a zero pays nothing on purpose, a gap has never
+   been decided. */
+/* A step opened for editing. Both halves of the band are typed here — what it
+   covers and what it pays — and it can be removed outright, in the place the
+   band is drawn rather than in a dialog that would hide the ladder it belongs
+   to. It is wider and taller than the step it replaces, which is the point:
+   the row it is changing stays on screen around it. */
+
+.ladder-add {
+  display: inline-flex;
+  min-width: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  transition: 140ms ease;
+}
+.ladder-add:hover {
+  border-style: solid;
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* The row's own controls, out of the way until the row is pointed at. */
+/* No auto margin here: the ladder already claims the free space, and a second
+   one would split it and leave the ladder stranded mid-row. */
+.cfg-line:hover .cfg-line-act, .cfg-line-act:focus-within { opacity: 1; }
+
+/* The band editor in the add dialog: one header row instead of a label above
+   every field, so a ladder of five bands reads as a table rather than as
+   fifteen loose inputs. */
+.band-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 2rem;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  margin-top: 0.35rem;
+}
+.band-grid > .field-label { margin: 0; }
+
+/* Point-map matrix, drawn as a heat map: the fill carries the value and the
+   number confirms it. Colour is read across a row far faster than digits are,
+   which is the whole point of a grid this wide — so cells are solid blocks of
+   equal size, and the digits sit quietly on top until the pointer arrives. */
+.tbl.matrix td { padding: 2px; }
+.tbl.matrix th { padding-block: 0.3rem; }
+.tbl.matrix thead th {
+  background: var(--surface-2);
+  font-size: 10.5px;
+}
+.matrix-cell {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0.3rem 0.3rem;
+  border-radius: 5px;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: 120ms ease;
+}
+
+/* Five steps of one ramp, normalised per grid. The top two steps carry white
+   text: at 82% and 100% brand the fill is dark enough in either theme, while
+   the first three stay light enough for the ink colour of the theme. */
+.heat-1 { background: color-mix(in srgb, var(--brand) 16%, var(--surface)); color: var(--ink); }
+.heat-2 { background: color-mix(in srgb, var(--brand) 34%, var(--surface)); color: var(--ink); }
+.heat-3 { background: color-mix(in srgb, var(--brand) 58%, var(--surface)); color: var(--ink); }
+.heat-4 { background: color-mix(in srgb, var(--brand) 82%, var(--surface)); color: #fff; }
+.heat-5 { background: var(--brand-deep); color: #fff; }
+.dark .heat-5 { background: color-mix(in srgb, var(--brand) 100%, transparent); }
+
+/* Dimmed so the fill reads first; a cell answers in full once pointed at. */
+.tbl.matrix td .matrix-cell { opacity: 0.86; }
+/* An outline, not a shadow: the zero and override states already carry a
+   box-shadow, and a hover shadow would replace the very marking it explains. */
+.tbl.matrix td:hover .matrix-cell {
+  opacity: 1;
+  outline: 2px solid var(--brand-deep);
+  outline-offset: 1px;
+}
+
+/* A rule that pays nothing is a decision, not a gap — it has to look
+   different from the empty cell next to it. */
+.matrix-cell.is-zero {
+  background: var(--neg-bg);
+  color: var(--neg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--neg) 35%, transparent);
+}
+/* A short-lived rule sits on top of the baseline for one month. */
+.matrix-cell.is-override { box-shadow: inset 0 -3px 0 var(--warn); }
+
+/* The superseded map drawn into the same grid. A corner mark means the current
+   rule pays something other than the old one; a hollow cell is a rate the old
+   map still carries that no current rule replaces. */
+.matrix-cell.is-changed::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 7px solid var(--warn);
+  border-left: 7px solid transparent;
+  border-top-right-radius: 5px;
+}
+.matrix-cell.is-ghost {
+  background: transparent;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-weight: 600;
+  font-style: italic;
+}
+.tbl.matrix td:hover .matrix-cell.is-ghost { color: var(--ink); }
+
+.matrix-empty {
+  display: block;
+  border-radius: 5px;
+  padding: 0.3rem;
+  color: var(--line);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.tbl.matrix td.is-empty:hover .matrix-empty {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* Dragging across a row to write one rate over several bands. The whole grid
+   stops selecting text for the duration, or the drag paints a text highlight
+   across the numbers instead of across the cells. */
+.tbl.matrix { user-select: none; }
+.tbl.matrix td.is-picked { background: var(--brand-soft); }
+.tbl.matrix td.is-picked .matrix-cell,
+.tbl.matrix td.is-picked .matrix-empty {
+  outline: 2px solid var(--brand-deep);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+/* The ramp itself, so a shade can be turned back into a number. */
+.heat-scale { display: inline-flex; align-items: center; gap: 2px; }
+.heat-scale i {
+  width: 1.5rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  font-style: normal;
+}
+
+/* Brand and design stay put while the bands scroll: the row label is what makes
+   a rate meaningful, and losing it mid-scroll makes the grid unreadable. */
+.tbl.matrix th:nth-child(-n+2),
+.tbl.matrix td:nth-child(-n+2) {
+  position: sticky;
+  background: var(--surface);
+  z-index: 1;
+}
+.tbl.matrix th:nth-child(1), .tbl.matrix td:nth-child(1) { left: 0; }
+.tbl.matrix th:nth-child(2), .tbl.matrix td:nth-child(2) { left: 108px; }
+.tbl.matrix thead th { z-index: 2; }
+.tbl.matrix thead th:nth-child(-n+2) { background: var(--surface-2); }
+/* Banding by brand, not by row: a brand with four designs is one block,
+   and shading it as one is what keeps the four from reading as four brands. */
+.tbl.matrix tr.is-alt td { background: color-mix(in srgb, var(--brand) 3%, transparent); }
+.tbl.matrix tr.is-alt td:nth-child(-n+2) { background: var(--surface-2); }
+
+/* Hovering a row lights its label only. The table's default full-row wash would
+   sit behind the heat cells and shift the very shade the grid is read by, so
+   the data columns keep their banding and only the brand column responds. */
+.tbl.matrix tbody tr:hover td { background: transparent; }
+.tbl.matrix tbody tr.is-alt:hover td { background: color-mix(in srgb, var(--brand) 3%, transparent); }
+.tbl.matrix tbody tr:hover td:nth-child(-n+2) { background: var(--brand-soft); }
+
+/* Small lookup tables — five rows stretched across a full-width table is four
+   columns of whitespace with the buttons parked at the far right. As a list
+   each row is one line, and nothing has to be tracked across the gap. */
+.cfg-rows { display: grid; }
+.cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--r-sm);
+  transition: 120ms ease;
+}
+.cfg-row + .cfg-row { box-shadow: inset 0 1px 0 var(--line-soft); }
+.cfg-row:hover { background: var(--surface-2); box-shadow: none; }
+.cfg-row:hover + .cfg-row { box-shadow: none; }
+
+.cfg-row-code {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 3.6rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--r-xs);
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-size: 11px;
+  font-weight: 800;
+}
+.cfg-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cfg-row-note {
+  flex: none;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+/* Actions appear on approach; five delete buttons sitting open is what made
+   the table version read as a form rather than a list of five things. */
+.cfg-row-acts {
+  display: flex;
+  flex: none;
+  gap: 0.1rem;
+  width: 3.4rem;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: 120ms ease;
+}
+.cfg-row:hover .cfg-row-acts,
+.cfg-row:focus-within .cfg-row-acts { opacity: 1; }
+@media (hover: none) { .cfg-row-acts { opacity: 1; } }
+
+.cfg-row-add {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: 120ms ease;
+}
+.cfg-row-add:hover {
+  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* Card header meta: what the table is scoped to, kept off the action row. */
+.cfg-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+
+/* Daily audit checks. A check that found nothing is still worth showing — the
+   green zero is the answer to "did anyone look today" — but it is not a button,
+   so only a flagged card lifts and responds to the pointer. */
+.check-card { transition: 130ms ease; }
+.check-card.is-clear { opacity: 0.72; cursor: default; }
+.check-card.is-flagged {
+  border-color: color-mix(in srgb, var(--neg) 35%, var(--line));
+  cursor: pointer;
+}
+.check-card.is-flagged:hover { box-shadow: var(--sh-2); transform: translateY(-1px); }
+.check-card.is-selected {
+  border-color: var(--neg);
+  box-shadow: 0 0 0 2px var(--neg-bg);
 }
