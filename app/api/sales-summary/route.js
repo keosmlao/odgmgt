@@ -4,12 +4,14 @@ import { getCurrentUser } from "@/lib/route-auth";
 import { buildFilters } from "@/lib/filters";
 import { parseIntSafe, safeDiv, monthName, formatDate, monthRange, workingDaysBetween, CHANNEL_EXPR } from "@/lib/helpers";
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
+import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
 
 // Cache 3 min
 const cache = new Map();
 const TTL = 180_000;
 
 export async function GET(request) {
+  await ensureReportedView();
   try {
     const sp = request.nextUrl.searchParams;
     let year = sp.get("year");
@@ -98,17 +100,17 @@ export async function GET(request) {
     ] = await Promise.all([
       ensureSalesAssignmentTable(),
       rows(`SELECT code, name_1 FROM public.ar_group WHERE code NOT IN ('10','9','104','105')`),
-      rows(`SELECT ${CHANNEL_EXPR} AS channel, COALESCE(SUM(sum_amount),0)::float AS actual FROM public.odg_sale_detail WHERE ${detailWhere} GROUP BY channel`, detailParams),
+      rows(`SELECT ${CHANNEL_EXPR} AS channel, COALESCE(SUM(sum_amount),0)::float AS actual FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} GROUP BY channel`, detailParams),
       rows(`SELECT sale_channel, COALESCE(SUM(target_amount),0)::float AS target FROM public.odg_sales_target WHERE ${targetWhere} GROUP BY sale_channel`, targetParams),
-      rows(`SELECT ${CHANNEL_EXPR} AS channel, COALESCE(SUM(sum_amount),0)::float AS actual FROM public.odg_sale_detail WHERE ${ytdDetailWhere} GROUP BY channel`, ytdDetailParams),
+      rows(`SELECT ${CHANNEL_EXPR} AS channel, COALESCE(SUM(sum_amount),0)::float AS actual FROM ${SALE_DETAIL_REPORTED} WHERE ${ytdDetailWhere} GROUP BY channel`, ytdDetailParams),
       rows(`SELECT sale_channel, COALESCE(SUM(target_amount),0)::float AS target FROM public.odg_sales_target WHERE ${ytdTargetWhere} GROUP BY sale_channel`, ytdTargetParams),
-      rows(`SELECT province AS province_code, COALESCE(NULLIF(province_name,''),province) AS label, COALESCE(SUM(sum_amount),0)::float AS actual FROM public.odg_sale_detail WHERE ${detailWhere} GROUP BY province, label`, detailParams),
+      rows(`SELECT province AS province_code, COALESCE(NULLIF(province_name,''),province) AS label, COALESCE(SUM(sum_amount),0)::float AS actual FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} GROUP BY province, label`, detailParams),
       rows(`SELECT province_code, COALESCE(SUM(target_amount),0)::float AS target FROM public.odg_sales_target WHERE ${targetWhere} GROUP BY province_code`, targetParams),
-      rows(`SELECT province AS province_code, COALESCE(SUM(sum_amount),0)::float AS actual FROM public.odg_sale_detail WHERE ${ytdDetailWhere} GROUP BY province`, ytdDetailParams),
+      rows(`SELECT province AS province_code, COALESCE(SUM(sum_amount),0)::float AS actual FROM ${SALE_DETAIL_REPORTED} WHERE ${ytdDetailWhere} GROUP BY province`, ytdDetailParams),
       rows(`SELECT province_code, COALESCE(SUM(target_amount),0)::float AS target FROM public.odg_sales_target WHERE ${ytdTargetWhere} GROUP BY province_code`, ytdTargetParams),
-      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(d.sum_amount),0)::float AS actual FROM public.odg_sales_assignment a LEFT JOIN public.odg_sale_detail d ON d.yeardoc=%s AND d.monthdoc=a.month AND d.bu_code=a.bu_code AND (a.province_code='ALL' OR d.province=a.province_code) AND (a.district_code='ALL' OR d.amper=a.district_code) ${chClauseD} ${assignWhere} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsD, ...assignParams]),
+      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(d.sum_amount),0)::float AS actual FROM public.odg_sales_assignment a LEFT JOIN ${SALE_DETAIL_REPORTED} d ON d.yeardoc=%s AND d.monthdoc=a.month AND d.bu_code=a.bu_code AND (a.province_code='ALL' OR d.province=a.province_code) AND (a.district_code='ALL' OR d.amper=a.district_code) ${chClauseD} ${assignWhere} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsD, ...assignParams]),
       rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(st.target_amount),0)::float AS target FROM public.odg_sales_assignment a LEFT JOIN public.odg_sales_target st ON st.target_year=%s AND st.target_month=a.month AND st.bu_code=a.bu_code AND (a.province_code='ALL' OR st.province_code=a.province_code) AND (a.district_code='ALL' OR st.district_code=a.district_code) ${chClauseT} ${assignWhere} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsT, ...assignParams]),
-      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(d.sum_amount),0)::float AS actual FROM public.odg_sales_assignment a LEFT JOIN public.odg_sale_detail d ON d.yeardoc=%s AND d.monthdoc=a.month AND d.bu_code=a.bu_code AND (a.province_code='ALL' OR d.province=a.province_code) AND (a.district_code='ALL' OR d.amper=a.district_code) ${chClauseD} ${assignWhereYtd} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsD, ...assignParamsYtd]),
+      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(d.sum_amount),0)::float AS actual FROM public.odg_sales_assignment a LEFT JOIN ${SALE_DETAIL_REPORTED} d ON d.yeardoc=%s AND d.monthdoc=a.month AND d.bu_code=a.bu_code AND (a.province_code='ALL' OR d.province=a.province_code) AND (a.district_code='ALL' OR d.amper=a.district_code) ${chClauseD} ${assignWhereYtd} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsD, ...assignParamsYtd]),
       rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(st.target_amount),0)::float AS target FROM public.odg_sales_assignment a LEFT JOIN public.odg_sales_target st ON st.target_year=%s AND st.target_month=a.month AND st.bu_code=a.bu_code AND (a.province_code='ALL' OR st.province_code=a.province_code) AND (a.district_code='ALL' OR st.district_code=a.district_code) ${chClauseT} ${assignWhereYtd} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsT, ...assignParamsYtd]),
     ]);
 

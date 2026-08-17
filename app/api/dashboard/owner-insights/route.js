@@ -4,6 +4,7 @@ import { parseIntSafe, safeDiv, CHANNEL_EXPR } from "@/lib/helpers";
 import { buildFilters, channelMap } from "@/lib/filters";
 import { getCurrentUser } from "@/lib/route-auth";
 import { getSaleDetailSchema } from "@/lib/sale-detail-schema";
+import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
 
 const cacheMap = new Map();
 const TTL = 300_000;
@@ -82,6 +83,7 @@ function classifyChannel(marginPct, sharePct) {
 }
 
 export async function GET(request) {
+  await ensureReportedView();
   try {
     const sp = request.nextUrl.searchParams;
     const now = new Date();
@@ -153,7 +155,7 @@ export async function GET(request) {
              SELECT province AS province_code,
                COALESCE(NULLIF(province_name, ''), province, 'UNKNOWN') AS province_name,
                COALESCE(SUM(sum_amount), 0)::float AS actual
-             FROM public.odg_sale_detail
+             FROM ${SALE_DETAIL_REPORTED}
              WHERE ${detailWhere}
              GROUP BY province, COALESCE(NULLIF(province_name, ''), province, 'UNKNOWN')
            ),
@@ -187,7 +189,7 @@ export async function GET(request) {
                ${custNameExpr} AS customer_name,
                COALESCE(SUM(sum_amount), 0)::float AS last_revenue,
                COUNT(DISTINCT doc_no)::int AS orders
-             FROM public.odg_sale_detail
+             FROM ${SALE_DETAIL_REPORTED}
              WHERE ${lastWhere}
                AND customer_code IS NOT NULL
                AND customer_code != ''
@@ -195,7 +197,7 @@ export async function GET(request) {
            ),
            this_m AS (
              SELECT DISTINCT customer_code
-             FROM public.odg_sale_detail
+             FROM ${SALE_DETAIL_REPORTED}
              WHERE ${currentWhere}
                AND customer_code IS NOT NULL
                AND customer_code != ''
@@ -214,7 +216,7 @@ export async function GET(request) {
         rows(
           `WITH scoped AS (
              SELECT customer_code, (yeardoc * 12 + monthdoc) AS ym
-             FROM public.odg_sale_detail
+             FROM ${SALE_DETAIL_REPORTED}
              WHERE customer_code IS NOT NULL
                AND customer_code != ''
                AND ${historicalFilters.detailWhere}
@@ -224,7 +226,7 @@ export async function GET(request) {
                ${custNameExpr} AS customer_name,
                COALESCE(SUM(sum_amount), 0)::float AS revenue,
                COUNT(DISTINCT doc_no)::int AS orders
-             FROM public.odg_sale_detail
+             FROM ${SALE_DETAIL_REPORTED}
              WHERE ${currentWhere}
                AND customer_code IS NOT NULL
                AND customer_code != ''
@@ -263,7 +265,7 @@ export async function GET(request) {
              COALESCE(SUM(sum_amount), 0)::float AS revenue,
              ${profitExpr} AS profit,
              ${marginExpr} AS margin_pct
-           FROM public.odg_sale_detail
+           FROM ${SALE_DETAIL_REPORTED}
            WHERE ${detailWhere}
            GROUP BY COALESCE(NULLIF(channel_name, ''), argroup, argroup_main, argroupsub, 'UNKNOWN')
            ORDER BY revenue DESC`,

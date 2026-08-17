@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { rows } from "@/lib/db";
 import { parseIntSafe } from "@/lib/helpers";
+import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
 
 export async function GET() {
+  await ensureReportedView();
   try {
     const data = await rows(`
       SELECT DISTINCT yeardoc AS year
-      FROM public.odg_sale_detail
+      FROM ${SALE_DETAIL_REPORTED}
       WHERE yeardoc IS NOT NULL
       UNION
       SELECT DISTINCT target_year AS year

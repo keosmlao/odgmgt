@@ -5,6 +5,7 @@ import { buildFilters, channelMap } from "@/lib/filters";
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
 import { getCurrentUser } from "@/lib/route-auth";
 import { getSaleDetailSchema } from "@/lib/sale-detail-schema";
+import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
 
 const cacheMap = new Map();
 const TTL = 300_000;
@@ -22,6 +23,7 @@ function summarizeSegment(rowsList) {
 }
 
 export async function GET(request) {
+  await ensureReportedView();
   try {
     const sp = request.nextUrl.searchParams;
     const now = new Date();
@@ -143,7 +145,7 @@ export async function GET(request) {
              COUNT(DISTINCT d.customer_code)::int AS customers,
              COALESCE(SUM(d.discount_amount + d.discount_amount_2), 0)::float AS discount_total
            FROM public.odg_sales_assignment a
-           LEFT JOIN public.odg_sale_detail d
+           LEFT JOIN ${SALE_DETAIL_REPORTED} d
              ON d.yeardoc = %s
             AND d.monthdoc = a.month
             AND d.bu_code = a.bu_code
@@ -183,7 +185,7 @@ export async function GET(request) {
              COUNT(DISTINCT monthdoc)::int AS active_months,
              COALESCE(SUM(CASE WHEN monthdoc = %s THEN sum_amount ELSE 0 END), 0)::float AS current_month_revenue,
              MAX(CASE WHEN COALESCE(register_lineoa, '') LIKE '%ແລ້ວ%' THEN 1 ELSE 0 END)::int AS line_registered
-           FROM public.odg_sale_detail
+           FROM ${SALE_DETAIL_REPORTED}
            WHERE ${detailWhere}
              AND customer_code IS NOT NULL
              AND customer_code != ''
@@ -223,7 +225,7 @@ export async function GET(request) {
            COUNT(DISTINCT customer_code)::int AS customers,
            COUNT(DISTINCT doc_no)::int AS orders,
            COALESCE(SUM(discount_amount + discount_amount_2), 0)::float AS discount_total
-         FROM public.odg_sale_detail
+         FROM ${SALE_DETAIL_REPORTED}
          WHERE ${detailWhere}
          GROUP BY COALESCE(NULLIF(salename, ''), 'UNKNOWN')
          ORDER BY revenue DESC`,
@@ -237,7 +239,7 @@ export async function GET(request) {
            ${marginExpr} AS margin_pct,
            COUNT(DISTINCT customer_code)::int AS customers,
            COUNT(DISTINCT doc_no)::int AS orders
-         FROM public.odg_sale_detail
+         FROM ${SALE_DETAIL_REPORTED}
          WHERE ${detailWhere}
          GROUP BY COALESCE(NULLIF(branch_name, ''), 'UNKNOWN')
          ORDER BY revenue DESC`,
@@ -249,7 +251,7 @@ export async function GET(request) {
            LPAD(SPLIT_PART(COALESCE(doc_time, '00:00'), ':', 1), 2, '0') || ':00' AS hour_slot,
            COALESCE(SUM(sum_amount), 0)::float AS revenue,
            COUNT(DISTINCT doc_no)::int AS orders
-         FROM public.odg_sale_detail
+         FROM ${SALE_DETAIL_REPORTED}
          WHERE ${detailWhere}
            AND monthdoc = %s
          GROUP BY

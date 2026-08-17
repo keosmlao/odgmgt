@@ -4,12 +4,14 @@ import { parseIntSafe } from "@/lib/helpers";
 import { buildFilters } from "@/lib/filters";
 import { getCurrentUser } from "@/lib/route-auth";
 import { getSaleDetailSchema } from "@/lib/sale-detail-schema";
+import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
 
 // Cache for 3 minutes (keyed by all filters)
 const cacheMap = new Map();
 const TTL = 180_000;
 
 export async function GET(request) {
+  await ensureReportedView();
   try {
     const sp = request.nextUrl.searchParams;
     const now = new Date();
@@ -50,35 +52,35 @@ export async function GET(request) {
     // All queries in parallel — using detailWhere/detailParams for BU/Channel/Province filtering
     const [todayRow, weekRow, topCustomers, bottomCustomers, gpRow, collectionRow, dailyTrend] = await Promise.all([
       one(`SELECT COALESCE(SUM(sum_amount),0)::float AS total, COUNT(DISTINCT doc_no)::int AS orders, COUNT(DISTINCT customer_code)::int AS customers
-           FROM public.odg_sale_detail WHERE ${detailWhere} ${todayFilter}`, detailParams),
+           FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} ${todayFilter}`, detailParams),
 
       one(`SELECT COALESCE(SUM(sum_amount),0)::float AS total, COUNT(DISTINCT doc_no)::int AS orders, COUNT(DISTINCT customer_code)::int AS customers
-           FROM public.odg_sale_detail WHERE ${detailWhere} ${weekFilter}`, detailParams),
+           FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} ${weekFilter}`, detailParams),
 
       rows(`SELECT customer_code, ${custNameExpr} AS customer_name, COALESCE(SUM(sum_amount),0)::float AS revenue, COUNT(DISTINCT doc_no)::int AS orders
-            FROM public.odg_sale_detail WHERE ${detailWhere}
+            FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere}
             GROUP BY customer_code, customer_name ORDER BY revenue DESC LIMIT 10`, detailParams),
 
       rows(`SELECT customer_code, ${custNameExpr} AS customer_name, COALESCE(SUM(sum_amount),0)::float AS revenue, COUNT(DISTINCT doc_no)::int AS orders
-            FROM public.odg_sale_detail WHERE ${detailWhere} AND monthdoc = %s
+            FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} AND monthdoc = %s
             GROUP BY customer_code, customer_name HAVING SUM(sum_amount) > 0 ORDER BY revenue ASC LIMIT 10`, [...detailParams, month]),
 
       costCol
         ? one(`SELECT COALESCE(SUM(sum_amount),0)::float AS revenue, COALESCE(SUM(${costCol}),0)::float AS cost, COALESCE(SUM(profit),0)::float AS profit,
                CASE WHEN COALESCE(SUM(sum_amount),0)>0 THEN (COALESCE(SUM(sum_amount),0)-COALESCE(SUM(${costCol}),0))/SUM(sum_amount)*100 ELSE 0 END AS gp_pct
-               FROM public.odg_sale_detail WHERE ${detailWhere}`, detailParams)
+               FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere}`, detailParams)
         : one(`SELECT COALESCE(SUM(sum_amount),0)::float AS revenue, 0::float AS cost, COALESCE(SUM(profit),0)::float AS profit,
                CASE WHEN COALESCE(SUM(sum_amount),0)>0 THEN COALESCE(SUM(profit),0)/SUM(sum_amount)*100 ELSE 0 END AS gp_pct
-               FROM public.odg_sale_detail WHERE ${detailWhere}`, detailParams),
+               FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere}`, detailParams),
 
       one(`SELECT COALESCE(SUM(sum_amount),0)::float AS total_sales,
            COALESCE(SUM(CASE WHEN lower(COALESCE(saletype,'')) IN ('cash','cs','cod') OR lower(COALESCE(saletype,'')) LIKE '%cash%' OR lower(COALESCE(saletype,'')) LIKE '%สด%' THEN sum_amount ELSE 0 END),0)::float AS collected,
            CASE WHEN COALESCE(SUM(sum_amount),0)>0 THEN COALESCE(SUM(CASE WHEN lower(COALESCE(saletype,'')) IN ('cash','cs','cod') OR lower(COALESCE(saletype,'')) LIKE '%cash%' OR lower(COALESCE(saletype,'')) LIKE '%สด%' THEN sum_amount ELSE 0 END),0)/SUM(sum_amount)*100 ELSE 0 END AS rate
-           FROM public.odg_sale_detail WHERE ${detailWhere} AND monthdoc = %s`, [...detailParams, month]),
+           FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} AND monthdoc = %s`, [...detailParams, month]),
 
       dateCol
         ? rows(`SELECT ${dateCol}::date AS day, COALESCE(SUM(sum_amount),0)::float AS amount, COUNT(DISTINCT doc_no)::int AS orders
-                FROM public.odg_sale_detail WHERE ${detailWhere} AND ${dateCol}::date >= (CURRENT_DATE - INTERVAL '14 days')
+                FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} AND ${dateCol}::date >= (CURRENT_DATE - INTERVAL '14 days')
                 GROUP BY day ORDER BY day`, detailParams)
         : [],
     ]);
