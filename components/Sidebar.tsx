@@ -80,6 +80,14 @@ export const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    key: "sidebar.groupPlanning",
+    items: [
+      { path: "/target", i18nKey: "sidebar.target", icon: <Target size={17} /> },
+      { path: "/sales-assignment", i18nKey: "sidebar.assignment", icon: <Users size={17} /> },
+      { path: "/shop-map", i18nKey: "sidebar.shopMap", icon: <Store size={17} /> },
+    ],
+  },
+  {
     key: "sidebar.groupTransport",
     items: [
       { path: "/transport", i18nKey: "sidebar.transport", icon: <Truck size={17} /> },
@@ -101,14 +109,6 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/products", i18nKey: "sidebar.products", icon: <Package size={17} /> },
       { path: "/defects", i18nKey: "sidebar.defects", icon: <ShieldAlert size={17} /> },
-    ],
-  },
-  {
-    key: "sidebar.groupPlanning",
-    items: [
-      { path: "/target", i18nKey: "sidebar.target", icon: <Target size={17} /> },
-      { path: "/sales-assignment", i18nKey: "sidebar.assignment", icon: <Users size={17} /> },
-      { path: "/shop-map", i18nKey: "sidebar.shopMap", icon: <Store size={17} /> },
     ],
   },
   {

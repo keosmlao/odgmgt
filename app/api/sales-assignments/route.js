@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { rows, one, query } from "@/lib/db";
 import { parseIntSafe } from "@/lib/helpers";
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
+import { MONTHLY_TABLE } from "@/lib/sale-monthly-sql.mjs";
+import { ensureFreshRollup } from "@/lib/sale-rollup";
 
 export async function GET(request) {
   try {
@@ -39,6 +41,27 @@ export async function GET(request) {
 
     const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
     const yearVal = parseIntSafe(year, new Date().getFullYear());
+
+    // Actuals come from the rollup, so they bucket on the month a bill is
+    // credited to (app_sale_month_override) exactly as the sales reports do.
+    await ensureFreshRollup([yearVal, yearVal - 1]);
+
+    /**
+     * An assignment's slice of the plan: same BU, same area, same channels.
+     *
+     * Both figures are aggregated in their own LATERAL rather than joined and
+     * SUMmed together — two joins that each match several rows would multiply
+     * into each other, and the target would grow by however many months of
+     * sales happened to match.
+     *
+     * `channel_codes` empty means every channel. On the target side an 'ALL'
+     * row is a lump nobody split by channel, so it belongs to whoever covers
+     * the area; the rollup has no such row, its channels are always resolved.
+     */
+    const areaMatch = `
+       AND (a.province_code = 'ALL' OR %ALIAS%.province_code = a.province_code)
+       AND (a.district_code = 'ALL' OR %ALIAS%.district_code = a.district_code)`;
+
     const data = await rows(
       `
         SELECT
@@ -51,19 +74,45 @@ export async function GET(request) {
           a.channel_codes,
           a.month,
           a.created_at,
-          COALESCE(SUM(st.target_amount), 0)::float AS target_amount
+          -- The grid used to print the raw code ("0103"); the district table is
+          -- the only place its name lives, and it is one join away.
+          COALESCE(NULLIF(btrim(am.name_1), ''), a.district_code) AS district_name,
+          tgt.amount::float AS target_amount,
+          act.amount::float AS actual_amount
         FROM public.odg_sales_assignment a
-        LEFT JOIN public.odg_sales_target st
-          ON st.target_year = %s
-         AND st.target_month = a.month
-         AND st.bu_code = a.bu_code
-         AND (a.province_code = 'ALL' OR st.province_code = a.province_code)
-         AND (a.district_code = 'ALL' OR st.district_code = a.district_code)
+        LEFT JOIN public.erp_amper am ON am.code = a.district_code
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(st.target_amount), 0) AS amount
+          FROM public.odg_sales_target st
+          WHERE st.target_year = %s
+            AND st.target_month = a.month
+            AND st.bu_code = a.bu_code
+            ${areaMatch.replaceAll("%ALIAS%", "st")}
+            AND (
+              a.channel_codes IS NULL
+              OR array_length(a.channel_codes, 1) IS NULL
+              OR st.sale_channel = ANY(a.channel_codes)
+              OR st.sale_channel = 'ALL'
+            )
+        ) tgt ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(sm.sum_amount), 0) AS amount
+          FROM ${MONTHLY_TABLE} sm
+          WHERE sm.yeardoc = %s
+            AND sm.monthdoc = a.month
+            AND sm.bu_code = a.bu_code
+            AND (a.province_code = 'ALL' OR sm.province = a.province_code)
+            AND (a.district_code = 'ALL' OR sm.amper = a.district_code)
+            AND (
+              a.channel_codes IS NULL
+              OR array_length(a.channel_codes, 1) IS NULL
+              OR sm.channel_code = ANY(a.channel_codes)
+            )
+        ) act ON TRUE
         ${where}
-        GROUP BY a.id, a.sale_id, a.sale_name, a.bu_code, a.province_code, a.district_code, a.channel_codes, a.month, a.created_at
         ORDER BY a.created_at DESC, a.id DESC
       `,
-      [yearVal, ...params],
+      [yearVal, yearVal, ...params],
     );
     return NextResponse.json({ success: true, data });
   } catch (error) {
