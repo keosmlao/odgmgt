@@ -272,6 +272,7 @@ const dict: Record<string, Record<Locale, string>> = {
   "incentive.totalReward": { lo: "ຜົນຕອບແທນລວມ", th: "ผลตอบแทนรวม", en: "Total reward" },
   "incentive.salesVsTarget": { lo: "ຍອດຂາຍ vs ເປົ້າ", th: "ยอดขาย vs เป้า", en: "Sales vs target" },
   "incentive.byPerson": { lo: "ແຍກຕາມພະນັກງານ", th: "แยกตามพนักงาน", en: "By employee" },
+  "incentive.everyone": { lo: "ທຸກຄົນ", th: "ทุกคน", en: "Everyone" },
   "incentive.people": { lo: "ຄົນ", th: "คน", en: "people" },
   "incentive.bills": { lo: "ຈຳນວນ", th: "จำนวน", en: "Quantity" },
   "incentive.sales": { lo: "ຍອດຂາຍ", th: "ยอดขาย", en: "Sales" },
@@ -615,14 +616,14 @@ const dict: Record<string, Record<Locale, string>> = {
     en: "A category with no group is outside the scheme and earns nothing · SDA needs a subtype, because that IS its design token",
   },
   "mapping.hint.size": {
-    lo: "ຄຳສັບຕ້ອງກົງກັບທີ່ໃຊ້ໃນຂັ້ນຄະແນນ · ຊັກຜ້າມີທາງສຳຮອງຄິດຈາກຕົວເລກ ໝວດອື່ນບໍ່ມີ",
-    th: "คำต้องตรงกับที่ใช้ในขั้นคะแนน · เครื่องซักผ้ามีทางสำรองคิดจากตัวเลข หมวดอื่นไม่มี",
-    en: "The token must match the one the bands use · washers fall back to the number in the wording, other groups do not",
+    lo: "ສະເພາະ ຕູ້ເຢັນ · ຊັກຜ້າ · ໂທລະທັດ ເທົ່ານັ້ນ — ແອ, SDA ແລະ ເຄື່ອງສຽງ ຄິດຕາມມູນຄ່າ ບໍ່ແມ່ນຂະໜາດ · ຊັກຜ້າມີທາງສຳຮອງຄິດຈາກຕົວເລກ ໝວດອື່ນບໍ່ມີ",
+    th: "เฉพาะ ตู้เย็น · เครื่องซักผ้า · ทีวี เท่านั้น — แอร์, SDA และเครื่องเสียง คิดตามมูลค่า ไม่ใช่ขนาด · เครื่องซักผ้ามีทางสำรองคิดจากตัวเลข หมวดอื่นไม่มี",
+    en: "Fridges, washers and televisions only — air conditioners, SDA and audio are banded on value, not size · washers fall back to the number in the wording, other groups do not",
   },
   "mapping.hint.design": {
-    lo: "ຊື່ໃນບິນຂຽນເປັນລາວ ແຕ່ກົດຄະແນນຂຽນເປັນອັງກິດ — ບ່ອນນີ້ຄືບ່ອນທີ່ສອງອັນພົບກັນ",
-    th: "ชื่อในบิลเขียนเป็นลาว แต่กฎคะแนนเขียนเป็นอังกฤษ — ที่นี่คือที่ที่สองอย่างมาบรรจบกัน",
-    en: "The bill writes Lao, the rules are written in English — this is where the two meet",
+    lo: "ສະເພາະ ຕູ້ເຢັນ ແລະ ຊັກຜ້າ ເທົ່ານັ້ນ — SDA ໃຊ້ປະເພດຍ່ອຍຂອງໝວດ, ແອ ອ່ານ Inverter/On-Off ຈາກຊື່ສິນຄ້າ · ຊື່ໃນບິນຂຽນເປັນລາວ ແຕ່ກົດຄະແນນຂຽນເປັນອັງກິດ ບ່ອນນີ້ຄືບ່ອນທີ່ສອງອັນພົບກັນ",
+    th: "เฉพาะ ตู้เย็น และ เครื่องซักผ้า เท่านั้น — SDA ใช้ประเภทย่อยของหมวด, แอร์อ่าน Inverter/On-Off จากชื่อสินค้า · ชื่อในบิลเขียนเป็นลาว แต่กฎคะแนนเขียนเป็นอังกฤษ ที่นี่คือที่ที่สองอย่างมาบรรจบกัน",
+    en: "Fridges and washers only — SDA takes the category's subtype, air conditioners read Inverter/On-Off from the item name · the bill writes Lao, the rules are written in English, and this is where the two meet",
   },
   "mapping.hint.seller": {
     lo: "ໃຊ້ສະເພາະຊື່ທີ່ບໍ່ກົງກັບທະບຽນພະນັກງານ · ຖ້າກົງຢູ່ແລ້ວ ບໍ່ຕ້ອງເພີ່ມ",

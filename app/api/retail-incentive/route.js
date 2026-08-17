@@ -6,6 +6,7 @@ import { ensurePayoutTables } from "@/lib/migrations";
 import { OVERRIDE_JOIN, REPORT_MONTH_FILTER } from "@/lib/sale-month-override";
 import { POINTS_SQL } from "@/lib/incentive-points-sql";
 import { ensurePriceBands } from "@/lib/migrations";
+import { foldAirSets } from "@/lib/incentive-sets";
 
 /**
  * Retail (ຂາຍໜ້າຮ້ານ) staff rewards for one month.
@@ -116,8 +117,19 @@ function noPointReason(row, points, qty) {
  * [H] half of a split air conditioner scores on its [C] partner — neither is
  * an unpaid sale, and listing them would bury the ones that are.
  */
-function zeroPointBills(points, people) {
+function zeroPointBills(points, people, employeeNames) {
   const nameByCode = new Map(people.map((row) => [String(row.employee_code ?? ""), row.name]));
+  /**
+   * A seller's name, whoever they are.
+   *
+   * The report's own rows only cover people carrying a target this month, but a
+   * bill that scored nothing can belong to anyone who served a customer — cover
+   * staff, a leaver, someone whose target was never set. Falling through to the
+   * staff register keeps the tabs above readable: "—" is not a name anyone can
+   * pick their own bills out by.
+   */
+  const sellerName = (code) =>
+    nameByCode.get(code) || employeeNames?.get(code) || code || "—";
 
   /** Why this line pays nothing when it should have paid, or null if it is fine. */
   const unpaidKind = (row) => {
@@ -155,7 +167,7 @@ function zeroPointBills(points, people) {
       doc_no: docNo,
       doc_date: row.doc_date,
       employee_code: code || null,
-      seller: nameByCode.get(code) || "—",
+      seller: sellerName(code),
       // Unpaid portion — what the card is counting.
       qty: 0,
       amount: 0,
@@ -219,15 +231,39 @@ function zeroPointBills(points, people) {
   const kinds = { no_rule: 0, no_bonus: 0, zero_rule: 0, other: 0 };
   for (const bill of all) for (const kind of bill.kinds) kinds[kind] += 1;
 
+  /**
+   * The same list seen per seller.
+   *
+   * An unpaid bill is somebody's bill. Read as one long list it is a pile of
+   * configuration to work through; read by seller it also answers the question
+   * the person being paid actually asks — "which of MY sales scored nothing" —
+   * and shows at a glance whether a gap is spread across the floor or sitting
+   * with one seller's product range.
+   */
+  const sellerTabs = new Map();
+  for (const bill of all) {
+    const key = bill.employee_code ?? `name:${bill.seller}`;
+    const entry = sellerTabs.get(key)
+      ?? { key, employee_code: bill.employee_code, name: bill.seller, bills: 0, qty: 0, amount: 0 };
+    entry.bills += 1;
+    entry.qty += bill.qty;
+    entry.amount += bill.amount;
+    sellerTabs.set(key, entry);
+  }
+  const sellers = [...sellerTabs.values()].sort((left, right) => right.amount - left.amount);
+
   return {
     total: all.length,
     lines: lineCount,
     qty: all.reduce((sum, bill) => sum + bill.qty, 0),
     amount: all.reduce((sum, bill) => sum + bill.amount, 0),
     kinds,
-    // A month with hundreds of these is a configuration problem, not a list to
-    // read to the end; the counts above still describe every one of them.
-    bills: all.slice(0, 200),
+    sellers,
+    // Held well above a normal month's count so the tabs above can be trusted:
+    // a seller's tab saying 45 has to open onto 45 bills, and a cap that bit
+    // first would quietly show them fewer. The ceiling stays as a backstop for
+    // a month where something has gone badly wrong with the configuration.
+    bills: all.slice(0, 1000),
   };
 }
 
@@ -261,7 +297,7 @@ async function loadMonth(year, month) {
   const [
     config,
     sales,
-    points,
+    scoredLines,
     targets,
     specialRewards,
     employees,
@@ -429,6 +465,12 @@ async function loadMonth(year, month) {
        ORDER BY position_code DESC`,
     ).catch(() => []),
   ]);
+
+  // Every figure below that is drilled down to a LINE reads sets, not
+  // components: the seller's category → brand → bill tree, and the unpaid-bill
+  // work list. Folded once here so the two can never tell different stories
+  // about the same sale. Points are unaffected — an outdoor half scores none.
+  const points = foldAirSets(scoredLines);
 
   const nameByCode = new Map(
     employees.map((row) => [String(row.employee_code), row.fullname_lo || row.fullname_en || ""]),
@@ -800,7 +842,7 @@ async function loadMonth(year, month) {
     0,
   );
 
-  const zeroBills = zeroPointBills(points, people);
+  const zeroBills = zeroPointBills(points, people, nameByCode);
 
   return {
     meta: {
@@ -952,7 +994,7 @@ export async function GET(request) {
     await ensurePriceBands();
 
     const data = await swrCache(
-      `retail-incentive:v23:${year}|${month}`,
+      `retail-incentive:v28:${year}|${month}`,
       { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass: sp.get("nocache") === "1" },
       () => loadMonth(year, month),
     );

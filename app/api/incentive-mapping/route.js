@@ -94,8 +94,18 @@ export async function GET(request) {
         sale,
       ),
 
-      // A size wording that never became a token. Only for the categories that
-      // are IN the scheme — everything else is noise.
+      // A size wording that never became a token — but only where a token is
+      // what the sale is actually scored by.
+      //
+      // Air, SDA and AV audio are banded on PRICE (app_incentive_price_band):
+      // they carry a size wording the way any product does, and a mapping for
+      // it would change nothing. Listing them buried the handful that matter
+      // under dozens that never could — 54 of 57 rows in July 2026, and the
+      // three real ones were the small numbers at the bottom.
+      //
+      // What is left is exactly what the scoring query reads a token for:
+      // REF by cubic feet, Washer by kilograms, and televisions (AV category
+      // 008) by inches.
       rows(
         `SELECT d.size_name AS name, MAX(c.pointmap_category) AS pcat,
                 COALESCE(SUM(d.qty), 0)::float AS qty,
@@ -107,18 +117,26 @@ export async function GET(request) {
           WHERE d.branch_code = %s AND d.argroup_main = %s
             AND d.doc_date >= %s::date AND d.doc_date <= %s::date
             AND st.size_name IS NULL
+            AND (
+              c.pointmap_category IN ('REF', 'Washer')
+              OR (c.pointmap_category = 'AV' AND d.item_category = '008')
+            )
           GROUP BY d.size_name
           ORDER BY 4 DESC LIMIT 60`,
         sale,
       ),
 
+      // Likewise for the design wording. SDA takes its design from the
+      // category's own subtype, Air reads Inverter/On-Off out of the item name,
+      // and AV has no design dimension at all — none of the three ever looks
+      // this table up, so a missing row there costs nothing.
       rows(
         `SELECT d.design_name AS name, MAX(c.pointmap_category) AS pcat,
                 COALESCE(SUM(d.qty), 0)::float AS qty,
                 COALESCE(SUM(d.sum_amount), 0)::float AS amount
            FROM public.odg_sale_detail d
            JOIN public.app_incentive_category c ON c.category_code = d.item_category
-                AND c.pointmap_category IS NOT NULL
+                AND c.pointmap_category IN ('REF', 'Washer')
            LEFT JOIN public.app_incentive_design_token dt ON btrim(dt.design_name) = btrim(d.design_name)
           WHERE d.branch_code = %s AND d.argroup_main = %s
             AND d.doc_date >= %s::date AND d.doc_date <= %s::date

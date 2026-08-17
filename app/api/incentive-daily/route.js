@@ -3,6 +3,7 @@ import { rows } from "@/lib/db";
 import { getCurrentUser } from "@/lib/route-auth";
 import { swrCache } from "@/lib/cache";
 import { POINTS_SQL } from "@/lib/incentive-points-sql";
+import { foldAirSets } from "@/lib/incentive-sets";
 import { ensurePriceBands } from "@/lib/migrations";
 
 /**
@@ -37,12 +38,21 @@ const LAO_DATE = new Intl.DateTimeFormat("en-CA", {
 });
 const laoDate = (value) => (value ? LAO_DATE.format(new Date(value)) : "");
 
-/** Scored lines for a whole month, shared by every day of it. */
+/**
+ * Scored lines for a whole month, shared by every day of it.
+ *
+ * Folded to one row per set: this screen lists bills line by line, and the
+ * outdoor half of a split air conditioner is not a line anyone reads — it
+ * scores on its indoor partner and would only double every air-conditioner
+ * bill. See lib/incentive-sets.
+ */
 function monthLines(year, month, bypass) {
   return swrCache(
-    `incentive-points:v2:${year}|${month}`,
+    `incentive-points:v3:${year}|${month}`,
     { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass },
-    () => rows(POINTS_SQL, [year, month, year, month, RETAIL_BRANCH, RETAIL_AR_GROUP]),
+    async () => foldAirSets(
+      await rows(POINTS_SQL, [year, month, year, month, RETAIL_BRANCH, RETAIL_AR_GROUP]),
+    ),
   );
 }
 

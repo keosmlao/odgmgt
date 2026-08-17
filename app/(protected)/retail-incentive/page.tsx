@@ -73,9 +73,14 @@ type ZeroBill = {
   total_qty: number; total_amount: number; total_points: number; flagged_lines: number;
   kinds: ZeroKind[]; lines: ZeroLine[];
 };
+type ZeroSeller = {
+  key: string; employee_code: string | null; name: string;
+  bills: number; qty: number; amount: number;
+};
 type ZeroBills = {
   total: number; lines: number; qty: number; amount: number;
   kinds: Record<ZeroKind, number>;
+  sellers?: ZeroSeller[];
   bills: ZeroBill[];
 };
 
@@ -368,9 +373,16 @@ function ZeroBillsCard({
   onLine: (line: PointLine) => void;
 }) {
   const [kind, setKind] = useState<ZeroKind | "">("");
+  // Whose bills to show. Kept apart from the reason filter so the two narrow
+  // together: "which of ນ້ຳຝົນ's bills have no rule written for them" is one
+  // question, and answering it should not mean losing the other tab row.
+  const [seller, setSeller] = useState("");
   const [open, setOpen] = useState<string | null>(null);
 
-  const bills = kind ? data.bills.filter((bill) => bill.kinds.includes(kind)) : data.bills;
+  const sellers = data.sellers ?? [];
+  const sellerKey = (bill: ZeroBill) => bill.employee_code ?? `name:${bill.seller}`;
+  const bills = data.bills.filter((bill) =>
+    (!kind || bill.kinds.includes(kind)) && (!seller || sellerKey(bill) === seller));
   const kindLabel = (key: ZeroKind) => t(ZERO_KINDS.find((item) => item.key === key)?.label ?? "incentive.kindOther");
   const kindTone = (key: ZeroKind) => ZERO_KINDS.find((item) => item.key === key)?.tone ?? "pill-muted";
 
@@ -415,6 +427,38 @@ function ZeroBillsCard({
               </button>
             ))}
           </div>
+
+          {/* Second row, second question: whose bills. Only worth drawing when
+              more than one person is in the list — with a single seller every
+              tab here would select the same bills the row above already shows. */}
+          {sellers.length > 1 && (
+            <div className="tabs mt-1.5" role="tablist" aria-label={t("incentive.byPerson")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!seller}
+                className={`tab ${!seller ? "is-active" : ""}`}
+                onClick={() => setSeller("")}
+              >
+                {t("incentive.everyone")}
+                <span className={`pill ${!seller ? "" : "pill-muted"}`}>{sellers.length}</span>
+              </button>
+              {sellers.map((person) => (
+                <button
+                  key={person.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={seller === person.key}
+                  className={`tab ${seller === person.key ? "is-active" : ""}`}
+                  onClick={() => setSeller(seller === person.key ? "" : person.key)}
+                  title={`${fmt(person.amount)} ${currency}`}
+                >
+                  {person.name}
+                  <span className={`pill ${seller === person.key ? "" : "pill-muted"}`}>{person.bills}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

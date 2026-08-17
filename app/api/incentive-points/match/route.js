@@ -4,6 +4,7 @@ import { parseIntSafe } from "@/lib/helpers";
 import { getCurrentUser } from "@/lib/route-auth";
 import { POINTS_SQL } from "@/lib/incentive-points-sql";
 import { swrCache, clearCache } from "@/lib/cache";
+import { foldAirSets } from "@/lib/incentive-sets";
 
 /**
  * What the configured ladders actually caught: one row per product sold.
@@ -27,15 +28,16 @@ const RETAIL_AR_GROUP = "101";
  *
  * The scoring query answers per bill, because that is what a reward report is
  * drilled down to. A configuration screen is asking a different question — "did
- * MY ladder catch this model" — which is the same answer for every bill the
- * model appears on, so the bills are summed away and only their count is kept.
+ * MY ladder catch this model" — so the bills are summed away and only their
+ * count is kept.
  *
  * Cached under the `incentive-sold:` prefix on purpose: every rule write
  * already clears that prefix, so this detail can never go on showing the bands
  * that were configured a moment ago.
  */
 async function loadMatches({ year, month }) {
-  const lines = await rows(POINTS_SQL, [year, month, year, month, RETAIL_BRANCH, RETAIL_AR_GROUP]);
+  const scored = await rows(POINTS_SQL, [year, month, year, month, RETAIL_BRANCH, RETAIL_AR_GROUP]);
+  const lines = foldAirSets(scored);
   const items = new Map();
   for (const line of lines) {
     if (!line.pcat) continue;
@@ -71,6 +73,24 @@ async function loadMatches({ year, month }) {
     // A status rule can pay one bill of a model differently from the next, so
     // the rate shown is the best the model achieved rather than a blend of two.
     entry.unit_points = Math.max(entry.unit_points, Number(line.unit_points || 0));
+    // The number a band was read on is no longer a property of the MODEL: an
+    // air conditioner is banded on what the set actually fetched, so the same
+    // model reaches a different figure on a discounted bill than on a full one.
+    // Keeping whichever bill happened to be read first made two halves of one
+    // set report different numbers. The best the model reached is a stable
+    // answer to "which band can this model reach", and the band named beside it
+    // has to come from that same bill or the row contradicts itself.
+    if (entry.measure === null || (line.measure !== null && Number(line.measure) > entry.measure)) {
+      entry.measure = line.measure === null ? null : Number(line.measure);
+      entry.rule_max = line.rule_max === null || line.rule_max === undefined ? null : Number(line.rule_max);
+      entry.rule_band = line.rule_band ?? null;
+      entry.rule_kind = line.rule_kind ?? null;
+      entry.size_name = line.size_name ?? "";
+    }
+    // A model that failed to match on ANY bill is a gap worth surfacing, even
+    // if another bill of it did land in a band.
+    entry.matched = entry.matched
+      && line.configured_points !== null && line.configured_points !== undefined;
     items.set(key, entry);
   }
   return [...items.values()];
@@ -102,7 +122,7 @@ export async function POST(request) {
     // and the per-product detail this route serves. Either one left behind
     // would answer the next question with the figures just discarded.
     await clearCache(`incentive-sold:v1:${year}|${month}`);
-    await clearCache(`incentive-sold:items:v1:${year}|${month}`);
+    await clearCache(`incentive-sold:items:v2:${year}|${month}`);
     return NextResponse.json({ success: true, data: { year, month, cleared: true } });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
@@ -123,7 +143,7 @@ export async function GET(request) {
       return NextResponse.json({ success: false, message: "category is required" }, { status: 400 });
     }
 
-    const key = `incentive-sold:items:v1:${year}|${month}`;
+    const key = `incentive-sold:items:v2:${year}|${month}`;
     if (sp.get("nocache") === "1") await clearCache(key);
     const all = await swrCache(key, { ttl: 120_000, staleTtl: 6 * 3_600_000 },
       () => loadMatches({ year, month }));
