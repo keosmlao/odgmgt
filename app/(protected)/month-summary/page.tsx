@@ -27,7 +27,13 @@ type Column = { key: string; group: string; label: string };
 type Group = { key: string; label: string };
 
 type Payload = {
-  meta: { year: number; month: number; last_year: number };
+  meta: {
+    year: number;
+    month: number;
+    last_year: number;
+    /** Latest sale date behind the numbers — blank if the source is empty. */
+    data_through?: string | null;
+  };
   groups: Group[];
   columns: Column[];
   sections: Section[];
@@ -63,6 +69,9 @@ const SECTION_TINT: Record<string, string> = {
   full: "",
 };
 
+/** ເດືອນ/ປີ ທີ່ເລືອກຄ້າງໄວ້ ເມື່ອ refresh ໜ້າ. */
+const PERIOD_KEY = "odg_month_summary_period";
+
 const SECTION_HEAD: Record<string, string> = {
   month: "bg-[#003361] text-white",
   ytd: "bg-[#2b70b5] text-white",
@@ -81,11 +90,37 @@ export default function MonthSummary() {
   const [error, setError] = useState("");
   const [data, setData] = useState<Payload | null>(null);
 
-  const load = async () => {
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PERIOD_KEY) || "null");
+      if (saved && saved.year && saved.month) {
+        setYear(String(saved.year));
+        setMonth(String(saved.month));
+      }
+    } catch {
+      localStorage.removeItem(PERIOD_KEY);
+    }
+    setRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!restored) return;
+    localStorage.setItem(PERIOD_KEY, JSON.stringify({ year, month }));
+  }, [restored, year, month]);
+
+  /**
+   * Opening the page tops the rollup up when new sales have landed; the
+   * Refresh button rebuilds it outright, so a stale number can always be
+   * cleared by hand rather than waited out.
+   */
+  const load = async (force = false) => {
     setLoading(true);
     setError("");
     try {
-      const res = await api.get("/month-summary", { params: { year, month } });
+      const res = await api.get("/month-summary", {
+        params: force ? { year, month, refresh: 1 } : { year, month },
+      });
       if (res.data?.success) setData(res.data.data);
       else {
         setData(null);
@@ -100,9 +135,10 @@ export default function MonthSummary() {
   };
 
   useEffect(() => {
+    if (!restored) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month]);
+  }, [restored, year, month]);
 
   const years = useMemo(() => {
     const current = new Date().getFullYear();
@@ -235,7 +271,10 @@ export default function MonthSummary() {
               {t("monthSummary.title")}
             </h1>
             <p className="page-sub">
-              {data ? `${MONTHS[data.meta.month - 1]} ${data.meta.year} · vs ${data.meta.last_year}` : t("app.loading")}
+              {data
+                ? `${MONTHS[data.meta.month - 1]} ${data.meta.year} · vs ${data.meta.last_year}` +
+                  (data.meta.data_through ? ` · ${t("monthSummary.dataThrough")} ${data.meta.data_through}` : "")
+                : t("app.loading")}
             </p>
           </div>
           <div className="flex items-end gap-2">
@@ -271,8 +310,9 @@ export default function MonthSummary() {
               <Download size={13} /> {t("app.exportCsv")}
             </button>
             <button
-              onClick={load}
+              onClick={() => load(true)}
               className="btn"
+              disabled={loading}
             >
               <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> {t("monthSummary.refresh")}
             </button>

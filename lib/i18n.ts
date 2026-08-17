@@ -259,6 +259,7 @@ const dict: Record<string, Record<Locale, string>> = {
   "monthSummary.month": { lo: "ເດືອນ", th: "เดือน", en: "Month" },
   "monthSummary.refresh": { lo: "ໂຫຼດໃໝ່", th: "รีเฟรช", en: "Refresh" },
   "monthSummary.totalCompany": { lo: "ລວມທັງບໍລິສັດ", th: "รวมทั้งบริษัท", en: "Total company" },
+  "monthSummary.dataThrough": { lo: "ຂໍ້ມູນຮອດ", th: "ข้อมูลถึง", en: "Data through" },
   "monthSummary.staff": { lo: "ພະນັກງານ", th: "พนักงาน", en: "Staff" },
   "monthSummary.note": {
     lo: "ACT ຈາກ odg_sale_detail · Target ຈາກ odg_sales_target · ROY (ເດືອນທີ່ຍັງເຫຼືອ) ໃຊ້ Target ເປັນ FC · ບໍລິການແຍກ Project ຕາມເປົ້າຄົງທີ່ຕໍ່ເດືອນ",

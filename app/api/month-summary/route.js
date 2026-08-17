@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { rows } from "@/lib/db";
 import { parseIntSafe, safeDiv } from "@/lib/helpers";
 import { MONTHLY_TABLE } from "@/lib/sale-monthly-sql.mjs";
+import { ensureFreshRollup } from "@/lib/sale-rollup";
 
 /**
  * Company summary in the layout of the monthly Excel report:
@@ -87,8 +88,12 @@ function normalizeTargetChannel(value) {
   return raw.toUpperCase() === "ALL" ? "ALL" : "OTHER";
 }
 
+/**
+ * Keyed by year·month·rollup-build, so a rebuilt rollup retires its own
+ * entries instead of serving numbers the refresh already superseded.
+ */
 const cache = new Map();
-const TTL = 180_000;
+const CACHE_MAX = 24;
 
 const bucketKey = (bu, channel, month) => `${bu}|${channel}|${month}`;
 
@@ -175,11 +180,17 @@ export async function GET(request) {
     const year = parseIntSafe(sp.get("year"), previous.getFullYear());
     const month = Math.min(12, Math.max(1, parseIntSafe(sp.get("month"), previous.getMonth() + 1)));
 
-    const cacheKey = `${year}|${month}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.ts < TTL) return NextResponse.json(cached.data);
-
     const lastYear = year - 1;
+
+    // Opening the page tops the rollup up when the source has moved; the
+    // Refresh button (?refresh=1) rebuilds unconditionally.
+    const force = /^(1|true|force)$/i.test(String(sp.get("refresh") || ""));
+    const freshness = await ensureFreshRollup([year, lastYear], { force });
+
+    const cacheKey = `${year}|${month}|${freshness.refreshed_at}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return NextResponse.json(cached);
+
     // Reads the pre-aggregated rollup (a few thousand rows) instead of scanning
     // odg_sale_detail; refreshed by scripts/refresh-sale-monthly.mjs.
     const actualSql = `
@@ -266,6 +277,9 @@ export async function GET(request) {
           last_year: lastYear,
           service_project_monthly_target: SERVICE_PROJECT_MONTHLY_TARGET,
           generated_at: new Date().toISOString(),
+          /** Latest sale date behind these numbers, and when the rollup was built. */
+          data_through: freshness.data_through,
+          rollup_refreshed_at: freshness.refreshed_at,
         },
         groups: GROUPS,
         columns: COLUMNS.map(({ key, group, label }) => ({ key, group, label })),
@@ -280,7 +294,8 @@ export async function GET(request) {
       },
     };
 
-    cache.set(cacheKey, { ts: Date.now(), data: result });
+    if (cache.size >= CACHE_MAX) cache.clear();
+    cache.set(cacheKey, result);
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
