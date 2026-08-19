@@ -14,6 +14,22 @@ const MONTHS = [
 const fmt = (v: number) => v > 0 ? v.toLocaleString("en-US") : "–";
 
 /**
+ * Resolve a multi-select where ALL is exclusive of everything else.
+ *
+ * Which way it resolves depends on what just changed: adding a district to a
+ * selection that already reads ALL means "these districts, not the whole
+ * province", while adding ALL to a list of districts means the whole province.
+ * Deciding on `next.includes("ALL")` alone made the district picker impossible
+ * to use — it starts at ALL, so every pick fell straight back to it.
+ */
+const exclusiveAll = (prev: string[], next: string[]) => {
+  if (!next.length) return [];
+  if (next.includes("ALL") && !prev.includes("ALL")) return ["ALL"];
+  const rest = next.filter(v => v !== "ALL");
+  return rest.length ? rest : ["ALL"];
+};
+
+/**
  * The month being lived through. The grid is a whole year wide, and the column
  * that decides today's decisions is somewhere in the middle of it.
  */
@@ -160,7 +176,7 @@ export default function SalesAssignment() {
     // not eighteen rows — the reports already read 'ALL' as "any province", and
     // one row per province would have to be re-cut every time a province is
     // added. So ALL replaces the individual picks rather than joining them.
-    const next = vals.includes("ALL") ? ["ALL"] : vals;
+    const next = exclusiveAll(form.provinceCodes, vals);
     setForm(f => ({ ...f, provinceCodes: next, districtCode: "ALL" }));
     if (next.length === 1 && isCapital(next)) { try { const r = await api.get("/amphur", { params: { province_code: next[0] } }); setDistricts(r.data?.data || []); } catch { setDistricts([]); } }
     else setDistricts([]);
@@ -396,8 +412,14 @@ export default function SalesAssignment() {
                         options={districtOptions}
                         placeholder={t("app.all")}
                         // Picking ALL means the whole province, so it replaces any
-                        // districts rather than sitting alongside them.
-                        onChange={v => setForm(f => ({ ...f, districtCode: (v.includes("ALL") || !v.length ? "ALL" : v) as any }))}
+                        // districts rather than sitting alongside them — and
+                        // picking a district clears ALL, which is where the field
+                        // starts. Clearing the field falls back to ALL.
+                        onChange={v => setForm(f => {
+                          const prev = Array.isArray(f.districtCode) ? f.districtCode : [f.districtCode];
+                          const next = exclusiveAll(prev, v);
+                          return { ...f, districtCode: (next.length && next[0] !== "ALL" ? next : "ALL") as any };
+                        })}
                       />
                     </div>
                   )}
