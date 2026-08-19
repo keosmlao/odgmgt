@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { rows, one, query } from "@/lib/db";
+import { rows, query } from "@/lib/db";
 import { parseIntSafe } from "@/lib/helpers";
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
 import { SELLER_TABLE } from "@/lib/sale-monthly-sql.mjs";
@@ -90,31 +90,36 @@ export async function GET(request) {
       GROUP BY b.id, sm.channel_code`;
 
     /**
-     * ເປົ້າ is odg_sales_target and nothing else: every figure in the column is a
-     * sum of that table's own target_amount values, never divided and never
-     * scaled.
+     * ເປົ້າ is odg_sales_target and nothing else: every figure in the column comes
+     * from that table's own target_amount values, and the board's grand total is
+     * exactly the plan that exists — no more, no less.
      *
-     * That only adds up if each plan row has exactly ONE owner. Several sellers
-     * really do work one district — the assignments were derived from who
-     * actually sold where — and letting each of them claim the district's plan
-     * had the board reading 3.4× the plan that exists. So a plan row goes to its
-     * single best claimant and the others get nothing from it:
+     * That only holds if each plan row is handed out exactly once in total. Several
+     * sellers really do work one district — the assignments were derived from who
+     * actually sold where — and letting each of them claim the district's whole
+     * plan had the board reading 3.4× the plan that exists. So a plan row is
+     * SHARED, not duplicated:
      *
-     *   · the most specific area wins — a district row beats a province-wide one,
-     *     which beats a country-wide one, so a lump is not taken by someone who
-     *     merely happens to overlap it;
-     *   · then the biggest seller of that BU / area / month, because the plan for
-     *     an area belongs with whoever actually works it;
-     *   · then the lowest id, so the answer never depends on row order.
+     *   · the most specific area wins the row outright — a district assignment
+     *     beats a province-wide one, which beats a country-wide one, so a lump is
+     *     not taken by someone who merely happens to overlap it;
+     *   · everyone left standing at that tier splits it evenly. Two sellers on one
+     *     district-month get half each, three get a third each.
      *
-     * MANAGERS own nothing. A manager answers for a whole channel of their BU —
-     * ຂາຍສົ່ງ for a BU manager, ໂຄງການ for the project manager — and that number
-     * is the SUM of what their sellers carry, not a separate allocation. Letting
-     * a manager claim the ຂາຍສົ່ງ rows instead left every wholesale seller under
-     * them reading ເປົ້າ 0, because 89% of a BU's plan is wholesale. So their
-     * figure is returned as `rollup_amount`, which the grid shows on their row
-     * and leaves out of every total — the plan is still counted once, by the
-     * seller who holds it.
+     * The split replaced a winner-takes-all tiebreak on "biggest seller of that
+     * BU / area / month". That rule handed one seller the whole month and the
+     * other nothing, and it flipped between them from month to month as their
+     * sales did — ຂາຍໜ້າຮ້ານ read as one person carrying ກ.ລ and another carrying
+     * ສ.ຫາ–ທ.ວ, which is not how the counter is actually staffed.
+     *
+     * MANAGERS own nothing, so they are not among the sharers. A manager answers
+     * for a whole channel of their BU — ຂາຍສົ່ງ for a BU manager, ໂຄງການ for the
+     * project manager — and that number is the SUM of what their sellers carry,
+     * not a separate allocation. Letting a manager claim the ຂາຍສົ່ງ rows instead
+     * left every wholesale seller under them reading ເປົ້າ 0, because 89% of a BU's
+     * plan is wholesale. So their figure is returned as `rollup_amount`, which the
+     * grid shows on their row and leaves out of every total — the plan is still
+     * counted once, by the sellers who hold it.
      */
     const data = await rows(
       `
@@ -139,13 +144,26 @@ export async function GET(request) {
            AND st.bu_code = b.bu_code
            ${claimMatch}
         ),
-        owner AS (
-          SELECT DISTINCT ON (c.target_id) c.target_id, c.assignment_id, c.target_amount,
-                 c.sale_channel
+        /**
+         * Only the closest claimants stay in the running for a plan row. The
+         * max is taken as a window rather than a correlated subquery so the
+         * claim set is scanned once.
+         */
+        contender AS (
+          SELECT c.*, MAX(c.specificity) OVER (PARTITION BY c.target_id) AS best
           FROM claim c
-          LEFT JOIN act ON act.assignment_id = c.assignment_id
-          ORDER BY c.target_id, c.specificity DESC,
-                   act.amount DESC NULLS LAST, c.assignment_id
+        ),
+        /**
+         * ...and they split it. WHERE runs before the window function, so the
+         * COUNT counts the sharers that survived the tier filter, not every
+         * assignment that overlapped the row.
+         */
+        owner AS (
+          SELECT t.target_id, t.assignment_id, t.sale_channel,
+                 -- ::numeric so a three-way split is a third each, not integer division.
+                 t.target_amount::numeric / COUNT(*) OVER (PARTITION BY t.target_id) AS target_amount
+          FROM contender t
+          WHERE t.specificity = t.best
         ),
         /**
          * The plan a row owns, cut by the channel of the odg_sales_target rows
@@ -249,6 +267,35 @@ export async function GET(request) {
   }
 }
 
+/**
+ * Bulk delete, because a delete on this board is never one row: a seller in a
+ * BU is twelve rows, one per month, and a whole BU is hundreds. Firing one
+ * request per id opened hundreds of parallel connections against a pool of 50,
+ * so some of them failed — and a half-finished delete is what put the rows back
+ * on screen at the next reload. One statement, one round trip, all or nothing.
+ */
+export async function DELETE(request) {
+  try {
+    await ensureSalesAssignmentTable();
+    const payload = await request.json().catch(() => ({}));
+    const ids = (Array.isArray(payload?.ids) ? payload.ids : [])
+      .map((id) => parseIntSafe(id, NaN))
+      .filter((id) => Number.isInteger(id));
+
+    if (!ids.length) {
+      return NextResponse.json({ success: false, message: "ids required" }, { status: 400 });
+    }
+
+    const result = await query(
+      "DELETE FROM public.odg_sales_assignment WHERE id = ANY(%s)",
+      [ids],
+    );
+    return NextResponse.json({ success: true, deleted: result.rowCount });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
 export async function POST(request) {
   try {
     await ensureSalesAssignmentTable();
@@ -256,51 +303,76 @@ export async function POST(request) {
     const saleId = payload.sale_id || payload.sale_code || payload.sale;
     const saleName = payload.sale_name || payload.name || null;
     const buCode = payload.bu_code || payload.bu;
-    const provinceCode = payload.province_code || payload.province;
-    const month = payload.month;
-    const districtCode = payload.district_code || payload.district || "ALL";
     const channelCodes = payload.channel_codes || [];
 
-    if (!(saleId && buCode && provinceCode && month)) {
+    /**
+     * One submit is one seller, in one BU, with one set of channels: only the
+     * area and the month change from row to row. So the varying three arrive as
+     * `rows` and go in as three parallel arrays, and a whole year across several
+     * provinces — each with its own districts — is a single INSERT rather than a
+     * hundred parallel requests against a pool of fifty.
+     *
+     * A bare object still works, because one row is the same shape with a list
+     * of one.
+     */
+    const list = Array.isArray(payload.rows) && payload.rows.length
+      ? payload.rows
+      : [{
+          province_code: payload.province_code || payload.province,
+          district_code: payload.district_code || payload.district,
+          month: payload.month,
+        }];
+
+    const provinces = [];
+    const districts = [];
+    const months = [];
+    for (const row of list) {
+      const province = row.province_code || row.province;
+      const district = row.district_code || row.district || "ALL";
+      const month = parseIntSafe(row.month, NaN);
+      if (!province) {
+        return NextResponse.json(
+          { success: false, message: "province_code is required" },
+          { status: 400 },
+        );
+      }
+      if (!Number.isInteger(month) || month < 1 || month > 12) {
+        return NextResponse.json(
+          { success: false, message: "month \u0e15\u0e49\u0e2d\u0e07\u0ea2\u0eb9\u0ec8\u0ea5\u0eb0\u0eab\u0ea7\u0ec8\u0eb2\u0e87 1-12" },
+          { status: 400 },
+        );
+      }
+      provinces.push(String(province));
+      districts.push(String(district));
+      months.push(month);
+    }
+
+    if (!(saleId && buCode && provinces.length)) {
       return NextResponse.json(
         { success: false, message: "sale_id, bu_code, province_code, month are required" },
         { status: 400 },
       );
     }
 
-    const monthVal = parseIntSafe(month, NaN);
-    if (Number.isNaN(monthVal)) {
-      return NextResponse.json(
-        { success: false, message: "month \u0e15\u0e49\u0e2d\u0e07\u0ec0\u0e9b\u0eb1\u0e99\u0e95\u0ebb\u0ea7\u0ec0\u0ea5\u0e81" },
-        { status: 400 },
-      );
-    }
-    if (monthVal < 1 || monthVal > 12) {
-      return NextResponse.json(
-        { success: false, message: "month \u0e15\u0e49\u0e2d\u0e07\u0ea2\u0eb9\u0ec8\u0ea5\u0eb0\u0eab\u0ea7\u0ec8\u0eb2\u0e87 1-12" },
-        { status: 400 },
-      );
-    }
-
-    const inserted = await one(
+    // DISTINCT, not a client-side dedupe: ON CONFLICT DO UPDATE refuses to touch
+    // the same row twice in one statement, so a repeated area/month pair would
+    // abort the whole insert rather than collapse into one row.
+    const inserted = await rows(
       `
         INSERT INTO public.odg_sales_assignment
-        (sale_id, sale_name, bu_code, province_code, district_code, channel_codes, month)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+          (sale_id, sale_name, bu_code, province_code, district_code, channel_codes, month)
+        SELECT DISTINCT %s::text, %s::text, %s::text, t.province, t.district, %s::text[], t.month
+        FROM unnest(%s::text[], %s::text[], %s::int[]) AS t(province, district, month)
         ON CONFLICT (sale_id, bu_code, province_code, district_code, month)
         DO UPDATE SET
           sale_name = EXCLUDED.sale_name,
-          bu_code = EXCLUDED.bu_code,
-          province_code = EXCLUDED.province_code,
-          district_code = EXCLUDED.district_code,
-          channel_codes = EXCLUDED.channel_codes,
-          month = EXCLUDED.month
+          channel_codes = EXCLUDED.channel_codes
         RETURNING id
       `,
-      [String(saleId), saleName, buCode, provinceCode, districtCode, channelCodes, monthVal],
+      [String(saleId), saleName, buCode, channelCodes, provinces, districts, months],
     );
 
-    return NextResponse.json({ success: true, id: inserted?.id || null });
+    return NextResponse.json({ success: true, count: inserted.length, ids: inserted.map((r) => r.id) });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

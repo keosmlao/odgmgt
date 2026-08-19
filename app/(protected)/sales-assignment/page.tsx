@@ -11,7 +11,12 @@ const MONTHS = [
   { v: 5, l: "May" }, { v: 6, l: "Jun" }, { v: 7, l: "Jul" }, { v: 8, l: "Aug" },
   { v: 9, l: "Sep" }, { v: 10, l: "Oct" }, { v: 11, l: "Nov" }, { v: 12, l: "Dec" },
 ];
-const fmt = (v: number) => v > 0 ? v.toLocaleString("en-US") : "–";
+// Two decimals, because a plan row shared three ways does not divide evenly and
+// the third decimal of a kip is noise in a nine-digit column.
+const fmt = (v: number) => v > 0 ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "–";
+/** Kip runs to nine digits; a projection is a guess and does not deserve them. */
+const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 /**
  * Resolve a multi-select where ALL is exclusive of everything else.
@@ -47,7 +52,10 @@ export default function SalesAssignment() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [provinces, setProvinces] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
+  // Districts keyed by province: several provinces can be assigned in one go and
+  // each carries its own list, so one flat array would belong to whichever
+  // province was picked last.
+  const [amphurs, setAmphurs] = useState<Record<string, any[]>>({});
   const [buList, setBuList] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +63,10 @@ export default function SalesAssignment() {
   const [deleting, setDeleting] = useState(false);
   const [expanded, setExpanded] = useState(new Set<string>());
   const [drawer, setDrawer] = useState(false);
-  const [form, setForm] = useState({ saleId: "", saleName: "", buCode: "", provinceCodes: [] as string[], districtCode: "ALL", channelCodes: [] as string[], months: [] as number[] });
+  // `districts[provinceCode]` empty (or missing) means the whole province — the
+  // same thing district_code = 'ALL' means in the table.
+  const blankForm = { saleId: "", saleName: "", buCode: "", provinceCodes: [] as string[], districts: {} as Record<string, string[]>, channelCodes: [] as string[], months: [] as number[] };
+  const [form, setForm] = useState(blankForm);
 
   const loadAll = async () => {
     setLoading(true);
@@ -94,8 +105,23 @@ export default function SalesAssignment() {
       total: 0, months: new Array(13).fill(0),
       roll: 0, rollMonths: new Array(13).fill(0),
       actual: 0, actMonths: new Array(13).fill(0),
-      ids: [],
     });
+    /**
+     * Every assignment row a node stands for, found by BU / seller / province /
+     * district and NOT by the channel branch the node is reached through.
+     *
+     * A row carries `channel_codes`, not one channel, so the same row appears
+     * under several channels at once. Deleting only the ids that fed the branch
+     * that was clicked left the row's other channels standing, and the person
+     * was still on the board after being deleted. Scoping the delete to what a
+     * row actually is makes it complete whichever channel it was clicked from.
+     */
+    const scopeIds = new Map<string, number[]>();
+    const scope = (key: string, id: number) => {
+      const seen = scopeIds.get(key);
+      if (!seen) scopeIds.set(key, [id]);
+      else if (!seen.includes(id)) seen.push(id);
+    };
     const chName = (code: string) =>
       code === "ALL" ? t("assignment.everyChannel") : chanMap.get(code) || code;
     /**
@@ -125,36 +151,39 @@ export default function SalesAssignment() {
     for (const item of assignments) {
       const bk = String(item.bu_code), sk = String(item.sale_id), pk = String(item.province_code), dk = item.district_code || "ALL";
       const m = Number(item.month);
+      scope(bk, item.id);
+      scope(`${bk}/${sk}`, item.id);
+      scope(`${bk}/${sk}/${pk}`, item.id);
+      scope(`${bk}/${sk}/${pk}/${dk}`, item.id);
       for (const sl of slices(item)) {
         const ck = sl.code;
-        // Every node keeps the assignment rows underneath it, so a delete button
-        // removes exactly what its row shows — no re-deriving the filter later.
-        // An assignment spanning two channels lands under both, hence the dedupe
-        // in removeNode.
         const add = (node: any) => {
           node.total += sl.val; node.months[m] += sl.val;
           node.actual += sl.act; node.actMonths[m] += sl.act;
-          node.ids.push(item.id);
         };
-        if (!root[bk]) root[bk] = { key: bk, name: buMap.get(bk) || bk, ...blank(), children: {} };
+        if (!root[bk]) root[bk] = { key: bk, scopeKey: bk, name: buMap.get(bk) || bk, ...blank(), children: {} };
         add(root[bk]);
         const bu = root[bk];
+        // No scopeKey on the channel: a row is not owned by one channel, so
+        // "delete this channel" cannot be answered without deleting rows that
+        // serve the others too.
         if (!bu.children[ck]) bu.children[ck] = { key: `${bk}|${ck}`, name: chName(ck), ...blank(), children: {} };
         add(bu.children[ck]);
         // The roll-up stops at the person: BU and channel rows are the plan, not
         // the plan plus their own manager's copy of it.
         const chan = bu.children[ck];
-        if (!chan.children[sk]) chan.children[sk] = { key: `${bk}|${ck}|${sk}`, name: item.sale_name || "Unknown", role: posMap.get(sk), ...blank(), children: {} };
+        if (!chan.children[sk]) chan.children[sk] = { key: `${bk}|${ck}|${sk}`, scopeKey: `${bk}/${sk}`, name: item.sale_name || "Unknown", role: posMap.get(sk), ...blank(), children: {} };
         add(chan.children[sk]); addRoll(chan.children[sk], m, sl.roll);
         const sale = chan.children[sk];
-        if (!sale.children[pk]) sale.children[pk] = { key: `${bk}|${ck}|${sk}|${pk}`, name: pk === "ALL" ? t("assignment.allProvinces") : provMap.get(pk) || pk, ...blank(), children: {} };
+        if (!sale.children[pk]) sale.children[pk] = { key: `${bk}|${ck}|${sk}|${pk}`, scopeKey: `${bk}/${sk}/${pk}`, name: pk === "ALL" ? t("assignment.allProvinces") : provMap.get(pk) || pk, ...blank(), children: {} };
         add(sale.children[pk]); addRoll(sale.children[pk], m, sl.roll);
         const prov = sale.children[pk];
-        if (!prov.children[dk]) prov.children[dk] = { key: `${bk}|${ck}|${sk}|${pk}|${dk}`, name: dk === "ALL" ? t("app.all") : (item.district_name || dk), ...blank(), children: null };
+        if (!prov.children[dk]) prov.children[dk] = { key: `${bk}|${ck}|${sk}|${pk}|${dk}`, scopeKey: `${bk}/${sk}/${pk}/${dk}`, name: dk === "ALL" ? t("app.all") : (item.district_name || dk), ...blank(), children: null };
         add(prov.children[dk]); addRoll(prov.children[dk], m, sl.roll);
       }
     }
-    const toArr = (o: any) => Object.values(o).sort((a: any, b: any) => b.total - a.total);
+    const withIds = (n: any) => ({ ...n, allIds: n.scopeKey ? scopeIds.get(n.scopeKey) || [] : [] });
+    const toArr = (o: any) => Object.values(o).sort((a: any, b: any) => b.total - a.total).map(withIds);
     return toArr(root).map((bu: any) => ({
       ...bu,
       children: toArr(bu.children).map((c: any) => ({
@@ -170,16 +199,31 @@ export default function SalesAssignment() {
   const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   const expandAll = () => { if (expanded.size > 0) { setExpanded(new Set()); } else { const all = new Set<string>(); tree.forEach((bu: any) => { all.add(bu.key); bu.children.forEach((c: any) => { all.add(c.key); c.children.forEach((s: any) => { all.add(s.key); s.children.forEach((p: any) => all.add(p.key)); }); }); }); setExpanded(all); } };
 
-  const isCapital = (codes: string[]) => codes.length === 1 && (codes[0] === "01" || (provMap.get(codes[0]) || "").includes("Capital"));
   const onProvChange = async (vals: string[]) => {
     // A manager covering the whole country is one row with province_code='ALL',
     // not eighteen rows — the reports already read 'ALL' as "any province", and
     // one row per province would have to be re-cut every time a province is
     // added. So ALL replaces the individual picks rather than joining them.
     const next = exclusiveAll(form.provinceCodes, vals);
-    setForm(f => ({ ...f, provinceCodes: next, districtCode: "ALL" }));
-    if (next.length === 1 && isCapital(next)) { try { const r = await api.get("/amphur", { params: { province_code: next[0] } }); setDistricts(r.data?.data || []); } catch { setDistricts([]); } }
-    else setDistricts([]);
+    setForm(f => ({
+      ...f,
+      provinceCodes: next,
+      // Districts already picked for a province that survived the change are
+      // kept: removing a different province should not silently reset them.
+      districts: Object.fromEntries(Object.entries(f.districts).filter(([code]) => next.includes(code))),
+    }));
+    // Districts are offered for every province, not only the capital: erp_amper
+    // carries them for all of them, and a seller working three districts of
+    // Savannakhet was previously written down as working the whole province.
+    const missing = next.filter(code => code !== "ALL" && !amphurs[code]);
+    if (!missing.length) return;
+    const loaded = await Promise.all(missing.map(async code => {
+      try {
+        const r = await api.get("/amphur", { params: { province_code: code } });
+        return [code, r.data?.data || []] as const;
+      } catch { return [code, []] as const; }
+    }));
+    setAmphurs(prev => ({ ...prev, ...Object.fromEntries(loaded) }));
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -187,38 +231,75 @@ export default function SalesAssignment() {
     if (!form.saleId || !form.buCode || !form.provinceCodes.length || !form.months.length) return;
     setSubmitting(true);
     try {
-      const dists = form.provinceCodes.length === 1 && isCapital(form.provinceCodes) ? (Array.isArray(form.districtCode) ? form.districtCode : [form.districtCode]) : ["ALL"];
-      const tasks = form.provinceCodes.flatMap(prov => form.months.flatMap(m => dists.map(dist =>
-        api.post("/sales-assignments", { sale_id: form.saleId, sale_name: form.saleName, bu_code: form.buCode, province_code: prov, district_code: dist, channel_codes: form.channelCodes, month: m })
-      )));
-      await Promise.all(tasks);
+      // Each province carries its own districts, so the capital can be three
+      // districts while Vientiane province is the whole thing — in one save.
+      const rows = form.provinceCodes.flatMap(prov => {
+        const picked = prov === "ALL" ? [] : form.districts[prov] || [];
+        const dists = picked.length ? picked : ["ALL"];
+        return form.months.flatMap(month => dists.map(district => ({ province_code: prov, district_code: district, month })));
+      });
+      await api.post("/sales-assignments", {
+        sale_id: form.saleId, sale_name: form.saleName, bu_code: form.buCode,
+        channel_codes: form.channelCodes, rows,
+      });
       await loadAll();
       setDrawer(false);
-      setForm({ saleId: "", saleName: "", buCode: "", provinceCodes: [], districtCode: "ALL", channelCodes: [], months: [] });
+      setForm(blankForm);
     } catch { alert("Error saving"); }
     finally { setSubmitting(false); }
   };
 
   /**
-   * Removes every assignment row beneath a node — "this seller, in this BU" is
-   * twelve rows, one per month, and deleting them one at a time was only
-   * possible by calling the API by hand.
+   * Removes every assignment row a node stands for — "this seller, in this BU"
+   * is twelve rows, one per month, and a whole BU is hundreds.
+   *
+   * One request, not one per id: a fan of hundreds of parallel DELETEs against
+   * a pool of 50 connections dropped some of them, and the survivors were back
+   * on the board at the next load. The reload runs in `finally` too, so a delete
+   * that half-fails still leaves the screen showing what the database holds
+   * rather than what the click hoped for.
    */
   const removeNode = async (node: any) => {
-    const ids: number[] = [...new Set(node.ids as number[])].filter(Boolean);
+    const ids: number[] = (node.allIds || []).filter(Boolean);
     if (!ids.length || deleting) return;
     // One assignment row carries every channel it names, so it is removed from
     // all of them at once — not only the channel branch the button was clicked in.
     if (!window.confirm(`${t("assignment.confirmDelete")}\n\n${node.name} — ${ids.length} ${t("assignment.rows")}\n\n${t("assignment.deleteSpansChannels")}`)) return;
     setDeleting(true);
     try {
-      await Promise.all(ids.map(id => api.delete(`/sales-assignments/${id}`)));
-      await loadAll();
+      await api.delete("/sales-assignments", { data: { ids } });
     } catch { alert(t("app.error")); }
-    finally { setDeleting(false); }
+    finally { await loadAll(); setDeleting(false); }
   };
 
+  /**
+   * The year read three ways, because "58% of target" says nothing on its own.
+   *
+   *   grandTotal — the whole year's plan
+   *   planToDate — the part of it the calendar has already reached, taken from
+   *                the monthly plan itself rather than months-elapsed ÷ 12: the
+   *                plan is not flat, and BU 12 alone puts a third of its year in
+   *                March–May
+   *   projected  — what the year lands on if the rest of it sells at the pace
+   *                this much of the plan has been sold at
+   */
   const grandTotal = tree.reduce((s: number, b: any) => s + b.total, 0);
+  const grandActual = tree.reduce((s: number, b: any) => s + b.actual, 0);
+  const planToDate = MONTHS.reduce((s, m) => m.v <= THIS_MONTH ? s + monthTotal(tree, m.v, "months") : s, 0);
+  const pace = grandTotal > 0 ? planToDate / grandTotal : 0;
+  const achieved = grandTotal > 0 ? grandActual / grandTotal : 0;
+  const vsPlan = planToDate > 0 ? grandActual / planToDate : 0;
+  const projected = pace > 0 ? grandActual / pace : 0;
+  const sellers = new Set(assignments.map((a: any) => String(a.sale_id))).size;
+  // Actuals can legitimately be absent — a year that has not started, or a
+  // rollup that has not run. Claiming 0% then would be a lie about the selling
+  // rather than a fact about the data, so the hero falls back to the plan alone.
+  const hasActual = grandActual > 0;
+  const tone = vsPlan >= 1
+    ? { chip: "bg-[var(--pos-bg)] text-[var(--pos)]", bar: "bg-[var(--pos)]", label: t("kpi.aheadOfPlan") }
+    : vsPlan >= 0.8
+      ? { chip: "bg-[var(--warn-bg)] text-[var(--warn)]", bar: "bg-[var(--warn)]", label: t("kpi.watch") }
+      : { chip: "bg-[var(--neg-bg)] text-[var(--neg)]", bar: "bg-[var(--neg)]", label: t("assignment.behindPlan") };
   const labels = { target: t("kpi.target"), rollup: `${t("kpi.target")} (ລວມ)` };
 
   // Level styles
@@ -234,7 +315,9 @@ export default function SalesAssignment() {
     { bg: "bg-[var(--surface)]", text: "text-[var(--muted)]", badge: "bg-[var(--surface-2)] text-[var(--muted)]  " },
   ];
   const letters = ["", "B", "C", "S", "P", "D"];
-  const indents = ["", "pl-3", "pl-7", "pl-11", "pl-16", "pl-20"];
+  // Tightened with the 220px Structure column: at pl-20 a district name had
+  // 60px of the column left to sit in, which is not a name.
+  const indents = ["", "pl-2", "pl-5", "pl-8", "pl-11", "pl-14"];
 
   // Option lists for the drawer's dropdowns. The seller carries their code in
   // the label: the roster repeats names, and the code is what gets stored.
@@ -253,13 +336,13 @@ export default function SalesAssignment() {
     ],
     [provinces, t],
   );
-  const districtOptions: Option[] = useMemo(
-    () => [
-      { value: "ALL", label: t("app.all") },
-      ...districts.map((d: any) => ({ value: String(d.code), label: d.name_1 || String(d.code) })),
-    ],
-    [districts, t],
-  );
+  const districtOptions = useMemo(() => {
+    const build = (rows: any[]): Option[] => [
+      { value: "ALL", label: t("assignment.wholeProvince") },
+      ...rows.map((d: any) => ({ value: String(d.code), label: d.name_1 || String(d.code) })),
+    ];
+    return Object.fromEntries(Object.entries(amphurs).map(([code, rows]) => [code, build(rows)]));
+  }, [amphurs, t]);
   const channelOptions: Option[] = useMemo(
     () => channels.map((c: any) => ({ value: String(c.code), label: c.name_1 || String(c.code) })),
     [channels],
@@ -287,28 +370,90 @@ export default function SalesAssignment() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1480px] px-5 py-6 lg:px-8">
+      {/* No max-width, unlike the other boards: this one is a whole year wide and
+          the columns that matter are the late months, so every pixel of the
+          screen is a month the reader does not have to scroll to. */}
+      <main className="w-full px-5 py-6 lg:px-8">
 
-        {/* Summary cards */}
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">Total Assignments</p>
-            <p className="mt-1 text-xl font-bold text-[var(--ink)]">{assignments.length}</p>
+        {/* ══ Summary ══
+            One card, not a row of tiles: the year's selling, the plan it is
+            measured against and the pace it is running at are one sentence, and
+            splitting them into separate boxes made the reader do the division
+            themselves. The bar carries both halves — the fill is what was sold,
+            the notch is where the plan says today should be. */}
+        <section className="mb-4 overflow-hidden rounded-[var(--r-lg)] border border-[var(--line)]/70 bg-[var(--surface)] shadow-sm">
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-[var(--muted)]">
+                  {hasActual ? t("assignment.sold") : t("assignment.yearPlan")}
+                </p>
+                <p className="mt-1.5 flex items-baseline gap-1.5">
+                  <span className="text-[28px] font-bold leading-none tracking-tight tabular-nums text-[var(--ink)]">
+                    {(hasActual ? grandActual : grandTotal).toLocaleString("en-US")}
+                  </span>
+                  <span className="text-xs font-medium text-[var(--muted)]">{t("transport.kip")}</span>
+                </p>
+              </div>
+              {hasActual && (
+                <div className={`shrink-0 rounded-[var(--r-md)] px-3 py-2 text-center ${tone.chip}`}>
+                  <p className="text-lg font-bold leading-none tabular-nums">{pct(vsPlan)}</p>
+                  <p className="mt-1 text-[10px] font-medium leading-none">{tone.label}</p>
+                </div>
+              )}
+            </div>
+
+            {hasActual && (
+              <>
+                {/* The notch sits inside the clipped track on purpose: at the very
+                    start or end of the year it should disappear into the cap
+                    rather than float past it. */}
+                <div className="relative mt-4 h-2.5 w-full overflow-hidden rounded-full bg-[var(--surface-2)] ring-1 ring-inset ring-[var(--line-soft)]">
+                  <div className={`h-full rounded-full transition-[width] duration-500 ${tone.bar}`} style={{ width: `${Math.min(100, Math.max(0, achieved * 100))}%` }} />
+                  <div
+                    className="absolute inset-y-0 w-[3px] rounded-full bg-[var(--ink)]/70"
+                    style={{ left: `calc(${Math.min(100, Math.max(0, pace * 100))}% - 1.5px)` }}
+                    title={`${t("kpi.target")} ${MONTHS[THIS_MONTH - 1]?.l} — ${planToDate.toLocaleString("en-US")}`}
+                  />
+                </div>
+
+                <div className="mt-2.5 flex items-center justify-between gap-3 text-[11px]">
+                  <span className="text-[var(--muted)]">
+                    {t("kpi.target")} <span className="font-semibold tabular-nums text-[var(--ink-soft)]">{grandTotal.toLocaleString("en-US")}</span> {t("transport.kip")}
+                  </span>
+                  <span className="text-[var(--muted)]">
+                    {t("assignment.eoy")} <span className="font-semibold tabular-nums text-[var(--ink-soft)]">{compact.format(projected)}</span>
+                  </span>
+                </div>
+              </>
+            )}
           </div>
-          <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">{t("kpi.target")}</p>
-            <p className="mt-1 text-xl font-bold text-[var(--brand)]">{grandTotal.toLocaleString("en-US")}</p>
+
+          <div className="grid grid-cols-3 divide-x divide-[var(--line-soft)] border-t border-[var(--line-soft)] bg-[var(--surface-2)]/60">
+            {[
+              { n: assignments.length, unit: t("assignment.rows"), label: t("assignment.count") },
+              { n: sellers, unit: t("assignment.people"), label: t("assignment.sellers") },
+              { n: tree.length, unit: t("assignment.units"), label: t("assignment.bus") },
+            ].map(stat => (
+              <div key={stat.label} className="px-4 py-3 text-center">
+                <p className="flex items-baseline justify-center gap-1">
+                  <span className="text-lg font-bold leading-none tabular-nums text-[var(--ink)]">{stat.n.toLocaleString("en-US")}</span>
+                  <span className="text-[10px] text-[var(--muted)]">{stat.unit}</span>
+                </p>
+                <p className="mt-1 text-[10px] text-[var(--muted)]">{stat.label}</p>
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
 
         {/* Pivot Table */}
-        <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] shadow-sm /70">
+        <div className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--line)]/70 bg-[var(--surface)] shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-[var(--brand-deep)] text-white">
-                  <th className="sticky left-0 z-10 bg-[var(--brand-deep)] px-4 py-2.5 text-left font-medium" style={{ minWidth: 280 }}>Structure</th>
-                  <th className="sticky left-[280px] z-10 bg-[var(--brand-deep)] px-3 py-2.5 text-left font-medium" style={{ minWidth: 74 }} />
+                  <th className="sticky left-0 z-10 bg-[var(--brand-deep)] px-4 py-2.5 text-left font-medium" style={{ minWidth: 220 }}>Structure</th>
+                  <th className="sticky left-[220px] z-10 bg-[var(--brand-deep)] px-3 py-2.5 text-left font-medium" style={{ minWidth: 74 }} />
                   <th className="border-l border-[var(--line)] px-2 py-2.5 text-right font-medium" style={{ minWidth: 92 }}>Total</th>
                   {MONTHS.map(m => (
                     <th
@@ -337,7 +482,7 @@ export default function SalesAssignment() {
                     <td className="sticky left-0 z-10 bg-[var(--surface-2)] px-4 align-top text-sm text-[var(--ink)]">
                       <span className="inline-block py-3">Grand Total</span>
                     </td>
-                    <td className="sticky left-[280px] z-10 bg-[var(--surface-2)] px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)]">{labels.target}</td>
+                    <td className="sticky left-[220px] z-10 bg-[var(--surface-2)] px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)]">{labels.target}</td>
                     <td className="border-l border-[var(--line)] px-2 py-1.5 text-right tabular-nums font-bold text-[var(--brand)]">{fmt(grandTotal)}</td>
                     {MONTHS.map(m => <td key={m.v} className={`px-2 py-1.5 text-right tabular-nums text-[var(--ink)]${nowCol(m.v)}`}>{fmt(monthTotal(tree, m.v, "months"))}</td>)}
                   </tr>
@@ -404,25 +549,35 @@ export default function SalesAssignment() {
                       onChange={onProvChange}
                     />
                   </div>
-                  {districts.length > 0 && (
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-[var(--ink-soft)]">District (Capital)</label>
-                      <MultiSearchSelect
-                        values={Array.isArray(form.districtCode) ? form.districtCode : [form.districtCode]}
-                        options={districtOptions}
-                        placeholder={t("app.all")}
-                        // Picking ALL means the whole province, so it replaces any
-                        // districts rather than sitting alongside them — and
-                        // picking a district clears ALL, which is where the field
-                        // starts. Clearing the field falls back to ALL.
-                        onChange={v => setForm(f => {
-                          const prev = Array.isArray(f.districtCode) ? f.districtCode : [f.districtCode];
-                          const next = exclusiveAll(prev, v);
-                          return { ...f, districtCode: (next.length && next[0] !== "ALL" ? next : "ALL") as any };
-                        })}
-                      />
-                    </div>
-                  )}
+                  {/* One picker per chosen province. ALL covers the country, so it
+                      has no districts to narrow. */}
+                  {form.provinceCodes.filter(code => code !== "ALL").map(code => {
+                    const picked = form.districts[code] || [];
+                    const ready = Boolean(amphurs[code]);
+                    return (
+                      <div key={code}>
+                        <label className="mb-1 block text-xs font-medium text-[var(--ink-soft)]">
+                          {provMap.get(code) || code}
+                        </label>
+                        <MultiSearchSelect
+                          values={picked.length ? picked : ["ALL"]}
+                          options={districtOptions[code] || []}
+                          isDisabled={!ready}
+                          placeholder={ready ? t("assignment.wholeProvince") : t("app.loading")}
+                          // Picking ALL means the whole province, so it replaces
+                          // any districts rather than sitting alongside them — and
+                          // picking a district clears ALL, which is where the field
+                          // starts. Empty is stored as "whole province".
+                          onChange={v => setForm(f => {
+                            const prev = f.districts[code]?.length ? f.districts[code] : ["ALL"];
+                            const next = exclusiveAll(prev, v);
+                            const keep = next.length && next[0] !== "ALL" ? next : [];
+                            return { ...f, districts: { ...f.districts, [code]: keep } };
+                          })}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -473,10 +628,10 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDele
   const isOpen = expanded.has(node.key);
   const hasKids = node.children && node.children.length > 0;
   const s = lvl[level] || lvl[5];
-  // Not on the BU or channel row: "delete every assignment in ໄຟຟ້າ" — or in
-  // ຂາຍສົ່ງ — is never a single intent, and it is the one click nobody could
-  // undo. From the person down, the row is somebody's assignment.
-  const canDelete = level >= 3 && node.ids?.length > 0;
+  // Every row that maps onto whole assignment rows can clear them — BU included.
+  // The channel band is the one that cannot: it has no ids of its own, because a
+  // row belongs to the channels it names rather than to any one of them.
+  const canDelete = node.allIds?.length > 0;
   const click = () => hasKids && toggle(node.key);
   /**
    * A manager owns no plan of their own, so their row shows the roll-up of what
@@ -487,7 +642,7 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDele
   const shown = isRollup ? node.roll : node.total;
   const shownMonths = isRollup ? node.rollMonths : node.months;
   const numCell = "px-2 py-1.5 text-right tabular-nums";
-  const metricCell = "sticky left-[280px] z-10 px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)] whitespace-nowrap";
+  const metricCell = "sticky left-[220px] z-10 px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)] whitespace-nowrap";
 
   return (
     <>
@@ -517,7 +672,7 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDele
                 type="button"
                 onClick={e => { e.stopPropagation(); onDelete(node); }}
                 disabled={deleting}
-                title={`${node.ids.length}`}
+                title={`${node.allIds.length}`}
                 className="ml-auto shrink-0 rounded p-1 text-[var(--muted)] opacity-0 transition hover:bg-[var(--neg-bg)] hover:text-[var(--neg)] focus:opacity-100 group-hover:opacity-100 disabled:opacity-40"
               >
                 <Trash2 size={12} />
