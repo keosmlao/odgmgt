@@ -11,7 +11,7 @@
  * Or on a timer:  POST /api/admin/refresh-summary  (see route)
  */
 import pg from "pg";
-import { MONTHLY_TABLE } from "../lib/sale-monthly-sql.mjs";
+import { MONTHLY_TABLE, SELLER_TABLE_DDL } from "../lib/sale-monthly-sql.mjs";
 
 const pool = new pg.Pool({
   host: process.env.PGHOST,
@@ -51,6 +51,13 @@ await pool.query(`CREATE INDEX IF NOT EXISTS idx_osm_year_month ON ${MONTHLY_TAB
 await pool.query(`CREATE INDEX IF NOT EXISTS idx_osm_bu_channel ON ${MONTHLY_TABLE} (yeardoc, bu_code, channel_code)`);
 
 const years = process.argv.slice(2).filter((arg) => /^\d{4}$/.test(arg)).map(Number);
+
+/* ── Seller × month rollup ────────────────────────────────────────────────
+   Same grain as odg_sale_monthly plus the salesperson, who is only on the bill
+   header (ic_trans.sale_code). Powers the Sales Assignment grid, where a row is
+   one person's area and the seller-less rollup would hand every seller sharing
+   a district that district's whole kip. */
+for (const statement of SELLER_TABLE_DDL) await pool.query(statement);
 
 /* ── Customer × month rollup ──────────────────────────────────────────────
    Powers the repeat/new/reactivated customer panels, which otherwise scan

@@ -75,23 +75,45 @@ export default function SalesAssignment() {
       if (!codes.length) node.allCh = true;
       else for (const code of codes) node.ch.add(String(code));
     };
+    /**
+     * A manager's ເປົ້າ is a roll-up of the plan their sellers hold, not a target
+     * of their own, so it is accumulated in `roll` and never in `total`. Adding
+     * it to `total` would count the same plan twice — once on the manager, once
+     * on the seller who actually carries it.
+     */
+    const addRoll = (node: any, month: number, amount: number) => {
+      node.roll += amount;
+      node.rollMonths[month] += amount;
+    };
+    const blank = () => ({
+      total: 0, months: new Array(13).fill(0),
+      roll: 0, rollMonths: new Array(13).fill(0),
+      actual: 0, actMonths: new Array(13).fill(0),
+      ids: [], ch: new Set(),
+    });
     for (const item of assignments) {
       const bk = String(item.bu_code), sk = String(item.sale_id), pk = String(item.province_code), dk = item.district_code || "ALL";
       const m = Number(item.month), val = Number(item.target_amount || 0), act = Number(item.actual_amount || 0);
+      const roll = Number(item.rollup_amount || 0);
       const codes: string[] = (item.channel_codes || []).map(String).filter(Boolean);
       // Every node keeps the assignment rows underneath it, so a delete button
       // removes exactly what its row shows — no re-deriving the filter later.
-      if (!root[bk]) root[bk] = { key: bk, name: buMap.get(bk) || bk, total: 0, months: new Array(13).fill(0), actual: 0, actMonths: new Array(13).fill(0), ids: [], ch: new Set(), children: {} };
+      if (!root[bk]) root[bk] = { key: bk, name: buMap.get(bk) || bk, ...blank(), children: {} };
       root[bk].total += val; root[bk].months[m] += val; root[bk].actual += act; root[bk].actMonths[m] += act; root[bk].ids.push(item.id); mark(root[bk], codes);
       const bu = root[bk];
-      if (!bu.children[sk]) bu.children[sk] = { key: `${bk}-${sk}`, name: item.sale_name || "Unknown", role: posMap.get(sk), total: 0, months: new Array(13).fill(0), actual: 0, actMonths: new Array(13).fill(0), ids: [], ch: new Set(), children: {} };
+      if (!bu.children[sk]) bu.children[sk] = { key: `${bk}-${sk}`, name: item.sale_name || "Unknown", role: posMap.get(sk), ...blank(), children: {} };
       bu.children[sk].total += val; bu.children[sk].months[m] += val; bu.children[sk].actual += act; bu.children[sk].actMonths[m] += act; bu.children[sk].ids.push(item.id); mark(bu.children[sk], codes);
+      // The roll-up stops at the person: a BU row is the plan, not the plan plus
+      // its own manager's copy of it.
+      addRoll(bu.children[sk], m, roll);
       const sale = bu.children[sk];
-      if (!sale.children[pk]) sale.children[pk] = { key: `${bk}-${sk}-${pk}`, name: pk === "ALL" ? t("assignment.allProvinces") : provMap.get(pk) || pk, total: 0, months: new Array(13).fill(0), actual: 0, actMonths: new Array(13).fill(0), ids: [], ch: new Set(), children: {} };
+      if (!sale.children[pk]) sale.children[pk] = { key: `${bk}-${sk}-${pk}`, name: pk === "ALL" ? t("assignment.allProvinces") : provMap.get(pk) || pk, ...blank(), children: {} };
       sale.children[pk].total += val; sale.children[pk].months[m] += val; sale.children[pk].actual += act; sale.children[pk].actMonths[m] += act; sale.children[pk].ids.push(item.id); mark(sale.children[pk], codes);
+      addRoll(sale.children[pk], m, roll);
       const prov = sale.children[pk];
-      if (!prov.children[dk]) prov.children[dk] = { key: `${bk}-${sk}-${pk}-${dk}`, name: dk === "ALL" ? t("app.all") : (item.district_name || dk), total: 0, months: new Array(13).fill(0), actual: 0, actMonths: new Array(13).fill(0), ids: [], ch: new Set(), children: null };
+      if (!prov.children[dk]) prov.children[dk] = { key: `${bk}-${sk}-${pk}-${dk}`, name: dk === "ALL" ? t("app.all") : (item.district_name || dk), ...blank(), children: null };
       prov.children[dk].total += val; prov.children[dk].months[m] += val; prov.children[dk].actual += act; prov.children[dk].actMonths[m] += act; prov.children[dk].ids.push(item.id); mark(prov.children[dk], codes);
+      addRoll(prov.children[dk], m, roll);
     }
     // Resolve the codes to names once here, so the row component just renders.
     const label = (n: any) => ({
@@ -154,8 +176,7 @@ export default function SalesAssignment() {
   };
 
   const grandTotal = tree.reduce((s: number, b: any) => s + b.total, 0);
-  const grandActual = tree.reduce((s: number, b: any) => s + b.actual, 0);
-  const labels = { target: t("kpi.target"), actual: t("label.actual"), ach: t("assignment.ach") };
+  const labels = { target: t("kpi.target"), rollup: `${t("kpi.target")} (ລວມ)` };
 
   // Level styles
   const lvl = [
@@ -222,7 +243,7 @@ export default function SalesAssignment() {
       <main className="mx-auto max-w-[1480px] px-5 py-6 lg:px-8">
 
         {/* Summary cards */}
-        <div className="mb-4 grid grid-cols-3 gap-3">
+        <div className="mb-4 grid grid-cols-2 gap-3">
           <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">Total Assignments</p>
             <p className="mt-1 text-xl font-bold text-[var(--ink)]">{assignments.length}</p>
@@ -230,17 +251,6 @@ export default function SalesAssignment() {
           <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">{t("kpi.target")}</p>
             <p className="mt-1 text-xl font-bold text-[var(--brand)]">{grandTotal.toLocaleString("en-US")}</p>
-          </div>
-          <div className="rounded-[var(--r-md)] border border-[var(--line)]/70 bg-[var(--surface)] p-4 shadow-sm /70">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">{t("label.actual")}</p>
-              {grandTotal > 0 && (
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${achClass((grandActual / grandTotal) * 100)}`}>
-                  {Math.round((grandActual / grandTotal) * 100)}%
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-xl font-bold text-[var(--ink)]">{grandActual.toLocaleString("en-US")}</p>
           </div>
         </div>
 
@@ -275,33 +285,14 @@ export default function SalesAssignment() {
               </tbody>
               {!loading && tree.length > 0 && (
                 <tfoot className="border-t-2 border-[var(--line)] bg-[var(--surface-2)] font-semibold">
-                  {/* Same three rows as the body, so the eye runs straight down. */}
+                  {/* Same single row as the body, so the eye runs straight down. */}
                   <tr>
-                    <td rowSpan={3} className="sticky left-0 z-10 bg-[var(--surface-2)] px-4 align-top text-sm text-[var(--ink)]">
+                    <td className="sticky left-0 z-10 bg-[var(--surface-2)] px-4 align-top text-sm text-[var(--ink)]">
                       <span className="inline-block py-3">Grand Total</span>
                     </td>
                     <td className="sticky left-[280px] z-10 bg-[var(--surface-2)] px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)]">{labels.target}</td>
-                    <td className="border-l border-[var(--line)] px-2 py-1.5 text-right tabular-nums text-[var(--muted)]">{fmt(grandTotal)}</td>
-                    {MONTHS.map(m => <td key={m.v} className={`px-2 py-1.5 text-right tabular-nums text-[var(--muted)]${nowCol(m.v)}`}>{fmt(monthTotal(tree, m.v, "months"))}</td>)}
-                  </tr>
-                  <tr>
-                    <td className="sticky left-[280px] z-10 bg-[var(--surface-2)] px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)]">{labels.actual}</td>
-                    <td className="border-l border-[var(--line)] px-2 py-1.5 text-right tabular-nums font-bold text-[var(--brand)]">{fmt(grandActual)}</td>
-                    {MONTHS.map(m => <td key={m.v} className={`px-2 py-1.5 text-right tabular-nums text-[var(--ink)]${nowCol(m.v)}`}>{fmt(monthTotal(tree, m.v, "actMonths"))}</td>)}
-                  </tr>
-                  <tr>
-                    <td className="sticky left-[280px] z-10 bg-[var(--surface-2)] px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)]">{labels.ach}</td>
-                    <td className="border-l border-[var(--line)] px-2 py-1.5 text-center">
-                      {grandTotal > 0 && (
-                        <span className={`inline-block min-w-[42px] rounded-full px-1.5 py-0.5 text-[10px] font-bold ${achClass((grandActual / grandTotal) * 100)}`}>
-                          {Math.round((grandActual / grandTotal) * 100)}%
-                        </span>
-                      )}
-                    </td>
-                    {MONTHS.map(m => {
-                      const tt = monthTotal(tree, m.v, "months"), aa = monthTotal(tree, m.v, "actMonths");
-                      return <td key={m.v} className={`px-2 py-1.5 text-right tabular-nums ${pctCls(tt, aa)}${nowCol(m.v)}`}>{pctText(tt, aa)}</td>;
-                    })}
+                    <td className="border-l border-[var(--line)] px-2 py-1.5 text-right tabular-nums font-bold text-[var(--brand)]">{fmt(grandTotal)}</td>
+                    {MONTHS.map(m => <td key={m.v} className={`px-2 py-1.5 text-right tabular-nums text-[var(--ink)]${nowCol(m.v)}`}>{fmt(monthTotal(tree, m.v, "months"))}</td>)}
                   </tr>
                 </tfoot>
               )}
@@ -424,26 +415,6 @@ export default function SalesAssignment() {
   );
 }
 
-/** Achievement of a node, guarding the months with a plan but no sales yet. */
-const pct = (node: any) => (node.total > 0 ? (node.actual / node.total) * 100 : 0);
-
-const achClass = (value: number) =>
-  value >= 100
-    ? "bg-[var(--pos-bg)] text-[var(--pos)]"
-    : value >= 90
-      ? "bg-[var(--warn-bg)] text-[var(--warn)]"
-      : "bg-[var(--neg-bg)] text-[var(--neg)]";
-
-/** Month achievement, blank where nothing was planned. */
-const pctText = (target: number, actual: number) =>
-  target > 0 ? `${Math.round((actual / target) * 100)}%` : "–";
-
-const pctCls = (target: number, actual: number) => {
-  if (!target) return "text-[var(--muted)]";
-  const value = (actual / target) * 100;
-  return value >= 100 ? "text-[var(--pos)]" : value >= 90 ? "text-[var(--warn)]" : "text-[var(--neg)]";
-};
-
 /* ── Recursive tree row component ── */
 function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDelete, deleting, labels }: any) {
   const isOpen = expanded.has(node.key);
@@ -453,16 +424,23 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDele
   // intent, and it is the one click nobody could undo.
   const canDelete = level >= 2 && node.ids?.length > 0;
   const click = () => hasKids && toggle(node.key);
+  /**
+   * A manager owns no plan of their own, so their row shows the roll-up of what
+   * their sellers carry — italic and labelled differently, because it is already
+   * counted inside the BU total above it and must not be read as an addition.
+   */
+  const isRollup = node.total === 0 && node.roll > 0;
+  const shown = isRollup ? node.roll : node.total;
+  const shownMonths = isRollup ? node.rollMonths : node.months;
   const numCell = "px-2 py-1.5 text-right tabular-nums";
   const metricCell = "sticky left-[280px] z-10 px-3 py-1.5 text-left text-[10px] font-medium text-[var(--muted)] whitespace-nowrap";
 
   return (
     <>
-      {/* One entity, three rows: plan, sold, achievement — the shape the
-          monthly close is read in. The name spans all three so the tree still
-          reads as one line per person. */}
-      <tr onClick={click} className={`group cursor-pointer transition-colors hover:bg-[var(--info-bg)]/50 dark:hover:bg-blue-900/10 ${s.bg}`}>
-        <td rowSpan={3} className={`sticky left-0 z-10 py-2 pr-4 align-top ${s.bg} border-b border-r border-[var(--line-soft)]`}>
+      {/* One row per entity: the plan alone. ຍອດຂາຍ and ບັນລຸ are off the board
+          for now — the tree still reads as one line per person. */}
+      <tr onClick={click} className={`group cursor-pointer border-b border-[var(--line)] transition-colors hover:bg-[var(--info-bg)]/50 dark:hover:bg-blue-900/10 ${s.bg}`}>
+        <td className={`sticky left-0 z-10 py-2 pr-4 align-top ${s.bg} border-b border-r border-[var(--line-soft)]`}>
           <div className={`flex items-center gap-2 ${indents[level]}`}>
             {hasKids ? (isOpen ? <ChevronDown size={12} className="text-[var(--muted)]" /> : <ChevronRight size={12} className="text-[var(--muted)]" />) : <span className="w-3" />}
             <span className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${s.badge}`}>{letters[level]}</span>
@@ -508,36 +486,10 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDele
           </div>
         </td>
 
-        <td className={`${metricCell} ${s.bg}`}>{labels.target}</td>
-        <td className={`${numCell} border-l border-[var(--line-soft)] text-[var(--muted)]`}>{fmt(node.total)}</td>
+        <td className={`${metricCell} ${s.bg}`}>{isRollup ? labels.rollup : labels.target}</td>
+        <td className={`${numCell} border-l border-[var(--line-soft)] font-semibold ${isRollup ? "italic text-[var(--muted)]" : level === 1 ? "text-[var(--ink)]" : "text-[var(--ink-soft)]"}`}>{fmt(shown)}</td>
         {MONTHS.map(m => (
-          <td key={m.v} className={`${numCell} text-[var(--muted)]${nowCol(m.v)}`}>{fmt(node.months[m.v])}</td>
-        ))}
-      </tr>
-
-      <tr onClick={click} className={`group cursor-pointer transition-colors hover:bg-[var(--info-bg)]/50 dark:hover:bg-blue-900/10 ${s.bg}`}>
-        <td className={`${metricCell} ${s.bg}`}>{labels.actual}</td>
-        <td className={`${numCell} border-l border-[var(--line-soft)] font-semibold ${level === 1 ? "text-[var(--ink)]" : "text-[var(--ink-soft)]"}`}>{fmt(node.actual)}</td>
-        {MONTHS.map(m => (
-          <td key={m.v} className={`${numCell} font-medium ${node.actMonths[m.v] > 0 ? "text-[var(--ink-soft)]" : "text-[var(--muted)]"}${nowCol(m.v)}`}>{fmt(node.actMonths[m.v])}</td>
-        ))}
-      </tr>
-
-      <tr onClick={click} className={`group cursor-pointer border-b border-[var(--line)] transition-colors hover:bg-[var(--info-bg)]/50 dark:hover:bg-blue-900/10 ${s.bg}`}>
-        <td className={`${metricCell} ${s.bg}`}>{labels.ach}</td>
-        <td className={`${numCell} border-l border-[var(--line-soft)] text-center`}>
-          {node.total > 0 ? (
-            <span className={`inline-block min-w-[42px] rounded-full px-1.5 py-0.5 text-[10px] font-bold ${achClass(pct(node))}`}>
-              {Math.round(pct(node))}%
-            </span>
-          ) : (
-            <span className="text-[10px] text-[var(--muted)]">–</span>
-          )}
-        </td>
-        {MONTHS.map(m => (
-          <td key={m.v} className={`${numCell} ${pctCls(node.months[m.v], node.actMonths[m.v])}${nowCol(m.v)}`}>
-            {pctText(node.months[m.v], node.actMonths[m.v])}
-          </td>
+          <td key={m.v} className={`${numCell} ${isRollup ? "italic text-[var(--muted)]" : shownMonths[m.v] > 0 ? "text-[var(--ink-soft)]" : "text-[var(--muted)]"}${nowCol(m.v)}`}>{fmt(shownMonths[m.v])}</td>
         ))}
       </tr>
 

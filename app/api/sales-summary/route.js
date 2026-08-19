@@ -5,6 +5,9 @@ import { buildFilters } from "@/lib/filters";
 import { parseIntSafe, safeDiv, monthName, formatDate, monthRange, workingDaysBetween, CHANNEL_EXPR } from "@/lib/helpers";
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
 import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
+import { SELLER_TABLE } from "@/lib/sale-monthly-sql.mjs";
+import { claimableChannelSql, isManagerSql } from "@/lib/sales-board-roles.mjs";
+import { ensureFreshRollup } from "@/lib/sale-rollup";
 
 // Cache 3 min
 const cache = new Map();
@@ -68,7 +71,9 @@ export async function GET(request) {
     const assignWhereYtd = assignFiltersYtd.length ? `WHERE ${assignFiltersYtd.join(" AND ")}` : "";
 
     // Channel clause for assignment joins
-    let chClauseD = "", chParamsD = [], chClauseT = "", chParamsT = [];
+    // The rollups store a resolved ar_group code, so they filter on codes; the
+    // plan table keeps whichever spelling was typed into it, code or name.
+    let chClauseT = "", chParamsT = [], chClauseR = "", chParamsR = [];
     // Build from filter channel info
     if (channel && channel !== "ALL") {
       const chRows = await rows(`SELECT code, name_1 FROM public.ar_group WHERE code NOT IN ('10','9','104','105')`);
@@ -77,13 +82,90 @@ export async function GET(request) {
       const vals = typeof channel === "string" ? channel.split(",").filter(Boolean) : [channel];
       const names = [], codes = [];
       for (const v of vals) { names.push(c2n[String(v)] || String(v)); codes.push(n2c[String(v)] || String(v)); }
-      if (names.length) { chClauseD = " AND (d.channel_name = ANY(%s) OR d.argroup = ANY(%s) OR d.argroup_main = ANY(%s) OR d.argroupsub = ANY(%s))"; chParamsD = [names, names, names, names]; }
       if (codes.length || names.length) { chClauseT = " AND (st.sale_channel = ANY(%s) OR st.sale_channel = ANY(%s))"; chParamsT = [codes.length ? codes : names, names.length ? names : codes]; }
+      if (codes.length) { chClauseR = " AND sm.channel_code = ANY(%s)"; chParamsR = [codes]; }
     }
+
+    /**
+     * Per-salesperson figures, both sides keyed on the person and not just on
+     * their area.
+     *
+     * The assignment table now names every seller who actually sells in a
+     * province rather than one owner per area, so several rows can cover the
+     * same district. Summing that district's kip once per row counted the same
+     * sale for each of them, and summing the plan once per row did the same to
+     * the target — the by-sale table added up to several times the company.
+     *
+     * ຍອດຂາຍ therefore comes from the seller-grained rollup (`sm.sale_id =
+     * a.sale_id`), and each plan row is divided between the assignments that
+     * claim it. Both then add back up to the company total however the areas
+     * are cut. Mirrors app/api/sales-assignments — keep the two in step.
+     */
+    const saleActualSql = (scope) => `
+      SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name,
+             COALESCE(SUM(sm.sum_amount),0)::float AS actual
+      FROM public.odg_sales_assignment a
+      LEFT JOIN ${SELLER_TABLE} sm
+        ON sm.yeardoc=%s AND sm.sale_id=a.sale_id AND sm.monthdoc=a.month
+       AND sm.bu_code=a.bu_code
+       AND (a.province_code='ALL' OR sm.province=a.province_code)
+       AND (a.district_code='ALL' OR sm.amper=a.district_code)
+       AND (a.channel_codes IS NULL OR array_length(a.channel_codes,1) IS NULL
+            OR sm.channel_code = ANY(a.channel_codes))
+       ${chClauseR}
+      ${scope}
+      GROUP BY a.sale_id, sale_name`;
+
+    const saleTargetSql = (scope) => `
+      WITH act AS (
+        SELECT b.id AS assignment_id, COALESCE(SUM(sm.sum_amount), 0) AS amount
+        FROM public.odg_sales_assignment b
+        LEFT JOIN ${SELLER_TABLE} sm
+          ON sm.yeardoc=%s AND sm.sale_id=b.sale_id AND sm.monthdoc=b.month
+         AND sm.bu_code=b.bu_code
+         AND (b.province_code='ALL' OR sm.province=b.province_code)
+         AND (b.district_code='ALL' OR sm.amper=b.district_code)
+         AND (b.channel_codes IS NULL OR array_length(b.channel_codes,1) IS NULL
+              OR sm.channel_code = ANY(b.channel_codes))
+        GROUP BY b.id
+      ),
+      claim AS (
+        SELECT b.id AS assignment_id, st.id AS target_id, st.target_amount,
+               (CASE WHEN b.province_code <> 'ALL' THEN 2 ELSE 0 END
+                + CASE WHEN b.district_code <> 'ALL' THEN 1 ELSE 0 END) AS specificity
+        FROM public.odg_sales_assignment b
+        JOIN public.odg_sales_target st
+          ON st.target_year=%s AND st.target_month=b.month AND st.bu_code=b.bu_code
+         -- 'ALL' is a wildcard on either side; see app/api/sales-assignments.
+         AND (b.province_code='ALL' OR st.province_code='ALL' OR st.province_code=b.province_code)
+         AND (b.district_code='ALL' OR st.district_code='ALL' OR st.district_code=b.district_code)
+         AND ${claimableChannelSql("b", "st")}
+         ${chClauseT}
+        -- Managers own no plan row: their number is the sum of what their
+        -- sellers carry, so counting it here would count the plan twice.
+        -- See app/api/sales-assignments for the roll-up the board displays.
+        WHERE NOT ${isManagerSql("b")}
+      ),
+      owner AS (
+        SELECT DISTINCT ON (c.target_id) c.target_id, c.assignment_id, c.target_amount
+        FROM claim c
+        LEFT JOIN act ON act.assignment_id = c.assignment_id
+        ORDER BY c.target_id, c.specificity DESC, act.amount DESC NULLS LAST, c.assignment_id
+      ),
+      share AS (
+        SELECT assignment_id, SUM(target_amount) AS amount FROM owner GROUP BY assignment_id
+      )
+      SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name,
+             COALESCE(SUM(share.amount),0)::float AS target
+      FROM public.odg_sales_assignment a
+      LEFT JOIN share ON share.assignment_id = a.id
+      ${scope}
+      GROUP BY a.sale_id, sale_name`;
 
     // ═══ BATCH 1: All independent queries in parallel (14 → 1 round) ═══
     const [
       , // ensureSalesAssignmentTable
+      , // ensureFreshRollup — by_sale reads the seller-grained rollup
       channelLookup,
       actualRowsRes,
       targetRowsRes,
@@ -99,6 +181,7 @@ export async function GET(request) {
       saleYtdTargetRowsRes,
     ] = await Promise.all([
       ensureSalesAssignmentTable(),
+      ensureFreshRollup([yearVal, yearVal - 1]),
       rows(`SELECT code, name_1 FROM public.ar_group WHERE code NOT IN ('10','9','104','105')`),
       rows(`SELECT ${CHANNEL_EXPR} AS channel, COALESCE(SUM(sum_amount),0)::float AS actual FROM ${SALE_DETAIL_REPORTED} WHERE ${detailWhere} GROUP BY channel`, detailParams),
       rows(`SELECT sale_channel, COALESCE(SUM(target_amount),0)::float AS target FROM public.odg_sales_target WHERE ${targetWhere} GROUP BY sale_channel`, targetParams),
@@ -108,10 +191,10 @@ export async function GET(request) {
       rows(`SELECT province_code, COALESCE(SUM(target_amount),0)::float AS target FROM public.odg_sales_target WHERE ${targetWhere} GROUP BY province_code`, targetParams),
       rows(`SELECT province AS province_code, COALESCE(SUM(sum_amount),0)::float AS actual FROM ${SALE_DETAIL_REPORTED} WHERE ${ytdDetailWhere} GROUP BY province`, ytdDetailParams),
       rows(`SELECT province_code, COALESCE(SUM(target_amount),0)::float AS target FROM public.odg_sales_target WHERE ${ytdTargetWhere} GROUP BY province_code`, ytdTargetParams),
-      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(d.sum_amount),0)::float AS actual FROM public.odg_sales_assignment a LEFT JOIN ${SALE_DETAIL_REPORTED} d ON d.yeardoc=%s AND d.monthdoc=a.month AND d.bu_code=a.bu_code AND (a.province_code='ALL' OR d.province=a.province_code) AND (a.district_code='ALL' OR d.amper=a.district_code) ${chClauseD} ${assignWhere} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsD, ...assignParams]),
-      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(st.target_amount),0)::float AS target FROM public.odg_sales_assignment a LEFT JOIN public.odg_sales_target st ON st.target_year=%s AND st.target_month=a.month AND st.bu_code=a.bu_code AND (a.province_code='ALL' OR st.province_code=a.province_code) AND (a.district_code='ALL' OR st.district_code=a.district_code) ${chClauseT} ${assignWhere} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsT, ...assignParams]),
-      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(d.sum_amount),0)::float AS actual FROM public.odg_sales_assignment a LEFT JOIN ${SALE_DETAIL_REPORTED} d ON d.yeardoc=%s AND d.monthdoc=a.month AND d.bu_code=a.bu_code AND (a.province_code='ALL' OR d.province=a.province_code) AND (a.district_code='ALL' OR d.amper=a.district_code) ${chClauseD} ${assignWhereYtd} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsD, ...assignParamsYtd]),
-      rows(`SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name, COALESCE(SUM(st.target_amount),0)::float AS target FROM public.odg_sales_assignment a LEFT JOIN public.odg_sales_target st ON st.target_year=%s AND st.target_month=a.month AND st.bu_code=a.bu_code AND (a.province_code='ALL' OR st.province_code=a.province_code) AND (a.district_code='ALL' OR st.district_code=a.district_code) ${chClauseT} ${assignWhereYtd} GROUP BY a.sale_id, sale_name`, [yearVal, ...chParamsT, ...assignParamsYtd]),
+      rows(saleActualSql(assignWhere), [yearVal, ...chParamsR, ...assignParams]),
+      rows(saleTargetSql(assignWhere), [yearVal, yearVal, ...chParamsT, ...assignParams]),
+      rows(saleActualSql(assignWhereYtd), [yearVal, ...chParamsR, ...assignParamsYtd]),
+      rows(saleTargetSql(assignWhereYtd), [yearVal, yearVal, ...chParamsT, ...assignParamsYtd]),
     ]);
 
     // Channel label helper
