@@ -1161,6 +1161,11 @@ const dict: Record<string, Record<Locale, string>> = {
     th: "ลบการมอบหมายนี้และทุกเดือนที่อยู่ภายใต้? กู้คืนไม่ได้",
     en: "Delete this assignment and every month under it? This cannot be undone.",
   },
+  "assignment.deleteSpansChannels": {
+    lo: "ໝາຍເຫດ: ແຖວມອບໝາຍໜຶ່ງກວມທຸກຊ່ອງທາງທີ່ມັນລະບຸໄວ້ — ລຶບຈາກຊ່ອງທາງໜຶ່ງ ຈະຫາຍໄປຈາກຊ່ອງທາງອື່ນນຳ.",
+    th: "หมายเหตุ: แถวมอบหมายหนึ่งครอบทุกช่องทางที่ระบุไว้ — ลบจากช่องทางหนึ่ง จะหายจากช่องทางอื่นด้วย",
+    en: "Note: one assignment row covers every channel it names — deleting it from one channel removes it from the others too.",
+  },
   "assignment.allChannels": {
     lo: "ທຸກຊ່ອງທາງ (ວ່າງໄວ້)",
     th: "ทุกช่องทาง (เว้นว่าง)",

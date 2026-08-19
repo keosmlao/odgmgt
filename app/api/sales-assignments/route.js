@@ -64,21 +64,30 @@ export async function GET(request) {
                 OR st.district_code = b.district_code)
            AND ${claimableChannelSql("b", "st")}`;
 
-    /** One assignment's own kip, for the ຍອດຂາຍ column and to break ties below. */
-    const sellerActual = (alias) => `
-      SELECT COALESCE(SUM(sm.sum_amount), 0) AS amount
-      FROM ${SELLER_TABLE} sm
-      WHERE sm.yeardoc = %s
-        AND sm.sale_id = ${alias}.sale_id
-        AND sm.monthdoc = ${alias}.month
-        AND sm.bu_code = ${alias}.bu_code
-        AND (${alias}.province_code = 'ALL' OR sm.province = ${alias}.province_code)
-        AND (${alias}.district_code = 'ALL' OR sm.amper = ${alias}.district_code)
-        AND (
-          ${alias}.channel_codes IS NULL
-          OR array_length(${alias}.channel_codes, 1) IS NULL
-          OR sm.channel_code = ANY(${alias}.channel_codes)
-        )`;
+    /**
+     * One assignment's own kip, split by the channel the bill was rung up in.
+     *
+     * Per channel rather than one lump because the board now opens a BU into
+     * its channels, and a seller who works both ຂາຍສົ່ງ and ໜ້າຮ້ານ has to
+     * land in both. Summing the slices gives back the old single figure, so
+     * everything reading `act` is unchanged.
+     */
+    const sellerActualByChannel = `
+      SELECT b.id AS assignment_id, sm.channel_code, SUM(sm.sum_amount)::float AS amount
+      FROM public.odg_sales_assignment b
+      JOIN ${SELLER_TABLE} sm
+        ON sm.yeardoc = %s
+       AND sm.sale_id = b.sale_id
+       AND sm.monthdoc = b.month
+       AND sm.bu_code = b.bu_code
+       AND (b.province_code = 'ALL' OR sm.province = b.province_code)
+       AND (b.district_code = 'ALL' OR sm.amper = b.district_code)
+       AND (
+         b.channel_codes IS NULL
+         OR array_length(b.channel_codes, 1) IS NULL
+         OR sm.channel_code = ANY(b.channel_codes)
+       )
+      GROUP BY b.id, sm.channel_code`;
 
     /**
      * ເປົ້າ is odg_sales_target and nothing else: every figure in the column is a
@@ -109,10 +118,9 @@ export async function GET(request) {
      */
     const data = await rows(
       `
-        WITH act AS (
-          SELECT b.id AS assignment_id, x.amount
-          FROM public.odg_sales_assignment b
-          LEFT JOIN LATERAL (${sellerActual("b")}) x ON TRUE
+        WITH act_ch AS (${sellerActualByChannel}),
+        act AS (
+          SELECT assignment_id, SUM(amount) AS amount FROM act_ch GROUP BY assignment_id
         ),
         role AS (
           SELECT b.id AS assignment_id, ${isManagerSql("b")} AS is_manager
@@ -120,6 +128,7 @@ export async function GET(request) {
         ),
         claim AS (
           SELECT b.id AS assignment_id, st.id AS target_id, st.target_amount,
+                 st.sale_channel,
                  (CASE WHEN b.province_code <> 'ALL' THEN 2 ELSE 0 END
                   + CASE WHEN b.district_code <> 'ALL' THEN 1 ELSE 0 END) AS specificity
           FROM public.odg_sales_assignment b
@@ -131,15 +140,27 @@ export async function GET(request) {
            ${claimMatch}
         ),
         owner AS (
-          SELECT DISTINCT ON (c.target_id) c.target_id, c.assignment_id, c.target_amount
+          SELECT DISTINCT ON (c.target_id) c.target_id, c.assignment_id, c.target_amount,
+                 c.sale_channel
           FROM claim c
           LEFT JOIN act ON act.assignment_id = c.assignment_id
           ORDER BY c.target_id, c.specificity DESC,
                    act.amount DESC NULLS LAST, c.assignment_id
         ),
+        /**
+         * The plan a row owns, cut by the channel of the odg_sales_target rows
+         * it owns. A plan row with no channel of its own is filed under 'ALL',
+         * the same bucket the board labels ທຸກຊ່ອງທາງ — it is a real lump for
+         * the whole BU, not a missing value to be spread across the channels.
+         */
+        plan_ch AS (
+          SELECT assignment_id,
+                 COALESCE(NULLIF(btrim(sale_channel), ''), 'ALL') AS channel_code,
+                 SUM(target_amount)::float AS amount
+          FROM owner GROUP BY 1, 2
+        ),
         plan AS (
-          SELECT assignment_id, SUM(target_amount) AS amount
-          FROM owner GROUP BY assignment_id
+          SELECT assignment_id, SUM(amount) AS amount FROM plan_ch GROUP BY assignment_id
         ),
         /**
          * The manager's roll-up. One row per manager × BU × month carries it —
@@ -153,8 +174,10 @@ export async function GET(request) {
           JOIN role r ON r.assignment_id = b.id AND r.is_manager
           ORDER BY b.sale_id, b.bu_code, b.month, b.id
         ),
-        rollup AS (
-          SELECT m.assignment_id, SUM(st.target_amount) AS amount
+        rollup_ch AS (
+          SELECT m.assignment_id,
+                 COALESCE(NULLIF(btrim(st.sale_channel), ''), 'ALL') AS channel_code,
+                 SUM(st.target_amount)::float AS amount
           FROM mgr m
           JOIN public.odg_sales_target st
             ON st.target_year = %s
@@ -166,7 +189,26 @@ export async function GET(request) {
              OR st.sale_channel = ANY(m.channel_codes)
              OR st.sale_channel = 'ALL'
            )
-          GROUP BY m.assignment_id
+          GROUP BY 1, 2
+        ),
+        rollup AS (
+          SELECT assignment_id, SUM(amount) AS amount FROM rollup_ch GROUP BY assignment_id
+        ),
+        /**
+         * One {channel: kip} object per assignment, so the grid can hang a
+         * channel level under the BU without a second round trip.
+         */
+        plan_map AS (
+          SELECT assignment_id, jsonb_object_agg(channel_code, amount) AS by_channel
+          FROM plan_ch GROUP BY assignment_id
+        ),
+        act_map AS (
+          SELECT assignment_id, jsonb_object_agg(channel_code, amount) AS by_channel
+          FROM act_ch GROUP BY assignment_id
+        ),
+        roll_map AS (
+          SELECT assignment_id, jsonb_object_agg(channel_code, amount) AS by_channel
+          FROM rollup_ch GROUP BY assignment_id
         )
         SELECT
           a.id,
@@ -184,12 +226,18 @@ export async function GET(request) {
           COALESCE(tgt.amount, 0)::float AS target_amount,
           -- Display only; never summed into a parent or the grand total.
           COALESCE(roll.amount, 0)::float AS rollup_amount,
-          COALESCE(act.amount, 0)::float AS actual_amount
+          COALESCE(act.amount, 0)::float AS actual_amount,
+          COALESCE(pm.by_channel, '{}'::jsonb) AS target_by_channel,
+          COALESCE(rm.by_channel, '{}'::jsonb) AS rollup_by_channel,
+          COALESCE(amp.by_channel, '{}'::jsonb) AS actual_by_channel
         FROM public.odg_sales_assignment a
         LEFT JOIN public.erp_amper am ON am.code = a.district_code
         LEFT JOIN plan tgt ON tgt.assignment_id = a.id
         LEFT JOIN rollup roll ON roll.assignment_id = a.id
         LEFT JOIN act ON act.assignment_id = a.id
+        LEFT JOIN plan_map pm ON pm.assignment_id = a.id
+        LEFT JOIN roll_map rm ON rm.assignment_id = a.id
+        LEFT JOIN act_map amp ON amp.assignment_id = a.id
         ${where}
         ORDER BY a.created_at DESC, a.id DESC
       `,

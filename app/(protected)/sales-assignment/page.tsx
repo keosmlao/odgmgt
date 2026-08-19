@@ -61,20 +61,9 @@ export default function SalesAssignment() {
   );
   const buMap = useMemo(() => new Map(buList.map((b: any) => [String(b.code), b.name_1 || b.name])), [buList]);
 
-  // Build pivot tree: BU → Sale → Province → District (with monthly columns)
+  // Build pivot tree: BU → Channel → Sale → Province → District (monthly columns)
   const tree = useMemo(() => {
     const root: any = {};
-    /**
-     * Channels roll up the tree, so a seller's row answers "which channels does
-     * this person cover" without expanding to the leaf. An assignment with no
-     * channels means every channel, and that has to stay distinguishable from
-     * one that names them — hence the separate `allCh` flag rather than an
-     * empty set, which would read the same as "none".
-     */
-    const mark = (node: any, codes: string[]) => {
-      if (!codes.length) node.allCh = true;
-      else for (const code of codes) node.ch.add(String(code));
-    };
     /**
      * A manager's ເປົ້າ is a roll-up of the plan their sellers hold, not a target
      * of their own, so it is accumulated in `roll` and never in `total`. Adding
@@ -89,45 +78,81 @@ export default function SalesAssignment() {
       total: 0, months: new Array(13).fill(0),
       roll: 0, rollMonths: new Array(13).fill(0),
       actual: 0, actMonths: new Array(13).fill(0),
-      ids: [], ch: new Set(),
+      ids: [],
     });
+    const chName = (code: string) =>
+      code === "ALL" ? t("assignment.everyChannel") : chanMap.get(code) || code;
+    /**
+     * One assignment cut into the channels its money actually landed in. The
+     * server already splits ເປົ້າ by odg_sales_target.sale_channel and ຍອດຂາຍ by
+     * the channel of the bill, so nothing is apportioned here — a channel row is
+     * the sum of plan rows written for that channel, never a share of a lump.
+     *
+     * A row that owns nothing still belongs on the board, so it is filed under
+     * the channels it was assigned (ທຸກຊ່ອງທາງ when it names none) with zeros:
+     * a fresh assignment is visible before any plan is written against it.
+     */
+    const slices = (item: any) => {
+      const plan = item.target_by_channel || {}, act = item.actual_by_channel || {}, roll = item.rollup_by_channel || {};
+      const codes = new Set([...Object.keys(plan), ...Object.keys(act), ...Object.keys(roll)]);
+      if (!codes.size) {
+        const named = (item.channel_codes || []).map(String).filter(Boolean);
+        return (named.length ? named : ["ALL"]).map((code: string) => ({ code, val: 0, act: 0, roll: 0 }));
+      }
+      return [...codes].map(code => ({
+        code,
+        val: Number(plan[code] || 0),
+        act: Number(act[code] || 0),
+        roll: Number(roll[code] || 0),
+      }));
+    };
     for (const item of assignments) {
       const bk = String(item.bu_code), sk = String(item.sale_id), pk = String(item.province_code), dk = item.district_code || "ALL";
-      const m = Number(item.month), val = Number(item.target_amount || 0), act = Number(item.actual_amount || 0);
-      const roll = Number(item.rollup_amount || 0);
-      const codes: string[] = (item.channel_codes || []).map(String).filter(Boolean);
-      // Every node keeps the assignment rows underneath it, so a delete button
-      // removes exactly what its row shows — no re-deriving the filter later.
-      if (!root[bk]) root[bk] = { key: bk, name: buMap.get(bk) || bk, ...blank(), children: {} };
-      root[bk].total += val; root[bk].months[m] += val; root[bk].actual += act; root[bk].actMonths[m] += act; root[bk].ids.push(item.id); mark(root[bk], codes);
-      const bu = root[bk];
-      if (!bu.children[sk]) bu.children[sk] = { key: `${bk}-${sk}`, name: item.sale_name || "Unknown", role: posMap.get(sk), ...blank(), children: {} };
-      bu.children[sk].total += val; bu.children[sk].months[m] += val; bu.children[sk].actual += act; bu.children[sk].actMonths[m] += act; bu.children[sk].ids.push(item.id); mark(bu.children[sk], codes);
-      // The roll-up stops at the person: a BU row is the plan, not the plan plus
-      // its own manager's copy of it.
-      addRoll(bu.children[sk], m, roll);
-      const sale = bu.children[sk];
-      if (!sale.children[pk]) sale.children[pk] = { key: `${bk}-${sk}-${pk}`, name: pk === "ALL" ? t("assignment.allProvinces") : provMap.get(pk) || pk, ...blank(), children: {} };
-      sale.children[pk].total += val; sale.children[pk].months[m] += val; sale.children[pk].actual += act; sale.children[pk].actMonths[m] += act; sale.children[pk].ids.push(item.id); mark(sale.children[pk], codes);
-      addRoll(sale.children[pk], m, roll);
-      const prov = sale.children[pk];
-      if (!prov.children[dk]) prov.children[dk] = { key: `${bk}-${sk}-${pk}-${dk}`, name: dk === "ALL" ? t("app.all") : (item.district_name || dk), ...blank(), children: null };
-      prov.children[dk].total += val; prov.children[dk].months[m] += val; prov.children[dk].actual += act; prov.children[dk].actMonths[m] += act; prov.children[dk].ids.push(item.id); mark(prov.children[dk], codes);
-      addRoll(prov.children[dk], m, roll);
+      const m = Number(item.month);
+      for (const sl of slices(item)) {
+        const ck = sl.code;
+        // Every node keeps the assignment rows underneath it, so a delete button
+        // removes exactly what its row shows — no re-deriving the filter later.
+        // An assignment spanning two channels lands under both, hence the dedupe
+        // in removeNode.
+        const add = (node: any) => {
+          node.total += sl.val; node.months[m] += sl.val;
+          node.actual += sl.act; node.actMonths[m] += sl.act;
+          node.ids.push(item.id);
+        };
+        if (!root[bk]) root[bk] = { key: bk, name: buMap.get(bk) || bk, ...blank(), children: {} };
+        add(root[bk]);
+        const bu = root[bk];
+        if (!bu.children[ck]) bu.children[ck] = { key: `${bk}|${ck}`, name: chName(ck), ...blank(), children: {} };
+        add(bu.children[ck]);
+        // The roll-up stops at the person: BU and channel rows are the plan, not
+        // the plan plus their own manager's copy of it.
+        const chan = bu.children[ck];
+        if (!chan.children[sk]) chan.children[sk] = { key: `${bk}|${ck}|${sk}`, name: item.sale_name || "Unknown", role: posMap.get(sk), ...blank(), children: {} };
+        add(chan.children[sk]); addRoll(chan.children[sk], m, sl.roll);
+        const sale = chan.children[sk];
+        if (!sale.children[pk]) sale.children[pk] = { key: `${bk}|${ck}|${sk}|${pk}`, name: pk === "ALL" ? t("assignment.allProvinces") : provMap.get(pk) || pk, ...blank(), children: {} };
+        add(sale.children[pk]); addRoll(sale.children[pk], m, sl.roll);
+        const prov = sale.children[pk];
+        if (!prov.children[dk]) prov.children[dk] = { key: `${bk}|${ck}|${sk}|${pk}|${dk}`, name: dk === "ALL" ? t("app.all") : (item.district_name || dk), ...blank(), children: null };
+        add(prov.children[dk]); addRoll(prov.children[dk], m, sl.roll);
+      }
     }
-    // Resolve the codes to names once here, so the row component just renders.
-    const label = (n: any) => ({
-      ...n,
-      chNames: n.allCh
-        ? [t("assignment.everyChannel")]
-        : [...n.ch].map((c: any) => chanMap.get(String(c)) || String(c)).sort(),
-    });
-    const toArr = (o: any) => Object.values(o).sort((a: any, b: any) => b.total - a.total).map(label);
-    return toArr(root).map((bu: any) => ({ ...bu, children: toArr(bu.children).map((s: any) => ({ ...s, children: toArr(s.children).map((p: any) => ({ ...p, children: toArr(p.children) })) })) }));
+    const toArr = (o: any) => Object.values(o).sort((a: any, b: any) => b.total - a.total);
+    return toArr(root).map((bu: any) => ({
+      ...bu,
+      children: toArr(bu.children).map((c: any) => ({
+        ...c,
+        children: toArr(c.children).map((s: any) => ({
+          ...s,
+          children: toArr(s.children).map((p: any) => ({ ...p, children: toArr(p.children) })),
+        })),
+      })),
+    }));
   }, [assignments, buMap, provMap, chanMap, posMap, t]);
 
   const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  const expandAll = () => { if (expanded.size > 0) { setExpanded(new Set()); } else { const all = new Set<string>(); tree.forEach((bu: any) => { all.add(bu.key); bu.children.forEach((s: any) => { all.add(s.key); s.children.forEach((p: any) => all.add(p.key)); }); }); setExpanded(all); } };
+  const expandAll = () => { if (expanded.size > 0) { setExpanded(new Set()); } else { const all = new Set<string>(); tree.forEach((bu: any) => { all.add(bu.key); bu.children.forEach((c: any) => { all.add(c.key); c.children.forEach((s: any) => { all.add(s.key); s.children.forEach((p: any) => all.add(p.key)); }); }); }); setExpanded(all); } };
 
   const isCapital = (codes: string[]) => codes.length === 1 && (codes[0] === "01" || (provMap.get(codes[0]) || "").includes("Capital"));
   const onProvChange = async (vals: string[]) => {
@@ -166,7 +191,9 @@ export default function SalesAssignment() {
   const removeNode = async (node: any) => {
     const ids: number[] = [...new Set(node.ids as number[])].filter(Boolean);
     if (!ids.length || deleting) return;
-    if (!window.confirm(`${t("assignment.confirmDelete")}\n\n${node.name} — ${ids.length} ${t("assignment.rows")}`)) return;
+    // One assignment row carries every channel it names, so it is removed from
+    // all of them at once — not only the channel branch the button was clicked in.
+    if (!window.confirm(`${t("assignment.confirmDelete")}\n\n${node.name} — ${ids.length} ${t("assignment.rows")}\n\n${t("assignment.deleteSpansChannels")}`)) return;
     setDeleting(true);
     try {
       await Promise.all(ids.map(id => api.delete(`/sales-assignments/${id}`)));
@@ -182,12 +209,16 @@ export default function SalesAssignment() {
   const lvl = [
     {}, // unused
     { bg: "bg-[var(--surface-2)] /50", text: "font-semibold text-[var(--ink)]", badge: "bg-[var(--info-bg)] text-[var(--brand)] dark:bg-blue-900/30 dark:text-blue-300" },
-    { bg: "bg-[var(--surface)]", text: "font-medium text-[var(--brand)]", badge: "bg-[var(--surface-2)] text-[var(--ink-soft)]  " },
+    // The channel. Carried by the brand-tinted "C" and bold brand text rather
+    // than a row tint: the first column is sticky, and every tint token here is
+    // translucent, so a tinted row would show the months sliding underneath it.
+    { bg: "bg-[var(--surface)]", text: "font-semibold text-[var(--brand)]", badge: "bg-[var(--info-bg)] text-[var(--brand)] dark:bg-blue-900/30 dark:text-blue-300" },
     { bg: "bg-[var(--surface)]", text: "font-medium text-[var(--ink-soft)]", badge: "bg-[var(--pos-bg)] text-[var(--pos)]  " },
     { bg: "bg-[var(--surface)]", text: "text-[var(--muted)]", badge: "bg-[var(--surface-2)] text-[var(--muted)]  " },
+    { bg: "bg-[var(--surface)]", text: "text-[var(--muted)]", badge: "bg-[var(--surface-2)] text-[var(--muted)]  " },
   ];
-  const letters = ["", "B", "S", "P", "D"];
-  const indents = ["", "pl-3", "pl-8", "pl-14", "pl-20"];
+  const letters = ["", "B", "C", "S", "P", "D"];
+  const indents = ["", "pl-3", "pl-7", "pl-11", "pl-16", "pl-20"];
 
   // Option lists for the drawer's dropdowns. The seller carries their code in
   // the label: the roster repeats names, and the code is what gets stored.
@@ -227,7 +258,7 @@ export default function SalesAssignment() {
           <div>
             <p className="eyebrow">Team operations</p>
             <h1 className="page-title">Sales Assignment</h1>
-            <p className="page-sub">BU → Employee → Province → District</p>
+            <p className="page-sub">BU → Channel → Employee → Province → District</p>
           </div>
           <div className="flex gap-2">
             <button onClick={expandAll} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:bg-[var(--surface-2)]">
@@ -419,10 +450,11 @@ export default function SalesAssignment() {
 function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDelete, deleting, labels }: any) {
   const isOpen = expanded.has(node.key);
   const hasKids = node.children && node.children.length > 0;
-  const s = lvl[level] || lvl[4];
-  // Not on the BU row: "delete every assignment in ໄຟຟ້າ" is never a single
-  // intent, and it is the one click nobody could undo.
-  const canDelete = level >= 2 && node.ids?.length > 0;
+  const s = lvl[level] || lvl[5];
+  // Not on the BU or channel row: "delete every assignment in ໄຟຟ້າ" — or in
+  // ຂາຍສົ່ງ — is never a single intent, and it is the one click nobody could
+  // undo. From the person down, the row is somebody's assignment.
+  const canDelete = level >= 3 && node.ids?.length > 0;
   const click = () => hasKids && toggle(node.key);
   /**
    * A manager owns no plan of their own, so their row shows the roll-up of what
@@ -456,20 +488,6 @@ function TreeRows({ node, level, expanded, toggle, lvl, letters, indents, onDele
                 }`}
               >
                 {node.role.title}
-              </span>
-            )}
-            {/* Which sales channels this row covers. Rolled up from the rows
-                beneath, so it reads without expanding the tree. */}
-            {node.chNames?.length > 0 && (
-              <span className="flex shrink-0 flex-wrap items-center gap-1">
-                {node.chNames.map((name: string) => (
-                  <span
-                    key={name}
-                    className="rounded px-1.5 py-0.5 text-[9px] font-medium leading-none bg-[var(--surface-2)] text-[var(--muted)]"
-                  >
-                    {name}
-                  </span>
-                ))}
               </span>
             )}
             {canDelete && (
