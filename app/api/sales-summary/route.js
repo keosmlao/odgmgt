@@ -6,7 +6,7 @@ import { parseIntSafe, safeDiv, monthName, formatDate, monthRange, workingDaysBe
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
 import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
 import { SELLER_TABLE } from "@/lib/sale-monthly-sql.mjs";
-import { claimableChannelSql, isManagerSql } from "@/lib/sales-board-roles.mjs";
+import { sellerTargetSql } from "@/lib/sale-seller-target.mjs";
 import { ensureFreshRollup } from "@/lib/sale-rollup";
 
 // Cache 3 min
@@ -116,51 +116,7 @@ export async function GET(request) {
       ${scope}
       GROUP BY a.sale_id, sale_name`;
 
-    const saleTargetSql = (scope) => `
-      WITH act AS (
-        SELECT b.id AS assignment_id, COALESCE(SUM(sm.sum_amount), 0) AS amount
-        FROM public.odg_sales_assignment b
-        LEFT JOIN ${SELLER_TABLE} sm
-          ON sm.yeardoc=%s AND sm.sale_id=b.sale_id AND sm.monthdoc=b.month
-         AND sm.bu_code=b.bu_code
-         AND (b.province_code='ALL' OR sm.province=b.province_code)
-         AND (b.district_code='ALL' OR sm.amper=b.district_code)
-         AND (b.channel_codes IS NULL OR array_length(b.channel_codes,1) IS NULL
-              OR sm.channel_code = ANY(b.channel_codes))
-        GROUP BY b.id
-      ),
-      claim AS (
-        SELECT b.id AS assignment_id, st.id AS target_id, st.target_amount,
-               (CASE WHEN b.province_code <> 'ALL' THEN 2 ELSE 0 END
-                + CASE WHEN b.district_code <> 'ALL' THEN 1 ELSE 0 END) AS specificity
-        FROM public.odg_sales_assignment b
-        JOIN public.odg_sales_target st
-          ON st.target_year=%s AND st.target_month=b.month AND st.bu_code=b.bu_code
-         -- 'ALL' is a wildcard on either side; see app/api/sales-assignments.
-         AND (b.province_code='ALL' OR st.province_code='ALL' OR st.province_code=b.province_code)
-         AND (b.district_code='ALL' OR st.district_code='ALL' OR st.district_code=b.district_code)
-         AND ${claimableChannelSql("b", "st")}
-         ${chClauseT}
-        -- Managers own no plan row: their number is the sum of what their
-        -- sellers carry, so counting it here would count the plan twice.
-        -- See app/api/sales-assignments for the roll-up the board displays.
-        WHERE NOT ${isManagerSql("b")}
-      ),
-      owner AS (
-        SELECT DISTINCT ON (c.target_id) c.target_id, c.assignment_id, c.target_amount
-        FROM claim c
-        LEFT JOIN act ON act.assignment_id = c.assignment_id
-        ORDER BY c.target_id, c.specificity DESC, act.amount DESC NULLS LAST, c.assignment_id
-      ),
-      share AS (
-        SELECT assignment_id, SUM(target_amount) AS amount FROM owner GROUP BY assignment_id
-      )
-      SELECT a.sale_id, COALESCE(NULLIF(a.sale_name,''),a.sale_id) AS sale_name,
-             COALESCE(SUM(share.amount),0)::float AS target
-      FROM public.odg_sales_assignment a
-      LEFT JOIN share ON share.assignment_id = a.id
-      ${scope}
-      GROUP BY a.sale_id, sale_name`;
+    const saleTargetSql = (scope) => sellerTargetSql({ channelClause: chClauseT, scope });
 
     // ═══ BATCH 1: All independent queries in parallel (14 → 1 round) ═══
     const [

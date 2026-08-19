@@ -73,6 +73,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/sales-summary", i18nKey: "sidebar.summary", icon: <Table size={17} /> },
       { path: "/month-summary", i18nKey: "sidebar.monthSummary", icon: <CalendarRange size={17} /> },
+      { path: "/sales-delivery", i18nKey: "sidebar.salesDelivery", icon: <PackageCheck size={17} /> },
       { path: "/retail-incentive", i18nKey: "sidebar.incentive", icon: <Award size={17} /> },
       { path: "/incentive-daily", i18nKey: "sidebar.incentiveDaily", icon: <CalendarCheck size={17} /> },
       { path: "/receivables", i18nKey: "sidebar.receivables", icon: <Wallet size={17} /> },

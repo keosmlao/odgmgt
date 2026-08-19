@@ -1151,6 +1151,7 @@ const dict: Record<string, Record<Locale, string>> = {
   "sidebar.assignment": { lo: "ແຈກງານຂາຍ", th: "มอบหมายงานขาย", en: "Sales Assignment" },
   "sidebar.summary": { lo: "ສະຫຼຸບການຂາຍ", th: "สรุปการขาย", en: "Sales Summary" },
   "sidebar.monthSummary": { lo: "ສະຫຼຸບເດືອນ / ROY", th: "สรุปรายเดือน / ROY", en: "Month & ROY Summary" },
+  "sidebar.salesDelivery": { lo: "ສົມທຽບຂາຍ / ຈັດສົ່ງ", th: "เทียบยอดขาย / จัดส่ง", en: "Sales vs Delivery" },
   "sidebar.saleMonthOverride": { lo: "ຍ້າຍເດືອນບິນ", th: "ย้ายเดือนบิล", en: "Bill month override" },
   "assignment.allProvinces": { lo: "ທຸກແຂວງ", th: "ทุกแขวง", en: "All provinces" },
   "assignment.rows": { lo: "ແຖວ", th: "แถว", en: "rows" },
