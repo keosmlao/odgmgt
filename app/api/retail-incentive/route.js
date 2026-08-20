@@ -7,6 +7,7 @@ import { OVERRIDE_JOIN, REPORT_MONTH_FILTER } from "@/lib/sale-month-override";
 import { POINTS_SQL } from "@/lib/incentive-points-sql";
 import { ensurePriceBands } from "@/lib/migrations";
 import { foldAirSets } from "@/lib/incentive-sets";
+import { isOnlineBillSql } from "@/lib/online-channel.mjs";
 
 /**
  * Retail (ຂາຍໜ້າຮ້ານ) staff rewards for one month.
@@ -327,6 +328,9 @@ async function loadMonth(year, month) {
        LEFT JOIN public.app_incentive_category c ON c.category_code = d.item_category
        WHERE ${REPORT_MONTH_FILTER}
          AND d.branch_code = %s AND d.argroup_main = %s
+         -- ຂາຍອອນລາຍ is rung up at this branch under the retail AR group but is
+         -- not storefront work; see lib/online-channel.mjs.
+         AND NOT ${isOnlineBillSql("d.doc_no")}
          AND d.item_code NOT LIKE '97%%'
          AND COALESCE(c.is_active, true)
        GROUP BY 1, 2`,
@@ -372,6 +376,9 @@ async function loadMonth(year, month) {
        LEFT JOIN public.app_incentive_sale_alias a ON btrim(a.salename) = btrim(d.salename)
        WHERE ${REPORT_MONTH_FILTER}
          AND d.branch_code = %s AND d.argroup_main = %s
+         -- ຂາຍອອນລາຍ is rung up at this branch under the retail AR group but is
+         -- not storefront work; see lib/online-channel.mjs.
+         AND NOT ${isOnlineBillSql("d.doc_no")}
          AND COALESCE(d.bu_code, '') <> ALL (%s)
        GROUP BY 1, 2, 3`,
       [Number(year), Number(month), Number(year), Number(month), RETAIL_BRANCH, RETAIL_AR_GROUP, EXCLUDED_BU],
@@ -425,6 +432,9 @@ async function loadMonth(year, month) {
          WHERE n.emp_code = r.emp_code
            AND ${REPORT_MONTH_FILTER}
            AND d.branch_code = %s AND d.argroup_main = %s
+         -- ຂາຍອອນລາຍ is rung up at this branch under the retail AR group but is
+         -- not storefront work; see lib/online-channel.mjs.
+         AND NOT ${isOnlineBillSql("d.doc_no")}
            AND d.item_code NOT LIKE '97%%'
            AND d.item_name !~ '\\[H\\]\\s*$'
            AND (

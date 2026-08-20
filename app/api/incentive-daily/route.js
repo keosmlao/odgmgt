@@ -5,6 +5,7 @@ import { swrCache } from "@/lib/cache";
 import { POINTS_SQL } from "@/lib/incentive-points-sql";
 import { foldAirSets } from "@/lib/incentive-sets";
 import { ensurePriceBands } from "@/lib/migrations";
+import { isOnlineBillSql } from "@/lib/online-channel.mjs";
 
 /**
  * One day of scoring, checked.
@@ -76,6 +77,9 @@ async function sellersByBill(docNos) {
        LEFT JOIN public.odg_employee e ON btrim(e.fullname_lo) = btrim(d.salename)
        LEFT JOIN public.odg_employee named ON named.employee_code = a.employee_code
       WHERE d.doc_no = ANY(%s) AND d.branch_code = %s AND d.argroup_main = %s
+         -- ຂາຍອອນລາຍ is rung up at this branch under the retail AR group but is
+         -- not storefront work; see lib/online-channel.mjs.
+         AND NOT ${isOnlineBillSql("d.doc_no")}
       GROUP BY 1, 2, 3, 4`,
     [docNos, RETAIL_BRANCH, RETAIL_AR_GROUP],
   ).catch(() => []);

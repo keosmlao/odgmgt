@@ -1,6 +1,7 @@
 /**
  * Creates the covering indexes that keep dashboard/analytics aggregates off the
- * 2GB odg_sale_detail heap. Safe to re-run: every step is IF NOT EXISTS and uses
+ * 2GB odg_sale_detail heap, plus the ic_trans lookup the online-channel rule
+ * depends on. Safe to re-run: every step is IF NOT EXISTS and uses
  * CONCURRENTLY so live traffic is never blocked.
  *
  *   node scripts/create-sale-detail-indexes.mjs
@@ -61,6 +62,14 @@ const INDEXES = [
     INCLUDE (item_code, item_name, item_brand, itemmaingroup, itemsubgroup,
              bu_code, province, province_name, channel_name, argroup, argroup_main,
              argroupsub, customer_code, qty, sum_amount, sum_of_cost, sum_cost_thb_vte)`],
+  // Resolving ຂາຍອອນລາຍ means asking "which bills did the online department
+  // sell", and the salesperson only exists on the bill header. Without this the
+  // lookup seq-scans 322k ic_trans rows (222 ms) on every report that splits by
+  // channel; with it, 19 ms. See lib/online-channel.mjs.
+  ["idx_ic_trans_sale_code_btrim", `
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ic_trans_sale_code_btrim
+    ON public.ic_trans (btrim(sale_code))
+    WHERE trans_flag IN (44, 48)`],
 ];
 
 for (const [name, sql] of INDEXES) {
