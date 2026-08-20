@@ -3,7 +3,7 @@ import { rows, query } from "@/lib/db";
 import { parseIntSafe } from "@/lib/helpers";
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
 import { SELLER_TABLE } from "@/lib/sale-monthly-sql.mjs";
-import { claimableChannelSql, isManagerSql } from "@/lib/sales-board-roles.mjs";
+import { claimableChannelSql, isManagerSql, managesChannelSql, planChannelSql } from "@/lib/sales-board-roles.mjs";
 import { ensureFreshRollup } from "@/lib/sale-rollup";
 
 export async function GET(request) {
@@ -112,14 +112,21 @@ export async function GET(request) {
      * sales did — ຂາຍໜ້າຮ້ານ read as one person carrying ກ.ລ and another carrying
      * ສ.ຫາ–ທ.ວ, which is not how the counter is actually staffed.
      *
-     * MANAGERS own nothing, so they are not among the sharers. A manager answers
-     * for a whole channel of their BU — ຂາຍສົ່ງ for a BU manager, ໂຄງການ for the
+     * A MANAGER is not among the sharers OF THE CHANNEL THEY RUN. A manager
+     * answers for a channel of their BU — ຂາຍສົ່ງ for a BU manager, ໂຄງການ for the
      * project manager — and that number is the SUM of what their sellers carry,
      * not a separate allocation. Letting a manager claim the ຂາຍສົ່ງ rows instead
      * left every wholesale seller under them reading ເປົ້າ 0, because 89% of a BU's
      * plan is wholesale. So their figure is returned as `rollup_amount`, which the
      * grid shows on their row and leaves out of every total — the plan is still
      * counted once, by the sellers who hold it.
+     *
+     * Only that channel, though. Running one channel of a BU used to bar a person
+     * from the plan of EVERY channel in it, so a head who runs ຂາຍສົ່ງ and sells
+     * ໂຄງການ themselves read ເປົ້າ 0 in ໂຄງການ while their plan was split among the
+     * sellers beside them. The bar is now per channel — see managesChannelSql —
+     * so a head with two channels on the roster rolls up both, and one with a
+     * second channel they merely sell claims it like anyone else.
      */
     const data = await rows(
       `
@@ -137,12 +144,14 @@ export async function GET(request) {
                  (CASE WHEN b.province_code <> 'ALL' THEN 2 ELSE 0 END
                   + CASE WHEN b.district_code <> 'ALL' THEN 1 ELSE 0 END) AS specificity
           FROM public.odg_sales_assignment b
-          JOIN role r ON r.assignment_id = b.id AND NOT r.is_manager
           JOIN public.odg_sales_target st
             ON st.target_year = %s
            AND st.target_month = b.month
            AND st.bu_code = b.bu_code
            ${claimMatch}
+           -- Per CHANNEL, not per person: a head is kept off the plan of the
+           -- channel they run and left on the plan of one they merely sell.
+           AND NOT ${managesChannelSql("b", "st")}
         ),
         /**
          * Only the closest claimants stay in the running for a plan row. The
@@ -184,29 +193,29 @@ export async function GET(request) {
          * The manager's roll-up. One row per manager × BU × month carries it —
          * a manager with several rows in one BU-month would otherwise show that
          * month's plan once per row.
+         *
+         * Which of those rows wins does not matter: the channels rolled up are
+         * the roster's, not the winning row's channel_codes. When they came
+         * off the row, a head covering two channels through two area rows rolled
+         * up whichever row happened to have the lower id and read 0 on the other.
          */
         mgr AS (
           SELECT DISTINCT ON (b.sale_id, b.bu_code, b.month)
-                 b.id AS assignment_id, b.bu_code, b.month, b.channel_codes
+                 b.id AS assignment_id, b.sale_id, b.bu_code, b.month
           FROM public.odg_sales_assignment b
           JOIN role r ON r.assignment_id = b.id AND r.is_manager
           ORDER BY b.sale_id, b.bu_code, b.month, b.id
         ),
         rollup_ch AS (
           SELECT m.assignment_id,
-                 COALESCE(NULLIF(btrim(st.sale_channel), ''), 'ALL') AS channel_code,
+                 ${planChannelSql("st")} AS channel_code,
                  SUM(st.target_amount)::float AS amount
           FROM mgr m
           JOIN public.odg_sales_target st
             ON st.target_year = %s
            AND st.target_month = m.month
            AND st.bu_code = m.bu_code
-           AND (
-             m.channel_codes IS NULL
-             OR array_length(m.channel_codes, 1) IS NULL
-             OR st.sale_channel = ANY(m.channel_codes)
-             OR st.sale_channel = 'ALL'
-           )
+           AND ${managesChannelSql("m", "st")}
           GROUP BY 1, 2
         ),
         rollup AS (

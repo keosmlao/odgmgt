@@ -15,8 +15,10 @@ import { ensureFreshRollup } from "@/lib/sale-rollup";
  * Channel codes come from public.ar_group:
  *   101 ຂາຍໜ້າຮ້ານ · 102 ຂາຍສົ່ງ · 103 ໂຄງການ · 104 ພະນັກງານ
  *   106 ຂາຍຊ່າງ · 107 ອອນລາຍ · 108 ຕົວແທນຂາຍ
- * ຂາຍຊ່າງ (106) rolls into WS for Air and into Retail for PIPE, matching the
- * way the targets are entered for those BUs.
+ * ຂາຍຊ່າງ (106) rolls into WS for Air and into Retail for PIPE and Sparepart,
+ * matching the way the targets are entered for those BUs. ອາໄຫຼ່'s counter and
+ * its technicians are one retail number — left out, the technicians' kip was in
+ * no column at all and simply missing from the report.
  */
 const COLUMNS = [
   { key: "ws_pipe", group: "ws", label: "PIPE", bu: ["13"], channels: ["102"] },
@@ -26,7 +28,7 @@ const COLUMNS = [
 
   { key: "rt_air_ce", group: "retail", label: "AIR+CE", bu: ["11", "12", "15"], channels: ["101"] },
   { key: "rt_pipe", group: "retail", label: "PIPE", bu: ["13"], channels: ["101", "106"] },
-  { key: "rt_sparepart", group: "retail", label: "Sparepart", bu: ["14"], channels: ["101"] },
+  { key: "rt_sparepart", group: "retail", label: "Sparepart", bu: ["14"], channels: ["101", "106"] },
   {
     key: "rt_online",
     group: "retail",

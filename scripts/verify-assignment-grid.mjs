@@ -12,7 +12,7 @@
 import { loadEnv } from "./_env.mjs";
 import pg from "pg";
 import { SELLER_TABLE } from "../lib/sale-monthly-sql.mjs";
-import { claimableChannelSql, isManagerSql } from "../lib/sales-board-roles.mjs";
+import { claimableChannelSql, isManagerSql, managesChannelSql, planChannelSql } from "../lib/sales-board-roles.mjs";
 
 loadEnv();
 
@@ -52,8 +52,9 @@ const [grid] = await q(
       AND (b.province_code = 'ALL' OR st.province_code = 'ALL' OR st.province_code = b.province_code)
       AND (b.district_code = 'ALL' OR st.district_code = 'ALL' OR st.district_code = b.district_code)
       AND ${claimableChannelSql("b", "st")}
-     -- Managers own nothing; their board figure is a roll-up of these rows.
-     WHERE NOT ${isManagerSql("b")}
+     -- A manager owns nothing in the channel they run; their board figure there
+     -- is a roll-up of these rows. Channels they merely sell they claim.
+      AND NOT ${managesChannelSql("b", "st")}
    ),
    owner AS (
      SELECT DISTINCT ON (c.target_id) c.target_id, c.assignment_id, c.target_amount
@@ -113,7 +114,7 @@ const unclaimed = await q(
      AND NOT EXISTS (
        SELECT 1 FROM public.odg_sales_assignment b
        WHERE b.month = st.target_month AND b.bu_code = st.bu_code
-         AND NOT ${isManagerSql("b")}
+         AND NOT ${managesChannelSql("b", "st")}
          AND (b.province_code = 'ALL' OR st.province_code = 'ALL' OR st.province_code = b.province_code)
          AND (b.district_code = 'ALL' OR st.district_code = 'ALL' OR st.district_code = b.district_code)
          AND ${claimableChannelSql("b", "st")}
@@ -133,20 +134,19 @@ console.log("\nmanager roll-ups (shown on the board, counted in no total):");
 for (const row of await q(
   `WITH mgr AS (
      SELECT DISTINCT ON (b.sale_id, b.bu_code, b.month)
-            b.id, b.sale_id, b.sale_name, b.bu_code, b.month, b.channel_codes
+            b.id, b.sale_id, b.sale_name, b.bu_code, b.month
      FROM public.odg_sales_assignment b
      WHERE ${isManagerSql("b")}
      ORDER BY b.sale_id, b.bu_code, b.month, b.id
    )
    SELECT m.sale_id, MIN(m.sale_name) AS name,
           string_agg(DISTINCT m.bu_code, '+') AS bus,
-          COALESCE(array_to_string(MIN(m.channel_codes), '+'), 'ALL') AS channels,
+          string_agg(DISTINCT ${planChannelSql("st")}, '+') AS channels,
           SUM(st.target_amount)::float AS rollup
    FROM mgr m
    JOIN public.odg_sales_target st
      ON st.target_year = $1::int AND st.target_month = m.month AND st.bu_code = m.bu_code
-    AND (m.channel_codes IS NULL OR array_length(m.channel_codes, 1) IS NULL
-         OR st.sale_channel = ANY(m.channel_codes) OR st.sale_channel = 'ALL')
+    AND ${managesChannelSql("m", "st")}
    GROUP BY m.sale_id ORDER BY 5 DESC`,
   [YEAR],
 )) {
