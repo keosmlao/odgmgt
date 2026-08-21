@@ -69,8 +69,15 @@ export default function Topbar() {
           <span className="topbar-avatar">{initials(displayName)}</span>
           <span className="min-w-0 leading-tight">
             <span className="block truncate text-[12px] font-semibold">{displayName}</span>
-            <span className="block truncate text-[10px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-              {user?.role || "—"}
+            {/* The job title from odg_employee, not the app's permission role —
+                a manager whose access level is "ceo" is still a ຜູ້ຈັດການ. Older
+                tokens carry no title, so the role stays as the fallback. */}
+            <span
+              className="block truncate text-[10px] tracking-wider"
+              style={{ color: "var(--muted)" }}
+              title={user?.role ? `${user.role}` : undefined}
+            >
+              {user?.position_name || (user?.role ? String(user.role).toUpperCase() : "—")}
             </span>
           </span>
         </span>

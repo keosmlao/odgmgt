@@ -6,8 +6,8 @@ import Link from "next/link";
 import {
   Loader2, AlertCircle, RefreshCw, Sun, Moon, Filter,
   Clock, Zap, AlertTriangle, TrendingUp, RotateCcw, X, ArrowUpRight, ClipboardCheck,
-  Target, BarChart3, ChevronRight, LayoutDashboard, DollarSign, Database, Shield,
-  Printer, Bell, Monitor, Sparkles, Download,
+  Target, BarChart3, ChevronRight, LayoutDashboard, DollarSign, Database,
+  Printer, Bell, Monitor, Download, MoreVertical,
 } from "lucide-react";
 import api from "@/service/api";
 import {
@@ -201,6 +201,8 @@ export default function Dashboard() {
   const [buTargets, setBuTargets] = useState<any>(null);
   const [dataSync, setDataSync] = useState<any>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  /** Lightning condenses its page header once you scroll past it. */
+  const [condensed, setCondensed] = useState(false);
   const [tvMode, setTvMode] = useState(false);
   const [thisMonthSnapshot, setThisMonthSnapshot] = useState<any>(null);
   const [lastMonthSnapshot, setLastMonthSnapshot] = useState<any>(null);
@@ -209,6 +211,13 @@ export default function Dashboard() {
   const thisMonthSnapshotKeyRef = useRef("");
   const lastMonthSnapshotKeyRef = useRef("");
   const font = { fontFamily: '"Noto Sans Lao","Noto Sans",system-ui,sans-serif' };
+
+  useEffect(() => {
+    const onScroll = () => setCondensed(window.scrollY > 140);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const activeFilters = [
     d.bu !== "ALL" ? { key: "bu", label: `${t("filter.bu")}: ${d.buNameMap?.[d.bu] || d.bu}`, clear: () => d.setBu("ALL") } : null,
     !d.channel.includes("ALL") ? { key: "channel", label: `${t("filter.channel")}: ${d.channel.join(", ")}`, clear: () => d.setChannel(["ALL"]) } : null,
@@ -535,7 +544,6 @@ export default function Dashboard() {
   const eoyGap = Number(data?.eoyGap || 0);
   /** Years with no rows in odg_sales_target cannot be judged against a plan. */
   const hasYtdTarget = Number(kpi.ytd_target || 0) > 0;
-  const forecastAch = hasYtdTarget ? (Number(data?.forecastEOY || 0) / Number(kpi.ytd_target)) * 100 : 0;
   const gpPct = Number(exec?.grossProfit?.gpPct || 0);
   const collectionRate = Number(exec?.collection?.rate || 0);
   const momGrowthPct = Number(analytics?.momGrowth?.growthPct || 0);
@@ -547,12 +555,6 @@ export default function Dashboard() {
   /** Pass/watch badge for a figure judged against a threshold, not a target. */
   const thresholdBadge = (ok: boolean) =>
     ({ text: t(ok ? "kpi.good" : "kpi.watch"), tone: ok ? ("pos" as const) : ("warn" as const) });
-  /** Cash as a share of the month's collected value — a real 0-100 figure. */
-  const cashShare = (cash: unknown, credit: unknown) => {
-    const total = Number(cash || 0) + Number(credit || 0);
-    return total > 0 ? (Number(cash || 0) / total) * 100 : 0;
-  };
-
   /**
    * The figures behind the overview as one long-format sheet — section, label,
    * value — so the same file works whatever mix of tables is on screen.
@@ -637,7 +639,20 @@ export default function Dashboard() {
   }
 
   /* ══ One-line executive summary built from the live KPI numbers ══ */
-  const topBu = (buProfit || []).slice().sort((a: any, b: any) => Number(b.revenue || 0) - Number(a.revenue || 0))[0];
+  /**
+   * A BU's display name. A few sale lines carry no bu_code — a free-gift line,
+   * a credit note nobody filed — and the raw fallback printed the string "null"
+   * as a business unit on an executive dashboard.
+   */
+  const buLabel = (code: any) => {
+    const key = String(code ?? "").trim();
+    if (!key || key === "-" || key === "null" || key === "undefined") return t("dash.buUnassigned");
+    return d.buNameMap?.[key] || key;
+  };
+
+  const orderCount = Number(data?.counts?.orders || 0);
+  const avgDealValue = Number(data?.diagnose?.conversion?.avgDeal || 0)
+    || (orderCount > 0 ? Number(kpi.ytd_actual || 0) / orderCount : 0);
   const secNav = [
     { id: "sec-kpi", label: t("dash.navKpi") },
     { id: "sec-target", label: t("dash.navTarget") },
@@ -688,7 +703,7 @@ export default function Dashboard() {
   buList.forEach((b: string) => { const r = pivot.get(b); channelList.forEach((ch: string) => { const v = r?.get(ch) || 0; if (v > heatMax) heatMax = v; }); });
 
   // BU profit pie
-  const buPie = buProfit.slice(0, 6).map((b: any) => ({ name: d.buNameMap?.[String(b.bu)] || b.bu, value: Math.max(Number(b.revenue || 0), 0) }));
+  const buPie = buProfit.slice(0, 6).map((b: any) => ({ name: buLabel(b.bu), value: Math.max(Number(b.revenue || 0), 0) }));
   // Group profit pie
   const gpPie = groupProfit.slice(0, 6).map((g: any) => ({ name: g.group, value: Math.max(Number(g.revenue || 0), 0) }));
 
@@ -722,10 +737,14 @@ export default function Dashboard() {
     const totalPayment = cash + credit;
     return (
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card title={t("section.achievement")}>
-          <Progress label={t("dash.achievement")} v={ach} />
-          <Progress label={t("dash.cashShare")} v={totalPayment > 0 ? (cash / totalPayment) * 100 : 0} />
-          <Progress label={t("label.repeatCustomer")} v={Number(qualityData.repeatPct || 0)} />
+        <Card title={t("section.achievement")} icon={<Target size={13} />} to="/month-summary" toLabel={t("dash.viewReport")}>
+          <div className="flex flex-col items-center">
+            <Gauge value={ach} label={t("dash.achievement")} />
+          </div>
+          <div className="mt-2">
+            <Progress label={t("dash.cashShare")} v={totalPayment > 0 ? (cash / totalPayment) * 100 : 0} />
+            <Progress label={t("label.repeatCustomer")} v={Number(qualityData.repeatPct || 0)} />
+          </div>
         </Card>
         <Card title={t("section.payment")}>
           <div className="flex items-center gap-5">
@@ -753,7 +772,7 @@ export default function Dashboard() {
   const renderRevenueMatrix = (matrix: any) => {
     if (!matrix.buList.length || !matrix.channelList.length) return null;
     return (
-      <Card title={t("dash.revenueMatrix")}>
+      <Card title={t("dash.revenueMatrix")} icon={<BarChart3 size={13} />} to="/sales-summary" toLabel={t("dash.viewReport")}>
         <div className="overflow-x-auto"><table className="w-full text-xs">
           <thead><tr className={tw.sub}>
             <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">BU</th>
@@ -765,7 +784,7 @@ export default function Dashboard() {
             const tot = matrix.channelList.reduce((s: number, ch: string) => s + (rm.get(ch) || 0), 0);
             return (
               <tr key={b} className="hover:bg-[var(--surface-2)]">
-                <td className={`whitespace-nowrap px-2 py-1.5 font-medium ${tw.head}`}>{d.buNameMap?.[String(b)] || b}</td>
+                <td className={`whitespace-nowrap px-2 py-1.5 font-medium ${tw.head}`}>{buLabel(b)}</td>
                 {matrix.channelList.map((ch: string) => {
                   const v = rm.get(ch) || 0;
                   const op = matrix.heatMax > 0 ? Math.max((v / matrix.heatMax) * 0.85, 0.04) : 0.04;
@@ -787,7 +806,7 @@ export default function Dashboard() {
   };
 
   const renderBuAndGroupSections = (buProfitRows: any[], groupRows: any[]) => {
-    const localBuPie = buProfitRows.slice(0, 6).map((b: any) => ({ name: d.buNameMap?.[String(b.bu)] || b.bu, value: Math.max(Number(b.revenue || 0), 0) }));
+    const localBuPie = buProfitRows.slice(0, 6).map((b: any) => ({ name: buLabel(b.bu), value: Math.max(Number(b.revenue || 0), 0) }));
     const localGpPie = groupRows.slice(0, 6).map((g: any) => ({ name: g.group, value: Math.max(Number(g.revenue || 0), 0) }));
 
     return (
@@ -806,7 +825,7 @@ export default function Dashboard() {
           <Card title={t("dash.buProfit")}>
             <div className="space-y-1.5">{buProfitRows.slice(0, 6).map((b: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs">
-                <span className={`font-medium ${tw.head}`}>{d.buNameMap?.[String(b.bu)] || b.bu}</span>
+                <span className={`font-medium ${tw.head}`}>{buLabel(b.bu)}</span>
                 <div className="flex gap-3 tabular-nums">
                   <span className={tw.sub}>Rev {compact(b.revenue)}</span>
                   <span className={`font-bold ${Number(b.profit_thb || 0) >= 0 ? tw.green : tw.red}`}>{Number(b.profit_thb || 0) >= 0 ? "+" : ""}{compact(b.profit_thb)}</span>
@@ -856,7 +875,7 @@ export default function Dashboard() {
             <div className="space-y-4">
               {buProfitRows.filter((b: any) => b.brands && b.brands.length > 0).slice(0, 6).map((b: any, bi: number) => (
                 <div key={bi}>
-                  <p className={`text-xs font-semibold ${tw.head}`}>{d.buNameMap?.[String(b.bu)] || b.bu}</p>
+                  <p className={`text-xs font-semibold ${tw.head}`}>{buLabel(b.bu)}</p>
                   <div className="mt-1.5 overflow-x-auto">
                     <table className="w-full text-[11px]">
                       <thead><tr className={tw.sub}>
@@ -888,7 +907,7 @@ export default function Dashboard() {
 
   const renderProductCards = (topRevenueRows: any[], topMarginRows: any[], revenueTitle: string, marginTitle: string) => (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card title={revenueTitle}>
+      <Card title={revenueTitle} to="/products" toLabel={t("dash.viewReport")}>
         {topRevenueRows.map((p: any, i: number) => (
           <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
             <div className="min-w-0 flex-1"><p className={`truncate text-xs font-medium ${tw.head}`}>{p.name || p.code}</p><p className="text-[10px] text-[var(--muted)]">{p.code}</p></div>
@@ -897,7 +916,7 @@ export default function Dashboard() {
         ))}
         {topRevenueRows.length === 0 && <Empty text={t("label.noData")} />}
       </Card>
-      <Card title={marginTitle}>
+      <Card title={marginTitle} to="/products" toLabel={t("dash.viewReport")}>
         {topMarginRows.map((p: any, i: number) => (
           <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
             <div className="min-w-0 flex-1"><p className={`truncate text-xs font-medium ${tw.head}`}>{p.name || p.code}</p><p className="text-[10px] text-[var(--muted)]">GP {(Number(p.gp || 0) * 100).toFixed(1)}%</p></div>
@@ -957,7 +976,7 @@ export default function Dashboard() {
         </>}
       </Card>
 
-      <Card title={t("dash.arAging")}>
+      <Card title={t("dash.arAging")} icon={<DollarSign size={13} />} to="/receivables" toLabel={t("dash.viewReport")}>
         <p className={`text-2xl font-bold ${tw.head}`}>{fmt(arData.total)}</p>
         <div className="mt-3 space-y-1.5">
           {(arData.buckets || []).map((b: any, i: number) => {
@@ -991,60 +1010,210 @@ export default function Dashboard() {
     </div>
   );
 
-  return (
-    <div style={font} className="min-h-screen bg-transparent">
+  /**
+   * The highlights panel — the seven numbers a CEO opens this page for, on one
+   * line under the title. Everything here is already computed above; this only
+   * decides what earns a slot and which of them carry a colour. `tone` names a
+   * token, so the value picks up --pos / --neg and follows dark mode.
+   */
+  type Highlight = { label: string; value: string; sub: string; tone?: "pos" | "warn" | "neg" };
 
-      {/* ══════ HEADER ══════ */}
-      <header className="page-hd flex-col !items-stretch !gap-0 !p-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 lg:px-6">
-          <div>
-            <p className="eyebrow">Executive overview</p>
-            <h1 className="page-title">{t("app.title")}</h1>
-            <p className="page-sub">
-              {t("app.subtitle")} — FY {d.year} · {t("dash.currencyUnit")}
-              {d.updatedAt && <> · {t("dash.updatedAt")} {d.updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>}
-            </p>
+  /**
+   * The period the highlights describe. The panel is the page's summary line,
+   * so it has to answer for whichever tab is open — left on YTD it contradicted
+   * every widget under it the moment you opened a month tab.
+   */
+  const period =
+    tab === "lastMonth"
+      ? {
+          label: prevTrend.name || t("kpi.lastMonth"),
+          actual: Number(kpi.last_month_actual || 0),
+          target: Number(kpi.last_month_target || 0),
+          ach: lastMonthAch,
+          lastYear: prevMonthLYActual,
+          cash: lastMonthCash,
+          credit: lastMonthCredit,
+        }
+      : tab === "thisMonth"
+        ? {
+            label: curTrend.name || t("kpi.thisMonth"),
+            actual: Number(kpi.this_month_actual || 0),
+            target: Number(kpi.this_month_target || 0),
+            ach: thisMonthAch,
+            lastYear: sameMonthLY,
+            cash: thisMonthCash,
+            credit: thisMonthCredit,
+          }
+        : {
+            label: t("kpi.ytd"),
+            actual: Number(kpi.ytd_actual || 0),
+            target: Number(kpi.ytd_target || 0),
+            ach: ytdAch,
+            lastYear: Number(kpi.ytd_last_year || 0),
+            cash: cashVal,
+            credit: creditVal,
+          };
+  const periodYoy = period.lastYear > 0 ? (period.actual / period.lastYear - 1) * 100 : 0;
+  const periodCashShare = period.cash + period.credit > 0
+    ? (period.cash / (period.cash + period.credit)) * 100
+    : 0;
+  const hasPeriodTarget = period.target > 0;
+
+  const highlights: Highlight[] = [
+    {
+      label: period.label,
+      value: fmt(period.actual),
+      sub: `${t("kpi.target")} ${compact(period.target)}`,
+    },
+    {
+      label: t("dash.achievement"),
+      value: hasPeriodTarget ? `${period.ach.toFixed(1)}%` : "—",
+      sub: hasPeriodTarget
+        ? `${t("kpi.gap")} ${compact(Math.max(period.target - period.actual, 0))}`
+        : t("kpi.noTarget"),
+      tone: !hasPeriodTarget ? undefined : period.ach >= 100 ? "pos" : period.ach >= 90 ? "warn" : "neg",
+    },
+    {
+      label: "YoY",
+      value: period.lastYear > 0 ? `${periodYoy >= 0 ? "+" : ""}${periodYoy.toFixed(1)}%` : "—",
+      sub: `${t("kpi.lastYear")} ${compact(period.lastYear)}`,
+      tone: period.lastYear > 0 ? (periodYoy >= 0 ? "pos" : "neg") : undefined,
+    },
+    {
+      label: t("dash.cashShare"),
+      value: `${periodCashShare.toFixed(0)}%`,
+      sub: `${t("momentum.cash")} ${compact(period.cash)} · ${t("momentum.credit")} ${compact(period.credit)}`,
+      tone: periodCashShare < 50 ? "warn" : undefined,
+    },
+
+    /* The pace only means something while the month is still running. */
+    ...(tab === "thisMonth"
+      ? ([{
+          label: t("momentum.perDay"),
+          value: fmt(data?.requiredPerDay),
+          sub: `${data?.daysLeft || 0} ${t("momentum.daysLeft")}`,
+          tone: onTrack ? undefined : "warn",
+        }] as Highlight[])
+      : []),
+
+    /* Whole-year measures. They are computed over the year, not the period, so
+       on a month tab they would sit next to July's numbers claiming to describe
+       July — the contradiction this panel exists to avoid. */
+    ...(tab === "overview"
+      ? ([
+          {
+            label: t("kpi.thisMonth"),
+            value: fmt(kpi.this_month_actual),
+            sub: `${t("kpi.target")} ${compact(kpi.this_month_target)}`,
+          },
+          {
+            label: t("kpi.forecast"),
+            value: compact(data?.forecastEOY),
+            sub: !hasYtdTarget
+              ? t("kpi.noTarget")
+              : eoyGap <= 0
+                ? `${t("kpi.aheadOfPlan")} ${compact(Math.abs(eoyGap))}`
+                : `${t("kpi.gap")} ${compact(eoyGap)}`,
+          },
+          {
+            label: "GP %",
+            value: exec || execFailed ? `${gpPct.toFixed(1)}%` : "—",
+            sub: `${t("kpi.profit")} ${compact(exec?.grossProfit?.profit)}`,
+            tone: exec && gpPct < 20 ? "warn" : undefined,
+          },
+          {
+            label: t("kpi.collection"),
+            value: exec || execFailed ? `${collectionRate.toFixed(0)}%` : "—",
+            sub: `${t("momentum.cash")} ${compact(exec?.collection?.collected)}`,
+            tone: exec && collectionRate < 50 ? "warn" : undefined,
+          },
+          {
+            label: t("dash.customers"),
+            value: Number(data?.counts?.customers || 0).toLocaleString(),
+            sub: `${t("dash.orders")} ${Number(data?.counts?.orders || 0).toLocaleString()} · ${t("dash.revPerOrder")} ${compact(avgDealValue)}`,
+          },
+        ] as Highlight[])
+      : []),
+
+    /* A balance, not a period figure: what is owed right now is the same answer
+       on every tab, and it is the one number here that never stops mattering. */
+    {
+      label: t("dash.arOverdue"),
+      value: compact(overdueAr),
+      sub: `${t("dash.arAging")} ${compact(arAging.total)}`,
+      tone: overdueAr > Number(arAging.total || 0) * 0.4 ? "neg" : overdueAr > 0 ? "warn" : undefined,
+    },
+  ];
+
+  return (
+    <div style={font} className="sf-app min-h-screen bg-transparent">
+
+      {/* ══════ LIGHTNING PAGE HEADER ══════
+          Breadcrumb, then the page's identity and its actions, then the numbers
+          nobody should have to scroll for, then the tabs. Salesforce puts the
+          record's own summary above the fold and everything else behind a tab;
+          this header is that same order. */}
+      <header className="sf-hd" data-condensed={condensed ? "true" : undefined}>
+        <div className="sf-crumb print:hidden">
+          <LayoutDashboard size={11} />
+          <span>{t("dash.tab.overview")}</span>
+          <ChevronRight size={11} />
+          <span className="font-semibold text-[var(--ink-soft)]">{t("app.title")}</span>
+        </div>
+
+        <div className="sf-ph">
+          <div className="sf-ph-id">
+            <span className="sf-icon"><BarChart3 size={18} /></span>
+            <div className="min-w-0">
+              <h1 className="sf-ph-title truncate">{t("app.title")}</h1>
+              <p className="sf-ph-meta">
+                {t("app.subtitle")} · FY {d.year} · {t("dash.currencyUnit")}
+                {d.updatedAt && <> · {t("dash.updatedAt")} {d.updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>}
+              </p>
+            </div>
           </div>
+
           <div className="flex items-center gap-1.5 print:hidden">
-            <button onClick={() => setShowFilter(!showFilter)} className={`btn ${showFilter ? "btn-primary" : ""}`}><Filter size={13} /> {t("app.filters")}</button>
-            <button onClick={() => setAutoRefresh(!autoRefresh)} title={t("dash.autoRefresh")} className={`btn btn-ghost btn-icon ${autoRefresh ? "!bg-[var(--info-bg)] !text-[var(--brand)]" : ""}`}><Zap size={14} /></button>
-            <button onClick={exportCsv} title={t("dash.exportCsv")} className="btn btn-ghost btn-icon"><Download size={14} /></button>
-            <button onClick={() => window.print()} title={t("dash.printReport")} className="btn btn-ghost btn-icon"><Printer size={14} /></button>
-            <button onClick={() => setTvMode(!tvMode)} title={t("dash.tvMode")} className={`btn btn-ghost btn-icon ${tvMode ? "!bg-[var(--info-bg)] !text-[var(--brand)]" : ""}`}><Monitor size={14} /></button>
-            <button onClick={() => d.load()} className="btn btn-ghost btn-icon"><RefreshCw size={14} className={d.loading || d.refreshing ? "animate-spin" : ""} /></button>
-            <button onClick={toggleTheme} className="btn btn-ghost btn-icon">{isDark ? <Sun size={14} /> : <Moon size={14} />}</button>
+            <div className="sf-group">
+              <button onClick={() => setShowFilter(true)} className={`btn ${activeFilters.length ? "is-on" : ""}`}>
+                <Filter size={13} /> {t("app.filters")}
+                {activeFilters.length > 0 && <span className="pill">{activeFilters.length}</span>}
+              </button>
+              <button onClick={() => d.load()} className="btn">
+                <RefreshCw size={13} className={d.loading || d.refreshing ? "animate-spin" : ""} />
+                {t("monthSummary.refresh")}
+              </button>
+            </div>
+            {/* Everything that is a preference rather than an action lives behind
+                the overflow, the way Lightning keeps a header to two buttons. */}
+            <Kebab
+              align="right"
+              items={[
+                { label: t("dash.autoRefresh"), icon: <Zap size={13} />, onClick: () => setAutoRefresh(!autoRefresh), state: autoRefresh ? "ON" : "OFF" },
+                { label: t("dash.tvMode"), icon: <Monitor size={13} />, onClick: () => setTvMode(!tvMode), state: tvMode ? "ON" : "OFF" },
+                { sep: true },
+                { label: t("dash.exportCsv"), icon: <Download size={13} />, onClick: exportCsv },
+                { label: t("dash.printReport"), icon: <Printer size={13} />, onClick: () => window.print() },
+                { sep: true },
+                { label: isDark ? t("theme.light") : t("theme.dark"), icon: isDark ? <Sun size={13} /> : <Moon size={13} />, onClick: toggleTheme },
+              ]}
+            />
           </div>
         </div>
-        {tvMode && (
-          <button onClick={() => setTvMode(false)} className="tv-keep fixed bottom-5 right-5 z-[60] inline-flex items-center gap-2 rounded-full bg-[var(--brand-deep)] px-4 py-2.5 text-xs font-semibold text-white shadow-xl print:hidden">
-            <X size={14} /> {t("dash.exitTv")}
-          </button>
-        )}
-        {showFilter && (
-          <div className="border-t border-[var(--line-soft)] px-4 py-2.5 lg:px-6">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold text-[var(--ink)]">{t("app.filters")}</p>
-              <button type="button" onClick={d.resetFilters} className="btn btn-ghost !px-2 !py-1 text-[10px]"><RotateCcw size={11} />{t("dash.resetFilters")}</button>
+
+        {/* ── Highlights panel ── */}
+        <div className="sf-hl">
+          {highlights.map((h) => (
+            <div key={h.label} className="sf-hl-item">
+              <p className="sf-hl-label">{h.label}</p>
+              <p className="sf-hl-value" style={h.tone ? { color: `var(--${h.tone})` } : undefined}>{h.value}</p>
+              <p className="sf-hl-sub">{h.sub}</p>
             </div>
-            <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-            {[
-              { l: t("filter.year"), v: d.year, fn: (v: string) => d.setYear(v), opts: d.yearOptions.map((y: any) => ({ v: y, l: y })), noAll: true },
-              { l: t("filter.bu"), v: d.bu, fn: (v: string) => d.setBu(v), opts: d.buOptions.map((o: any) => ({ v: o.value, l: o.label })) },
-              { l: t("filter.channel"), v: d.channel[0] || "ALL", fn: (v: string) => d.setChannel([v]), opts: d.channelOptions.map((o: any) => ({ v: o.value, l: o.label })) },
-              { l: t("filter.province"), v: d.province[0] || "ALL", fn: (v: string) => d.setProvince([v]), opts: d.provinceOptions.map((o: any) => ({ v: o.value, l: o.label })) },
-            ].map((f, i) => (
-              <div key={i}><label className="field-label">{f.l}</label>
-                <select value={f.v} onChange={e => f.fn(e.target.value)} className="select">
-                  {!f.noAll && <option value="ALL">{t("app.all")}</option>}
-                  {f.opts.map((o: any) => <option key={o.v} value={o.v}>{o.l}</option>)}
-                </select>
-              </div>
-            ))}
-            </div>
-          </div>
-        )}
+          ))}
+        </div>
+
         {activeFilters.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--line-soft)] px-4 py-2 lg:px-6">
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 print:hidden">
             <span className="text-[10px] font-semibold text-[var(--muted)]">{t("dash.activeFilters")}</span>
             {activeFilters.map((filter) => (
               <button key={filter.key} type="button" onClick={filter.clear} className="pill hover:opacity-75">
@@ -1053,19 +1222,63 @@ export default function Dashboard() {
             ))}
           </div>
         )}
-        {/* Tab bar */}
-        <div className="border-t border-[var(--line-soft)] px-4 py-2 lg:px-6"><div className="tabs">
+
+        <div className="sf-tabs print:hidden">
           {([
             { key: "overview" as const, label: t("dash.tab.overview") },
             { key: "lastMonth" as const, label: `${t("dash.tab.lastMonth")} · ${trend[prevMonthIdx]?.name || "Prev"}` },
             { key: "thisMonth" as const, label: `${t("dash.tab.thisMonth")} · ${trend[new Date().getMonth()]?.name || "Now"}` },
           ]).map(tb => (
-            <button key={tb.key} onClick={() => setTab(tb.key)} className={`tab ${tab === tb.key ? "is-active" : ""}`}>
+            <button key={tb.key} onClick={() => setTab(tb.key)} className={`sf-tab ${tab === tb.key ? "is-active" : ""}`}>
               {tb.label}
             </button>
           ))}
-        </div></div>
+        </div>
       </header>
+
+      {/* ── Filters, docked to the right edge ──
+          A panel rather than a strip: opening the filters used to shove the whole
+          dashboard down the page, so you lost your place every time you changed
+          one. */}
+      {showFilter && (
+        <>
+          <div className="sf-dock-backdrop print:hidden" onClick={() => setShowFilter(false)} />
+          <aside className="sf-dock print:hidden" role="dialog" aria-label={t("app.filters")}>
+            <div className="sf-dock-hd">
+              <p className="flex items-center gap-2 text-[13px] font-bold text-[var(--ink)]">
+                <Filter size={14} className="text-[var(--brand)]" /> {t("app.filters")}
+              </p>
+              <button onClick={() => setShowFilter(false)} className="btn btn-ghost btn-icon"><X size={15} /></button>
+            </div>
+            <div className="sf-dock-bd space-y-3">
+              {[
+                { l: t("filter.year"), v: d.year, fn: (v: string) => d.setYear(v), opts: d.yearOptions.map((y: any) => ({ v: y, l: y })), noAll: true },
+                { l: t("filter.bu"), v: d.bu, fn: (v: string) => d.setBu(v), opts: d.buOptions.map((o: any) => ({ v: o.value, l: o.label })) },
+                { l: t("filter.channel"), v: d.channel[0] || "ALL", fn: (v: string) => d.setChannel([v]), opts: d.channelOptions.map((o: any) => ({ v: o.value, l: o.label })) },
+                { l: t("filter.province"), v: d.province[0] || "ALL", fn: (v: string) => d.setProvince([v]), opts: d.provinceOptions.map((o: any) => ({ v: o.value, l: o.label })) },
+              ].map((f, i) => (
+                <div key={i}>
+                  <label className="field-label">{f.l}</label>
+                  <select value={f.v} onChange={e => f.fn(e.target.value)} className="select">
+                    {!f.noAll && <option value="ALL">{t("app.all")}</option>}
+                    {f.opts.map((o: any) => <option key={o.v} value={o.v}>{o.l}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="sf-dock-ft">
+              <button type="button" onClick={d.resetFilters} className="btn"><RotateCcw size={12} /> {t("dash.resetFilters")}</button>
+              <button type="button" onClick={() => setShowFilter(false)} className="btn btn-primary">{t("app.close")}</button>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {tvMode && (
+        <button onClick={() => setTvMode(false)} className="tv-keep fixed bottom-5 right-5 z-[60] inline-flex items-center gap-2 rounded-[var(--sf-r)] bg-[var(--brand-deep)] px-4 py-2.5 text-xs font-semibold text-white shadow-xl print:hidden">
+          <X size={14} /> {t("dash.exitTv")}
+        </button>
+      )}
 
       {(d.loading || d.refreshing) && data && (
         <div className="fixed inset-x-0 top-0 z-50 h-1 overflow-hidden bg-sky-100 dark:bg-blue-900/30">
@@ -1074,30 +1287,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      <main className="mx-auto max-w-[1480px] space-y-6 px-5 py-6 lg:px-8 lg:py-8">
+      <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6 lg:py-5">
 
         {/* ══════════════════════════════════════════════════════════════
             TAB: OVERVIEW (ພາບລວມ YTD)
         ══════════════════════════════════════════════════════════════ */}
         {tab === "overview" && (<>
-
-        {/* ═══════════════════════════════════════════════════════════
-            SECTION 0: EXECUTIVE SUMMARY (one-line status)
-        ═══════════════════════════════════════════════════════════ */}
-        <div className="rounded-[var(--r-lg)] border border-[var(--brand-soft)] bg-[var(--brand-soft)]/40 px-4 py-3">
-          <p className={`text-[13px] leading-relaxed ${tw.head}`}>
-            <Sparkles size={14} className="mr-1.5 inline-block -translate-y-px text-[var(--brand)]" />
-            <strong>{fmt(kpi.ytd_actual)}</strong> {t("dash.summaryAch")} <strong>{ytdAch.toFixed(1)}%</strong> {t("dash.summaryOfTarget")}
-            {" • "}
-            {monthGap > 0 ? (
-              <>{t("dash.summaryRemain")} <strong className="text-[var(--neg)]">{fmt(monthGap)}</strong> {t("dash.summaryInDays")} <strong>{data?.daysLeft || 0}</strong> {t("momentum.daysLeft")}</>
-            ) : (
-              <strong className="text-[var(--pos)]">{t("momentum.onTrack")}</strong>
-            )}
-            {topBu && <>{" • "}{t("dash.summaryTopBu")}: <strong>{d.buNameMap?.[String(topBu.bu)] || topBu.bu}</strong> ({compact(topBu.revenue)})</>}
-            {exec?.grossProfit?.profit != null && <>{" • "}{t("kpi.profit")} <strong>{fmt(exec.grossProfit.profit)}</strong> ({gpPct.toFixed(1)}%)</>}
-          </p>
-        </div>
 
         {/* ═══════════════════════════════════════════════════════════
             SECTION 0A: EXECUTIVE ALERT CENTER
@@ -1130,7 +1325,7 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════
             SECTION 0B: STICKY SECTION NAVIGATOR
         ═══════════════════════════════════════════════════════════ */}
-        <div className="sticky top-14 z-30 -mx-5 flex gap-1.5 overflow-x-auto border-y border-[var(--line-soft)] bg-[var(--canvas)]/90 px-5 py-2 backdrop-blur-md md:top-0 lg:-mx-8 lg:px-8 print:hidden">
+        <div className="-mx-4 flex gap-1.5 overflow-x-auto border-y border-[var(--line-soft)] px-4 py-2 lg:-mx-6 lg:px-6 print:hidden">
           {secNav.map((n) => (
             <button key={n.id} onClick={() => document.getElementById(n.id)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="pill whitespace-nowrap">{n.label}</button>
           ))}
@@ -1146,116 +1341,12 @@ export default function Dashboard() {
             <span>{t("dash.targetMissing")}</span>
           </div>
         )}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi featured label={t("kpi.ytd")} value={fmt(kpi.ytd_actual)} sub={`${t("kpi.target")} ${fmt(kpi.ytd_target)}`} ach={ytdAch} color="blue" />
-          <Kpi label={t("kpi.thisMonth")} value={fmt(kpi.this_month_actual)} sub={`${t("kpi.target")} ${fmt(kpi.this_month_target)}`} ach={thisMonthAch} color="violet" />
-          {/* YoY is a direction, not an achievement — the value already carries the number. */}
-          <Kpi
-            label="YoY"
-            value={`${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%`}
-            sub={`${t("kpi.lastYear")} ${fmt(kpi.ytd_last_year)}`}
-            badge={{ text: t(yoy >= 0 ? "kpi.up" : "kpi.down"), tone: yoy >= 0 ? "pos" : "neg" }}
-          />
-          {/* eoyGap is target − forecast, so a negative gap means the forecast beats the plan. */}
-          <Kpi
-            label="Forecast EOY"
-            value={compact(data?.forecastEOY)}
-            sub={
-              !hasYtdTarget
-                ? t("kpi.noTarget")
-                : eoyGap <= 0
-                  ? `${t("kpi.aheadOfPlan")} ${compact(Math.abs(eoyGap))}`
-                  : `${t("kpi.gap")} ${compact(eoyGap)}`
-            }
-            ach={hasYtdTarget ? forecastAch : undefined}
-          />
-          <Kpi
-            label="GP %"
-            loading={!exec && !execFailed}
-            value={`${gpPct.toFixed(1)}%`}
-            sub={`${t("kpi.profit")} ${fmt(exec?.grossProfit?.profit)}`}
-            ach={gpPct}
-            barTone={gpPct >= 20 ? "pos" : "warn"}
-            badge={null}
-          />
-          <Kpi
-            label={t("kpi.cashShare")}
-            loading={!exec && !execFailed}
-            value={`${collectionRate.toFixed(0)}%`}
-            sub={`${t("momentum.cash")} ${fmt(exec?.collection?.collected)}`}
-            ach={collectionRate}
-            barTone={collectionRate >= 50 ? "pos" : "warn"}
-            badge={null}
-          />
-          <Kpi
-            label={t("dash.customers")}
-            value={Number(data?.counts?.customers || 0).toLocaleString()}
-            sub={`${t("dash.ordersPerCust")} ${Number(data?.counts?.customers || 0) > 0 ? (Number(data?.counts?.orders || 0) / Number(data?.counts?.customers)).toFixed(1) : "0"}`}
-            badge={null}
-          />
-          <Kpi
-            label={t("dash.orders")}
-            value={Number(data?.counts?.orders || 0).toLocaleString()}
-            sub={`${t("dash.revPerOrder")} ${compact(Number(data?.counts?.orders || 0) > 0 ? Number(kpi.ytd_actual || 0) / Number(data?.counts?.orders) : 0)}`}
-            badge={null}
-          />
-        </div>
-
-        {/* Executive decisions and approval workload */}
-        <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-          <Card title={t("dash.executiveDecision") }>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <DecisionTile
-                tone={ytdAch >= 100 ? "pos" : ytdAch >= 90 ? "warn" : "neg"}
-                label={t("dash.salesPosition")}
-                value={`${ytdAch.toFixed(1)}%`}
-                detail={hasYtdTarget ? `${t("kpi.gap")} ${fmt(Math.max(Number(kpi.ytd_target || 0) - Number(kpi.ytd_actual || 0), 0))}` : t("kpi.noTarget")}
-              />
-              <DecisionTile
-                tone={gpPct >= 20 ? "pos" : "warn"}
-                label={t("dash.profitHealth")}
-                value={`${gpPct.toFixed(1)}%`}
-                detail={`${t("kpi.profit")} ${fmt(exec?.grossProfit?.profit)}`}
-              />
-              <DecisionTile
-                tone={Number(approvalSummary?.totalOverdue || 0) > 0 ? "neg" : "pos"}
-                label={t("dash.pendingDecisions")}
-                value={String(approvalSummary?.totalPending ?? "—")}
-                detail={`${t("dash.overdueSla")} ${approvalSummary?.totalOverdue ?? "—"}`}
-              />
-            </div>
-          </Card>
-
-          <Card title={t("dash.approvalCenter")}>
-            {!approvalSummary ? (
-              <div className="space-y-2"><div className="skeleton h-10" /><div className="skeleton h-10" /><div className="skeleton h-10" /></div>
-            ) : (
-              <div className="space-y-1">
-                {[
-                  { key: "po", label: "PO", href: "/approvals/po" },
-                  { key: "pr", label: "PR", href: "/approvals/pr" },
-                  { key: "product", label: t("sidebar.approveProductName"), href: "/approvals/product-name" },
-                ].map((item) => {
-                  const queue = approvalSummary.queues?.[item.key] || {};
-                  return (
-                    <Link key={item.key} href={item.href} className="flex items-center gap-3 rounded-[var(--r-sm)] px-2 py-2 hover:bg-[var(--surface-2)]">
-                      <span className="grid h-8 w-8 place-items-center rounded-[var(--r-sm)] bg-[var(--brand-soft)] text-[var(--brand)]"><ClipboardCheck size={15} /></span>
-                      <span className="min-w-0 flex-1"><strong className="block text-[11.5px] text-[var(--ink)]">{item.label}</strong><small className="text-[10px] text-[var(--muted)]">{t("dash.overdueSla")} {queue.overdue || 0}</small></span>
-                      <span className="num text-sm font-bold text-[var(--ink)]">{queue.pending || 0}</span>
-                      <ArrowUpRight size={13} className="text-[var(--muted)]" />
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-        </div>
-
         {/* ═══════════════════════════════════════════════════════════
-            SECTION 1B: TARGET VS ACTUAL BY BU (moved up — headline view)
+            SECTION 1: TARGET VS ACTUAL BY BU + APPROVAL QUEUE
         ═══════════════════════════════════════════════════════════ */}
         <div id="sec-target" className="scroll-mt-32 md:scroll-mt-14" />
-        <Card title={t("dash.targetVsActual")}>
+        <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+        <Card title={t("dash.targetVsActual")} icon={<Target size={13} />} to="/target" toLabel={t("dash.viewReport")}>
           <p className={`mb-3 text-xs ${tw.sub}`}>
             {t("dash.targetVsActualDesc")}
             {/* The target is 8 full months while the actual stops at the last
@@ -1288,9 +1379,21 @@ export default function Dashboard() {
                 const bc = String(b.bu);
                 const ytdTgt = targetMap.get(bc) || 0;
                 const act = Number(b.revenue || 0);
-                return { bu: bc, name: d.buNameMap?.[bc] || bc, target: ytdTgt, actual: act, ach: ytdTgt > 0 ? (act / ytdTgt) * 100 : 0 };
+                return { bu: bc, name: buLabel(bc), target: ytdTgt, actual: act, ach: ytdTgt > 0 ? (act / ytdTgt) * 100 : 0 };
               })
               .sort((a: any, b: any) => b.actual - a.actual);
+
+            /* Nobody sets a plan for the online BU or for the lines that carry no
+               BU at all, so those rows sat here at 0% next to six units that are
+               genuinely being measured — three of them a stray credit note and a
+               free-gift line worth −7,087 kip between them. They are still real
+               kip, so they are folded into one residual line and stay in the
+               total rather than being dropped: the total has to keep matching
+               the YTD figure in the header. */
+            const planned = rows.filter((r: any) => r.target > 0);
+            const unplanned = rows.filter((r: any) => r.target <= 0);
+            const unplannedActual = unplanned.reduce((s: number, r: any) => s + r.actual, 0);
+            const showUnplanned = Math.abs(unplannedActual) >= 1;
             const grandTarget = rows.reduce((s: number, r: any) => s + r.target, 0);
             const grandActual = rows.reduce((s: number, r: any) => s + r.actual, 0);
             return (
@@ -1305,7 +1408,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--line-soft)] dark:divide-slate-800">
-                    {rows.map((r: any, i: number) => (
+                    {planned.map((r: any, i: number) => (
                       <tr key={i} className="hover:bg-[var(--surface-2)]">
                         <td className={`py-1.5 pr-2 font-medium ${tw.head}`}>{r.name}</td>
                         <td className="py-1.5 px-2 text-right tabular-nums text-[var(--muted)]">{compact(r.target)}</td>
@@ -1317,6 +1420,17 @@ export default function Dashboard() {
                         </td>
                       </tr>
                     ))}
+                    {showUnplanned && (
+                      <tr
+                        className="hover:bg-[var(--surface-2)]"
+                        title={`${t("dash.noTargetHint")} — ${unplanned.map((r: any) => r.name).join(", ")}`}
+                      >
+                        <td className="py-1.5 pr-2 font-medium text-[var(--muted)]">{t("dash.noTargetRow")}</td>
+                        <td className="py-1.5 px-2 text-right text-[var(--muted)]">–</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums text-[var(--muted)]">{compact(unplannedActual)}</td>
+                        <td className="py-1.5 pl-2 text-right text-[var(--muted)]">–</td>
+                      </tr>
+                    )}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-[var(--line)]">
@@ -1335,6 +1449,30 @@ export default function Dashboard() {
             );
           })()}
         </Card>
+          <Card title={t("dash.approvalCenter")} icon={<ClipboardCheck size={13} />} to="/approvals" toLabel={t("dash.viewReport")}>
+            {!approvalSummary ? (
+              <div className="space-y-2"><div className="skeleton h-10" /><div className="skeleton h-10" /><div className="skeleton h-10" /></div>
+            ) : (
+              <div className="space-y-1">
+                {[
+                  { key: "po", label: "PO", href: "/approvals/po" },
+                  { key: "pr", label: "PR", href: "/approvals/pr" },
+                  { key: "product", label: t("sidebar.approveProductName"), href: "/approvals/product-name" },
+                ].map((item) => {
+                  const queue = approvalSummary.queues?.[item.key] || {};
+                  return (
+                    <Link key={item.key} href={item.href} className="flex items-center gap-3 rounded-[var(--r-sm)] px-2 py-2 hover:bg-[var(--surface-2)]">
+                      <span className="grid h-8 w-8 place-items-center rounded-[var(--r-sm)] bg-[var(--brand-soft)] text-[var(--brand)]"><ClipboardCheck size={15} /></span>
+                      <span className="min-w-0 flex-1"><strong className="block text-[11.5px] text-[var(--ink)]">{item.label}</strong><small className="text-[10px] text-[var(--muted)]">{t("dash.overdueSla")} {queue.overdue || 0}</small></span>
+                      <span className="num text-sm font-bold text-[var(--ink)]">{queue.pending || 0}</span>
+                      <ArrowUpRight size={13} className="text-[var(--muted)]" />
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
 
         {/* ═══════════════════════════════════════════════════════════
             SECTION 2: TODAY / WEEK / MOMENTUM
@@ -1355,42 +1493,18 @@ export default function Dashboard() {
         </div>
 
         {/* ═══════════════════════════════════════════════════════════
-            SECTION 2B: QUICK ACTIONS / NAVIGATION CARDS
-        ═══════════════════════════════════════════════════════════ */}
-        <div className="flex items-center justify-between gap-4 print:hidden">
-          <div className="min-w-0">
-            <h2 className="text-[15px] font-bold tracking-tight text-[var(--ink)]">{t("dash.quickNav")}</h2>
-            <p className="page-sub">{t("dash.quickNavDesc")}</p>
-          </div>
-          <span className="hidden h-px w-24 bg-gradient-to-r from-[var(--accent)] to-transparent sm:block" />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 print:hidden">
-          {[
-            { href: "/target", icon: Target, label: t("dash.goToTarget") },
-            { href: "/sales-summary", icon: BarChart3, label: t("dash.goToSalesSummary") },
-            { href: "/month-summary", icon: LayoutDashboard, label: t("dash.goToMonthSummary") },
-            { href: "/commission", icon: DollarSign, label: t("dash.goToCommission") },
-            { href: "/retail-incentive", icon: Shield, label: t("dash.goToIncentive") },
-            { href: "/sales-assignment", icon: ClipboardCheck, label: t("dash.goToAssignment") },
-            { href: "/analytics", icon: TrendingUp, label: t("dash.goToAnalytics") },
-          ].map((item) => (
-            <Link key={item.href} href={item.href} className="group flex items-center gap-3 rounded-[var(--r-md)] border border-[var(--line-soft)] px-4 py-3.5 transition-all hover:-translate-y-0.5 hover:border-[var(--brand-soft)] hover:shadow-md hover:bg-[var(--surface)]">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--r-sm)] bg-[var(--brand-soft)] text-[var(--brand)] transition-colors group-hover:bg-[var(--brand)] group-hover:text-white">
-                <item.icon size={18} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-[var(--ink)]">{item.label}</p>
-              </div>
-              <ChevronRight size={15} className="shrink-0 text-[var(--muted)] transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          ))}
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════
             SECTION 3: ACHIEVEMENT + PAYMENT PIE + CUSTOMER QUALITY
         ═══════════════════════════════════════════════════════════ */}
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card title={t("section.achievement")}><Progress label="YTD" v={ytdAch} /><Progress label={t("kpi.thisMonth")} v={thisMonthAch} /><Progress label={t("kpi.lastMonth")} v={lastMonthAch} /></Card>
+          <Card title={t("section.achievement")} subtitle={`${t("kpi.target")} ${fmt(kpi.ytd_target)}`} icon={<Target size={13} />} to="/month-summary" toLabel={t("dash.viewReport")}>
+            <div className="flex flex-col items-center">
+              <Gauge value={ytdAch} label="YTD" />
+            </div>
+            <div className="mt-2">
+              <Progress label={t("kpi.thisMonth")} v={thisMonthAch} />
+              <Progress label={t("kpi.lastMonth")} v={lastMonthAch} />
+            </div>
+          </Card>
           <Card title={t("section.payment")}>
             <div className="flex items-center gap-5">
               <div className="relative h-36 w-36 shrink-0">
@@ -1466,7 +1580,7 @@ export default function Dashboard() {
             SECTION 6: REVENUE MATRIX (BU × Channel)
         ═══════════════════════════════════════════════════════════ */}
         {buList.length > 0 && channelList.length > 0 && (
-          <Card title={t("dash.revenueMatrix")}>
+          <Card title={t("dash.revenueMatrix")} icon={<BarChart3 size={13} />} to="/sales-summary" toLabel={t("dash.viewReport")}>
             <div className="overflow-x-auto"><table className="w-full text-xs">
               <thead><tr className={tw.sub}>
                 <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">BU</th>
@@ -1477,7 +1591,7 @@ export default function Dashboard() {
                 const rm = pivot.get(b) || new Map();
                 const tot = channelList.reduce((s: number, ch: string) => s + (rm.get(ch) || 0), 0);
                 return (<tr key={b} className="hover:bg-[var(--surface-2)]">
-                  <td className={`whitespace-nowrap px-2 py-1.5 font-medium ${tw.head}`}>{d.buNameMap?.[String(b)] || b}</td>
+                  <td className={`whitespace-nowrap px-2 py-1.5 font-medium ${tw.head}`}>{buLabel(b)}</td>
                   {channelList.map((ch: string) => { const v = rm.get(ch) || 0; const op = heatMax > 0 ? Math.max((v / heatMax) * 0.85, 0.04) : 0.04; return (
                     <td key={ch} className="p-0.5 text-center"><div className="rounded-lg px-2 py-1.5 tabular-nums font-medium" style={{ backgroundColor: `rgba(22,119,90,${op})`, color: op > 0.45 ? "#fff" : undefined }}>{v > 0 ? fmt(v) : "–"}</div></td>
                   ); })}
@@ -1506,7 +1620,7 @@ export default function Dashboard() {
           <Card title={t("dash.buProfit")}>
             <div className="space-y-1.5">{buProfit.slice(0, 6).map((b: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs">
-                <span className={`font-medium ${tw.head}`}>{d.buNameMap?.[String(b.bu)] || b.bu}</span>
+                <span className={`font-medium ${tw.head}`}>{buLabel(b.bu)}</span>
                 <div className="flex gap-3 tabular-nums">
                   <span className={tw.sub}>Rev {compact(b.revenue)}</span>
                   <span className={`font-bold ${Number(b.profit_thb || 0) >= 0 ? tw.green : tw.red}`}>{Number(b.profit_thb || 0) >= 0 ? "+" : ""}{compact(b.profit_thb)}</span>
@@ -1563,7 +1677,7 @@ export default function Dashboard() {
             <div className="space-y-4">
               {buProfit.filter((b: any) => b.brands && b.brands.length > 0).slice(0, 6).map((b: any, bi: number) => (
                 <div key={bi}>
-                  <p className={`text-xs font-semibold ${tw.head}`}>{d.buNameMap?.[String(b.bu)] || b.bu}</p>
+                  <p className={`text-xs font-semibold ${tw.head}`}>{buLabel(b.bu)}</p>
                   <div className="mt-1.5 overflow-x-auto">
                     <table className="w-full text-[11px]">
                       <thead>
@@ -1593,32 +1707,10 @@ export default function Dashboard() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SECTION 7D: MONTH SUMMARY PREVIEW
-        ═══════════════════════════════════════════════════════════ */}
-        <Link href="/month-summary" className="group">
-          <section className="card min-h-0 transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
-            <div className="card-hd"><h3 className="card-title">{t("sidebar.monthSummary")}</h3></div>
-            <div className="card-bd flex flex-col items-center justify-center gap-3 py-8 text-center">
-              <span className="grid h-14 w-14 place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)] transition-colors group-hover:bg-[var(--brand)] group-hover:text-white">
-                <LayoutDashboard size={26} />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-[var(--ink)]">{t("sidebar.monthSummary")}</p>
-                <p className={`mt-1 text-xs ${tw.sub}`}>{t("dash.quickNavDesc")}</p>
-              </div>
-              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--brand-soft)] px-4 py-1.5 text-[11px] font-semibold text-[var(--brand)] transition-colors group-hover:bg-[var(--brand)] group-hover:text-white">
-                {t("dash.goToSalesSummary")}
-                <ChevronRight size={14} />
-              </span>
-            </div>
-          </section>
-        </Link>
-
-        {/* ═══════════════════════════════════════════════════════════
             SECTION 8: TOP PRODUCTS + TOP MARGIN
         ═══════════════════════════════════════════════════════════ */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title={t("dash.topRevProducts")}>
+          <Card title={t("dash.topRevProducts")} to="/products" toLabel={t("dash.viewReport")}>
             {topRevenue.map((p: any, i: number) => (
               <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
                 <div className="min-w-0 flex-1"><p className={`truncate text-xs font-medium ${tw.head}`}>{p.name || p.code}</p><p className="text-[10px] text-[var(--muted)]">{p.code}</p></div>
@@ -1627,7 +1719,7 @@ export default function Dashboard() {
             ))}
             {topRevenue.length === 0 && <Empty text={t("label.noData")} />}
           </Card>
-          <Card title={t("dash.topMarginProducts")}>
+          <Card title={t("dash.topMarginProducts")} to="/products" toLabel={t("dash.viewReport")}>
             {topMargin.map((p: any, i: number) => (
               <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
                 <div className="min-w-0 flex-1"><p className={`truncate text-xs font-medium ${tw.head}`}>{p.name || p.code}</p><p className="text-[10px] text-[var(--muted)]">GP {(Number(p.gp || 0) * 100).toFixed(1)}%</p></div>
@@ -1644,21 +1736,7 @@ export default function Dashboard() {
         <div id="sec-team" className="scroll-mt-32 md:scroll-mt-14" />
         <div className="grid gap-4 lg:grid-cols-3">
           <Card title={`ທີມຂາຍ (${team.length})`}>{team.map((m: any, i: number) => <Rank key={i} i={i} label={m.name} value={fmt(m.actual)} ach={m.achPct} />)}{team.length === 0 && <Empty text={t("label.noData")} />}</Card>
-          <Card title="Top Sales Reps">
-            {[...team].sort((a: any, b: any) => b.actual - a.actual).slice(0, 3).map((m: any, i: number) => (
-              <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
-                <div className="flex items-center gap-2">
-                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--pos-bg)] text-[10px] font-bold text-[var(--pos)]">{i + 1}</span>
-                  <span className={`text-xs font-medium ${tw.head}`}>{m.name}</span>
-                </div>
-                <div className="flex items-center gap-3 text-xs tabular-nums">
-                  <span className={tw.sub}>{fmt(m.actual)}</span>
-                  <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${(m.achPct || 0) >= 100 ? "bg-[var(--pos-bg)] text-[var(--pos)]" : (m.achPct || 0) >= 90 ? "bg-[var(--warn-bg)] text-[var(--warn)]" : "bg-[var(--neg-bg)] text-[var(--neg)]"}`}>{pct(m.achPct)}</span>
-                </div>
-              </div>
-            ))}
-            {team.length === 0 && <Empty text={t("label.noData")} />}
-          </Card>
+          <Card title={`ແຂວງ Top (${provinces.length})`} to="/shop-map" toLabel={t("dash.viewReport")}>{provinces.map((p: any, i: number) => <Rank key={i} i={i} label={p.label} value={fmt(p.actual)} ach={p.achPct} />)}{provinces.length === 0 && <Empty text={t("label.noData")} />}</Card>
           <Card title="Bottom Sales Reps">
             {[...team].sort((a: any, b: any) => a.actual - b.actual).slice(0, 3).map((m: any, i: number) => (
               <div key={i} className="flex items-center justify-between border-b border-[var(--line-soft)] py-2 last:border-0">
@@ -1675,9 +1753,7 @@ export default function Dashboard() {
             {team.length === 0 && <Empty text={t("label.noData")} />}
           </Card>
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card title={`ແຂວງ Top (${provinces.length})`}>{provinces.map((p: any, i: number) => <Rank key={i} i={i} label={p.label} value={fmt(p.actual)} ach={p.achPct} />)}{provinces.length === 0 && <Empty text={t("label.noData")} />}</Card>
-        </div>
+
 
         {/* ═══════════════════════════════════════════════════════════
             SECTION 10: TERRITORY RISK / OPPORTUNITY
@@ -1760,7 +1836,7 @@ export default function Dashboard() {
           </Card>
 
           {/* AR Aging */}
-          <Card title={t("dash.arAging")}>
+          <Card title={t("dash.arAging")} icon={<DollarSign size={13} />} to="/receivables" toLabel={t("dash.viewReport")}>
             <p className={`text-2xl font-bold ${tw.head}`}>{fmt(arAging.total)}</p>
             <div className="mt-3 space-y-1.5">
               {(arAging.buckets || []).map((b: any, i: number) => {
@@ -2346,46 +2422,7 @@ export default function Dashboard() {
             TAB: LAST MONTH (ເດືອນກ່ອນ)
         ══════════════════════════════════════════════════════════════ */}
         {tab === "lastMonth" && (<>
-          <SectionHeading eyebrow="Period review" title={`${prevTrend.name || t("kpi.lastMonth")} performance`} description="Completed month results, payment mix and year-over-year comparison." />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <Kpi featured label={`${prevTrend.name || "Prev"} ຍອດຂາຍ`} value={fmt(kpi.last_month_actual)} sub={`${t("kpi.target")} ${fmt(kpi.last_month_target)}`} ach={lastMonthAch} color="blue" />
-            <Kpi label={`${prevTrend.name || "Prev"} ປີກ່ອນ`} value={fmt(prevMonthLYActual)} sub={`ທຽບ: ${prevMonthLYActual > 0 ? ((Number(kpi.last_month_actual || 0) / prevMonthLYActual - 1) * 100).toFixed(1) : "0"}%`} badge={trendBadge(prevMonthLYActual > 0 ? (Number(kpi.last_month_actual || 0) / prevMonthLYActual - 1) * 100 : 0)} />
-            <Kpi label="Achievement" value={pct(lastMonthAch)} sub={`Gap ${fmt(Math.max(0, Number(kpi.last_month_target || 0) - Number(kpi.last_month_actual || 0)))}`} ach={lastMonthAch} color={lastMonthAch >= 100 ? "emerald" : "amber"} />
-            {/* The bar is the cash share of the month, so it means something on its own. */}
-            <Kpi label="Cash / Credit" value={fmt(Number(kpi.last_month_cash || 0))} sub={`${t("momentum.credit")} ${fmt(Number(kpi.last_month_credit || 0))}`} ach={cashShare(kpi.last_month_cash, kpi.last_month_credit)} barTone={cashShare(kpi.last_month_cash, kpi.last_month_credit) >= 50 ? "pos" : "warn"} badge={null} />
-          </div>
-
           {renderFocusSummary(lastMonthAch, lastMonthCash, lastMonthCredit, lastMonthQuality)}
-
-          {/* Comparison table: Last month vs Same month last year */}
-          <Card title={`${prevTrend.name || "ເດືອນກ່ອນ"} — ທຽບກັບເດືອນດຽວກັນປີກ່ອນ`}>
-            <div className="overflow-x-auto"><table className="w-full text-xs">
-              <thead><tr className={tw.sub}>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">Metric</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider">{prevTrend.name} {Number(d.year)}</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider">{prevTrend.name} {Number(d.year) - 1}</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider">Change</th>
-              </tr></thead>
-              <tbody className="divide-y divide-[var(--line-soft)] dark:divide-slate-800">
-                {[
-                  { label: t("label.actual"), cur: Number(kpi.last_month_actual || 0), prev: prevMonthLYActual },
-                  { label: t("kpi.target"), cur: Number(kpi.last_month_target || 0), prev: 0 },
-                  { label: t("momentum.cash"), cur: Number(kpi.last_month_cash || 0), prev: 0 },
-                  { label: t("momentum.credit"), cur: Number(kpi.last_month_credit || 0), prev: 0 },
-                ].map((r, i) => {
-                  const chg = r.prev > 0 ? ((r.cur / r.prev - 1) * 100) : 0;
-                  return (
-                    <tr key={i} className="hover:bg-[var(--surface-2)]">
-                      <td className={`px-3 py-2 font-medium ${tw.head}`}>{r.label}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold text-[var(--ink)]">{fmt(r.cur)}</td>
-                      <td className={`px-3 py-2 text-right tabular-nums ${tw.sub}`}>{r.prev > 0 ? fmt(r.prev) : "–"}</td>
-                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${chg >= 0 ? tw.green : tw.red}`}>{r.prev > 0 ? `${chg >= 0 ? "+" : ""}${chg.toFixed(1)}%` : "–"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table></div>
-          </Card>
 
           {/* Trend chart highlighting last month */}
           <Card title={`ແນວໂນ້ມ — ${prevTrend.name || "ເດືອນກ່ອນ"} ທຽບປີກ່ອນ`}>
@@ -2440,15 +2477,6 @@ export default function Dashboard() {
             TAB: THIS MONTH (ເດືອນປະຈຸບັນ)
         ══════════════════════════════════════════════════════════════ */}
         {tab === "thisMonth" && (<>
-          <SectionHeading eyebrow="Live performance" title={`${curTrend.name || t("kpi.thisMonth")} sales pulse`} description="Current progress, daily pace and actions required to close the target gap." />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <Kpi featured label={`${curTrend.name || "Now"} ຍອດຂາຍ`} value={fmt(kpi.this_month_actual)} sub={`${t("kpi.target")} ${fmt(kpi.this_month_target)}`} ach={thisMonthAch} color="blue" />
-            <Kpi label={`${curTrend.name || "Now"} ປີກ່ອນ`} value={fmt(sameMonthLY)} sub={`ທຽບ: ${sameMonthLY > 0 ? ((Number(kpi.this_month_actual || 0) / sameMonthLY - 1) * 100).toFixed(1) : "0"}%`} badge={trendBadge(sameMonthLY > 0 ? (Number(kpi.this_month_actual || 0) / sameMonthLY - 1) * 100 : 0)} />
-            <Kpi label="Achievement" value={pct(thisMonthAch)} sub={`Gap ${fmt(monthGap)}`} ach={thisMonthAch} color={thisMonthAch >= 100 ? "emerald" : "amber"} />
-            <Kpi label={t("momentum.perDay")} value={fmt(data?.requiredPerDay)} sub={`${data?.daysLeft || 0} ${t("momentum.daysLeft")}`} badge={thresholdBadge(onTrack)} />
-            <Kpi label="Cash / Credit" value={fmt(Number(kpi.this_month_cash || 0))} sub={`${t("momentum.credit")} ${fmt(Number(kpi.this_month_credit || 0))}`} ach={cashShare(kpi.this_month_cash, kpi.this_month_credit)} barTone={cashShare(kpi.this_month_cash, kpi.this_month_credit) >= 50 ? "pos" : "warn"} badge={null} />
-          </div>
-
           {/* Momentum strip */}
           <div className="ribbon flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[var(--r-lg)] px-4 py-3.5 text-white">
             <div className="flex items-center gap-2.5">
@@ -2467,36 +2495,6 @@ export default function Dashboard() {
           </div>
 
           {renderFocusSummary(thisMonthAch, thisMonthCash, thisMonthCredit, thisMonthQuality)}
-
-          {/* Comparison table: This month vs Same month last year */}
-          <Card title={`${curTrend.name || "ເດືອນນີ້"} — ທຽບກັບເດືອນດຽວກັນປີກ່ອນ`}>
-            <div className="overflow-x-auto"><table className="w-full text-xs">
-              <thead><tr className={tw.sub}>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">Metric</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider">{curTrend.name} {Number(d.year)}</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider">{curTrend.name} {Number(d.year) - 1}</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider">Change</th>
-              </tr></thead>
-              <tbody className="divide-y divide-[var(--line-soft)] dark:divide-slate-800">
-                {[
-                  { label: t("label.actual"), cur: Number(kpi.this_month_actual || 0), prev: sameMonthLY },
-                  { label: t("kpi.target"), cur: Number(kpi.this_month_target || 0), prev: 0 },
-                  { label: t("momentum.cash"), cur: Number(kpi.this_month_cash || 0), prev: 0 },
-                  { label: t("momentum.credit"), cur: Number(kpi.this_month_credit || 0), prev: 0 },
-                ].map((r, i) => {
-                  const chg = r.prev > 0 ? ((r.cur / r.prev - 1) * 100) : 0;
-                  return (
-                    <tr key={i} className="hover:bg-[var(--surface-2)]">
-                      <td className={`px-3 py-2 font-medium ${tw.head}`}>{r.label}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold text-[var(--ink)]">{fmt(r.cur)}</td>
-                      <td className={`px-3 py-2 text-right tabular-nums ${tw.sub}`}>{r.prev > 0 ? fmt(r.prev) : "–"}</td>
-                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${chg >= 0 ? tw.green : tw.red}`}>{r.prev > 0 ? `${chg >= 0 ? "+" : ""}${chg.toFixed(1)}%` : "–"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table></div>
-          </Card>
 
           {/* Daily trend if available */}
           {exec && (exec.dailyTrend || []).length > 0 && (
@@ -2570,23 +2568,187 @@ export default function Dashboard() {
 
 /* ─── Inline Components ─── */
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * A Salesforce dashboard component: name and optional strapline in the header,
+ * the visual in the body, and a footer that leads to the report the numbers
+ * came from. `to` is what turns a tile into a component — without a report
+ * behind it there is nothing to link to and no menu worth opening, so both the
+ * footer and the kebab stay off rather than being drawn as dead chrome.
+ */
+function Card({
+  title,
+  subtitle,
+  icon,
+  to,
+  toLabel,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  to?: string;
+  toLabel?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="card min-h-0">
-      <div className="card-hd"><h3 className="card-title">{title}</h3></div>
-      <div className="card-bd">{children}</div>
+    <section className="sf-widget min-h-0">
+      <div className="sf-widget-hd">
+        <div className="min-w-0 flex-1">
+          <h3 className="sf-widget-title">{icon}{title}</h3>
+          {subtitle && <p className="sf-widget-sub">{subtitle}</p>}
+        </div>
+        {action}
+        {to && (
+          <Kebab
+            align="right"
+            items={[
+              { label: toLabel || "View report", icon: <ArrowUpRight size={13} />, href: to },
+              { label: "Open in new tab", icon: <ArrowUpRight size={13} />, href: to, newTab: true },
+            ]}
+          />
+        )}
+      </div>
+      <div className="sf-widget-bd">{children}</div>
+      {to && (
+        <div className="sf-widget-ft">
+          <Link href={to} className="sf-viewreport">
+            {toLabel || "View report"} <ChevronRight size={11} />
+          </Link>
+        </div>
+      )}
     </section>
   );
 }
 
-function DecisionTile({ tone, label, value, detail }: { tone: "pos" | "warn" | "neg"; label: string; value: string; detail: string }) {
-  const color = tone === "pos" ? "var(--pos)" : tone === "warn" ? "var(--warn)" : "var(--neg)";
-  const background = tone === "pos" ? "var(--pos-bg)" : tone === "warn" ? "var(--warn-bg)" : "var(--neg-bg)";
+type KebabItem = {
+  label?: string;
+  icon?: React.ReactNode;
+  onClick?: () => void;
+  href?: string;
+  newTab?: boolean;
+  /** Shown right-aligned for a toggle, so the menu says what state it is in. */
+  state?: string;
+  sep?: boolean;
+};
+
+/** The ⋮ menu Lightning puts on every header. Closes on outside click or Esc. */
+function Kebab({ items, align = "right" }: { items: KebabItem[]; align?: "left" | "right" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <div className="rounded-[var(--r-md)] border p-3" style={{ borderColor: "var(--line-soft)", background }}>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">{label}</p>
-      <p className="num mt-1 text-xl font-bold" style={{ color }}>{value}</p>
-      <p className="mt-0.5 text-[10.5px] text-[var(--muted)]">{detail}</p>
+    <div ref={ref} className="relative inline-flex">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className={`sf-kebab ${open ? "is-on" : ""}`}
+      >
+        <MoreVertical size={14} />
+      </button>
+      {open && (
+        <div className="sf-menu" role="menu" style={align === "left" ? { left: 0, right: "auto" } : undefined}>
+          {items.map((item, index) =>
+            item.sep ? (
+              <div key={`sep-${index}`} className="sf-menu-sep" />
+            ) : item.href ? (
+              <Link
+                key={item.label}
+                href={item.href}
+                target={item.newTab ? "_blank" : undefined}
+                onClick={() => setOpen(false)}
+                className="sf-menu-item"
+                role="menuitem"
+              >
+                {item.icon}{item.label}
+              </Link>
+            ) : (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                onClick={() => { item.onClick?.(); setOpen(false); }}
+                className="sf-menu-item"
+              >
+                {item.icon}{item.label}
+                {item.state && <span className="sf-menu-state">{item.state}</span>}
+              </button>
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Salesforce's gauge: one number against its plan on a 240° arc. The arc is
+ * drawn as two stroked paths rather than a chart library — it is a fixed shape,
+ * and Recharts would cost a mount and a resize observer to draw the same thing.
+ */
+function Gauge({
+  value,
+  label,
+  min = "0%",
+  max = "100%",
+  size = 148,
+}: {
+  value: number;
+  label: string;
+  min?: string;
+  max?: string;
+  size?: number;
+}) {
+  const pctValue = Math.max(0, Math.min(Number(value || 0), 100));
+  const tone = value >= 100 ? "pos" : value >= 90 ? "warn" : "neg";
+  const stroke = 11;
+  const radius = (size - stroke) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  // 240° of arc, opening at the bottom: from 150° round to 30°.
+  const point = (deg: number) => {
+    const rad = (deg * Math.PI) / 180;
+    return `${cx + radius * Math.cos(rad)} ${cy + radius * Math.sin(rad)}`;
+  };
+  const arc = (fromDeg: number, toDeg: number) =>
+    `M ${point(fromDeg)} A ${radius} ${radius} 0 ${toDeg - fromDeg > 180 ? 1 : 0} 1 ${point(toDeg)}`;
+  const sweep = 240;
+  const height = Math.round(size * 0.74);
+
+  return (
+    <div className="sf-gauge" style={{ width: size, height }}>
+      <svg width={size} height={height} viewBox={`0 0 ${size} ${height}`} aria-hidden>
+        <path d={arc(150, 150 + sweep)} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} strokeLinecap="round" />
+        <path
+          d={arc(150, 150 + Math.max(sweep * (pctValue / 100), 0.01))}
+          fill="none"
+          stroke={`var(--${tone})`}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="sf-gauge-face">
+        <span className="sf-gauge-value" style={{ color: `var(--${tone})` }}>{Number(value || 0).toFixed(1)}%</span>
+        <span className="sf-gauge-label">{label}</span>
+      </div>
+      <div className="sf-gauge-ends absolute inset-x-1 bottom-0"><span>{min}</span><span>{max}</span></div>
     </div>
   );
 }

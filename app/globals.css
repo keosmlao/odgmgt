@@ -1808,3 +1808,226 @@ button.rule-link {
 /* Only shown where the sheet cannot fit — a scroll hint on a desktop is noise. */
 .ms-swipe { display: none; }
 @media (max-width: 900px) { .ms-swipe { display: inline-flex; } }
+
+/* ══════════════════════════════════════════════════════════════
+   Lightning shell — the dashboard, laid out the way Salesforce lays out a
+   dashboard, in ODIEN's own colours.
+
+   Scoped to `.sf-app` on purpose. Salesforce geometry is much tighter than the
+   rest of this app — 4px corners, 1px rules, a hairline shadow — and letting
+   that leak into the other pages would leave the product looking like two
+   products. Nothing here hard-codes a palette value: the tokens at the top of
+   this file still decide the colours, so dark mode follows for free.
+   ══════════════════════════════════════════════════════════════ */
+.sf-app { --sf-r: 4px; }
+.sf-app .card,
+.sf-app .btn,
+.sf-app .select,
+.sf-app .input { border-radius: var(--sf-r); }
+.sf-app .pill { border-radius: var(--sf-r); }
+
+/* ── Page header ──────────────────────────────────────────────
+   Breadcrumb, then the object's icon and name with its actions, then the
+   highlights, then the tabs — the Lightning record page order. */
+.sf-hd {
+  position: sticky;
+  /* Clears the app's own topbar, which is sticky at 0 and sits above this. */
+  top: 3.25rem;
+  z-index: 30;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 92%, transparent);
+  backdrop-filter: blur(14px);
+  padding: 0.5rem 1rem 0;
+}
+@media (min-width: 1024px) { .sf-hd { padding: 0.5rem 1.5rem 0; } }
+
+/* Condensed: past the fold, the header gives its room back to the dashboard and
+   keeps only what you steer by — the name, the numbers and the tabs. */
+.sf-hd[data-condensed] .sf-crumb,
+.sf-hd[data-condensed] .sf-ph-meta,
+.sf-hd[data-condensed] .sf-hl-sub { display: none; }
+.sf-hd[data-condensed] .sf-icon { height: 1.75rem; width: 1.75rem; }
+.sf-hd[data-condensed] .sf-ph-title { font-size: 0.95rem; }
+.sf-hd[data-condensed] .sf-hl { margin-top: 0.35rem; padding-top: 0.35rem; }
+.sf-hd[data-condensed] .sf-hl-value { font-size: 0.92rem; }
+.sf-hd[data-condensed] .sf-tabs { margin-top: 0.35rem; }
+
+.sf-crumb {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 11px;
+  color: var(--muted);
+}
+.sf-crumb a:hover { color: var(--brand); text-decoration: underline; }
+
+.sf-ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 0.2rem; }
+.sf-ph-id { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.sf-icon {
+  display: grid;
+  place-items: center;
+  height: 2.25rem;
+  width: 2.25rem;
+  flex: none;
+  border-radius: var(--sf-r);
+  background: linear-gradient(140deg, var(--brand-deep), var(--brand));
+  color: #fff;
+  box-shadow: var(--sh-1);
+}
+.sf-ph-title { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; color: var(--ink); }
+.sf-ph-meta { margin-top: 0.05rem; font-size: 11.5px; color: var(--muted); }
+
+/* Joined action buttons, the Lightning button group. */
+.sf-group { display: inline-flex; align-items: stretch; }
+.sf-group > .btn { border-radius: 0; margin-left: -1px; }
+.sf-group > .btn:first-child { border-radius: var(--sf-r) 0 0 var(--sf-r); margin-left: 0; }
+.sf-group > .btn:last-child { border-radius: 0 var(--sf-r) var(--sf-r) 0; }
+.sf-group > .btn:hover:not(:disabled) { position: relative; z-index: 1; }
+.sf-app .btn.is-on {
+  position: relative;
+  z-index: 1;
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+  color: var(--brand);
+}
+
+/* ── Highlights panel ─────────────────────────────────────────
+   The numbers an executive should not have to scroll for, on one rule-separated
+   line directly under the title — Lightning's compact layout. */
+.sf-hl {
+  display: flex;
+  overflow-x: auto;
+  margin-top: 0.6rem;
+  border-top: 1px solid var(--line-soft);
+  padding: 0.55rem 0 0.1rem;
+}
+.sf-hl-item { flex: none; min-width: 8rem; padding: 0 1.1rem; border-left: 1px solid var(--line-soft); }
+.sf-hl-item:first-child { padding-left: 0; border-left: 0; }
+.sf-hl-label { font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.sf-hl-value { margin-top: 0.1rem; font-size: 1.02rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sf-hl-sub { font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ── Tab set ──────────────────────────────────────────────────
+   Underlined, not pilled: in Lightning the tab strip is the page's spine and
+   sits flush on the header's bottom rule. */
+.sf-tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); margin: 0.5rem -1rem 0; padding: 0 1rem; }
+@media (min-width: 1024px) { .sf-tabs { margin: 0.5rem -1.5rem 0; padding: 0 1.5rem; } }
+.sf-tab {
+  position: relative;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  padding: 0.5rem 0.9rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.sf-tab:hover { color: var(--brand); }
+.sf-tab.is-active { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* ── Dashboard widget ─────────────────────────────────────────
+   Header with the component's name, body, and a footer that links to the
+   report behind it — the three parts of a Salesforce dashboard component. */
+.sf-widget {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--sf-r);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+}
+.sf-widget-hd {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line-soft);
+  padding: 0.5rem 0.7rem;
+}
+.sf-widget-title { display: flex; align-items: center; gap: 0.4rem; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.sf-widget-title svg { color: var(--brand); flex: none; }
+.sf-widget-sub { margin-top: 0.05rem; font-size: 10.5px; color: var(--muted); }
+.sf-widget-bd { flex: 1 1 auto; min-width: 0; padding: 0.75rem; }
+.sf-widget-ft {
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0 0 var(--sf-r) var(--sf-r);
+  background: var(--surface-2);
+  padding: 0.35rem 0.7rem;
+  text-align: right;
+}
+.sf-viewreport { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 11px; font-weight: 600; color: var(--brand); }
+.sf-viewreport:hover { text-decoration: underline; }
+
+/* ── Overflow menu ────────────────────────────────────────────── */
+.sf-kebab {
+  display: grid;
+  place-items: center;
+  height: 1.6rem;
+  width: 1.6rem;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--sf-r);
+  color: var(--muted);
+}
+.sf-kebab:hover, .sf-kebab.is-on { background: var(--surface-2); border-color: var(--line); color: var(--ink); }
+.sf-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+  min-width: 12rem;
+  border: 1px solid var(--line);
+  border-radius: var(--sf-r);
+  background: var(--surface);
+  box-shadow: var(--sh-3);
+  padding: 0.25rem;
+}
+.sf-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--sf-r);
+  padding: 0.4rem 0.55rem;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+.sf-menu-item:hover { background: var(--brand-soft); color: var(--brand); }
+.sf-menu-item .sf-menu-state { margin-left: auto; font-size: 10px; font-weight: 700; color: var(--muted); }
+.sf-menu-sep { height: 1px; margin: 0.25rem 0; background: var(--line-soft); }
+
+/* ── Docked filter panel ──────────────────────────────────────
+   Filters live in a panel docked to the right edge in Lightning, not in a strip
+   that pushes the dashboard down every time it opens. */
+.sf-dock-backdrop { position: fixed; inset: 0; z-index: 45; background: rgba(0, 26, 46, 0.35); }
+.sf-dock {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 46;
+  display: flex;
+  width: min(21rem, 92vw);
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--sh-3);
+  animation: sf-dock-in 0.18s ease-out;
+}
+@keyframes sf-dock-in { from { transform: translateX(100%); } to { transform: none; } }
+.sf-dock-hd { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; border-bottom: 1px solid var(--line); padding: 0.7rem 0.9rem; }
+.sf-dock-bd { flex: 1; overflow-y: auto; padding: 0.9rem; }
+.sf-dock-ft { display: flex; gap: 0.5rem; border-top: 1px solid var(--line); padding: 0.7rem 0.9rem; }
+.sf-dock-ft .btn { flex: 1; justify-content: center; }
+
+/* ── Gauge ────────────────────────────────────────────────────
+   Salesforce's own way of showing one number against its plan. The arc is SVG;
+   only the type on top of it is styled here. */
+.sf-gauge { position: relative; display: grid; place-items: center; }
+.sf-gauge-face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 0.6rem; }
+.sf-gauge-value { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+.sf-gauge-label { margin-top: 0.15rem; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.sf-gauge-ends { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
