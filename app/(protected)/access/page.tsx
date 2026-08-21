@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, KeyRound, Plus, RefreshCw, ShieldCheck, Trash2, UserCheck, UserPlus, Users } from "lucide-react";
+import { Building2, Check, ChevronDown, KeyRound, Plus, RefreshCw, RotateCcw, ShieldCheck, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
 import ReactSelect from "react-select";
 import api from "@/service/api";
 import { useAuth } from "@/context/AuthContext";
@@ -85,6 +85,10 @@ export default function AccessPage() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  /** Which row has its password editor open, and what is typed in it. */
+  const [pwFor, setPwFor] = useState("");
+  const [pwValue, setPwValue] = useState("");
+  const [okMessage, setOkMessage] = useState("");
 
   const load = async (q = "") => {
     setLoading(true);
@@ -119,6 +123,37 @@ export default function AccessPage() {
       await load();
     } catch {
       setError(t("app.error"));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  /**
+   * Sets an employee's sign-in password. There was no way to do this anywhere
+   * in the app, so an employee whose stored password nobody knew — a hash set
+   * by another system, or a blank — simply could not be let back in.
+   */
+  const setPassword = async (code: string) => {
+    const value = pwValue.trim();
+    if (value.length < 4) {
+      setError(t("access.passwordTooShort"));
+      return;
+    }
+    setBusy(code);
+    setError("");
+    try {
+      const res = await api.patch("/access", { employee_code: code, password: value });
+      if (res.data?.success) {
+        setOkMessage(`${t("access.passwordSet")} · ${code}`);
+        setPwFor("");
+        setPwValue("");
+        await load();
+      } else {
+        setError(res.data?.message || t("app.error"));
+      }
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(message || t("app.error"));
     } finally {
       setBusy("");
     }
@@ -161,6 +196,15 @@ export default function AccessPage() {
       </header>
 
       <div className="page mx-auto max-w-6xl">
+        {okMessage && (
+          <div
+            className="mb-3 flex items-center gap-2 rounded-[var(--r-md)] border px-3 py-2 text-[12px] font-medium"
+            style={{ borderColor: "var(--pos)", background: "var(--pos-bg)", color: "var(--pos)" }}
+          >
+            <Check size={14} /> {okMessage}
+          </div>
+        )}
+
         {error && (
           <div
             className="mb-3 rounded-[var(--r-md)] border px-3 py-2 text-[12px] font-medium"
@@ -317,16 +361,67 @@ export default function AccessPage() {
                         </button>
                       </td>
                       <td>
-                        {row.no_password ? (
-                          <span className="pill pill-neg">
-                            <KeyRound size={10} /> {t("access.noPassword")}
-                          </span>
-                        ) : row.hashed_password ? (
-                          <span className="pill pill-warn">
-                            <KeyRound size={10} /> {t("access.hashed")}
+                        {pwFor === row.employee_code ? (
+                          <span className="flex items-center gap-1">
+                            <input
+                              className="input"
+                              style={{ width: "9rem" }}
+                              autoFocus
+                              value={pwValue}
+                              placeholder={t("access.newPassword")}
+                              onChange={(e) => setPwValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") setPassword(row.employee_code);
+                                if (e.key === "Escape") setPwFor("");
+                              }}
+                            />
+                            {/* The house convention: everyone's password is their own code. */}
+                            <button
+                              type="button"
+                              className="btn btn-ghost !px-1.5"
+                              title={t("access.useEmployeeCode")}
+                              onClick={() => setPwValue(row.employee_code)}
+                            >
+                              #
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-icon"
+                              disabled={busy === row.employee_code}
+                              onClick={() => setPassword(row.employee_code)}
+                            >
+                              <Check size={13} />
+                            </button>
+                            <button type="button" className="btn btn-ghost btn-icon" onClick={() => setPwFor("")}>
+                              <X size={13} />
+                            </button>
                           </span>
                         ) : (
-                          <span className="pill pill-muted">OK</span>
+                          <span className="flex items-center gap-1.5">
+                            {row.no_password ? (
+                              <span className="pill pill-neg">
+                                <KeyRound size={10} /> {t("access.noPassword")}
+                              </span>
+                            ) : row.hashed_password ? (
+                              <span className="pill pill-warn">
+                                <KeyRound size={10} /> {t("access.hashed")}
+                              </span>
+                            ) : (
+                              <span className="pill pill-muted">OK</span>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-icon"
+                              title={t("access.resetPassword")}
+                              onClick={() => {
+                                setPwFor(row.employee_code);
+                                setPwValue(row.employee_code);
+                                setOkMessage("");
+                              }}
+                            >
+                              <RotateCcw size={13} />
+                            </button>
+                          </span>
                         )}
                       </td>
                       <td>

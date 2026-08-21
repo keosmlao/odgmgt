@@ -3,6 +3,7 @@ import { rows, one, query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/route-auth";
 import { OWNER_CODES, MGMT_USER_TABLE } from "@/lib/employee-auth";
 import { ensureMgmtUserTable } from "@/lib/migrations";
+import { auditLog, requestIp } from "@/lib/audit";
 
 /**
  * Who may sign in to this management app — public.odg_mgmt_user.
@@ -131,6 +132,57 @@ export async function POST(request) {
       [code, role, isActive, buCode, channelCodes, note, auth.user.username, auth.user.username],
     );
 
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+/**
+ * Sets an employee's sign-in password.
+ *
+ * odg_employee.password is shared with the other ODIEN apps and 237 of the 238
+ * readable rows hold the employee's own code in plain text — that is the house
+ * convention, and this writes the same shape so a reset here behaves like every
+ * other account. The 23 hashed rows still verify; nothing about them changes
+ * until someone resets one.
+ *
+ * The reset is audited, because the one thing you cannot recover afterwards is
+ * who changed it.
+ */
+export async function PATCH(request) {
+  const auth = requireAdmin(request);
+  if (!auth.ok) {
+    return NextResponse.json({ success: false, message: auth.message }, { status: auth.status });
+  }
+
+  try {
+    const body = await request.json();
+    const code = String(body.employee_code || "").trim();
+    const password = String(body.password ?? "");
+
+    if (!code) {
+      return NextResponse.json({ success: false, message: "employee_code required" }, { status: 400 });
+    }
+    if (password.trim().length < 4) {
+      return NextResponse.json(
+        { success: false, message: "password must be at least 4 characters" },
+        { status: 400 },
+      );
+    }
+
+    const updated = await one(
+      `UPDATE public.odg_employee SET password = %s
+       WHERE btrim(employee_code) = %s
+       RETURNING employee_code`,
+      [password, code],
+    );
+    if (!updated) {
+      return NextResponse.json({ success: false, message: "employee not found" }, { status: 404 });
+    }
+
+    // The password itself is never written to the log.
+    auditLog(auth.user.username, "password_reset", code, requestIp(request));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
