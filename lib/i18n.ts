@@ -261,6 +261,13 @@ const dict: Record<string, Record<Locale, string>> = {
   "monthSummary.totalCompany": { lo: "ລວມທັງບໍລິສັດ", th: "รวมทั้งบริษัท", en: "Total company" },
   "monthSummary.dataThrough": { lo: "ຂໍ້ມູນຮອດ", th: "ข้อมูลถึง", en: "Data through" },
   "monthSummary.staff": { lo: "ພະນັກງານ", th: "พนักงาน", en: "Staff" },
+  "monthSummary.sheet": { lo: "ຕາຕະລາງລາຍລະອຽດ", th: "ตารางรายละเอียด", en: "Detail sheet" },
+  "monthSummary.prevMonth": { lo: "ເດືອນກ່ອນໜ້າ", th: "เดือนก่อนหน้า", en: "Previous month" },
+  "monthSummary.nextMonth": { lo: "ເດືອນຖັດໄປ", th: "เดือนถัดไป", en: "Next month" },
+  "monthSummary.compact": { lo: "ແໜ້ນ", th: "แน่น", en: "Compact" },
+  "monthSummary.roomy": { lo: "ຫຼວມ", th: "หลวม", en: "Roomy" },
+  "monthSummary.swipe": { lo: "ເລື່ອນຊ້າຍ-ຂວາ", th: "เลื่อนซ้าย-ขวา", en: "Scroll sideways" },
+  "monthSummary.forecast": { lo: "ຄາດຄະເນ", th: "คาดการณ์", en: "Forecast" },
   "monthSummary.note": {
     lo: "ACT ຈາກ odg_sale_detail · Target ຈາກ odg_sales_target · ROY (ເດືອນທີ່ຍັງເຫຼືອ) ໃຊ້ Target ເປັນ FC · ບໍລິການແຍກ Project ຕາມເປົ້າຄົງທີ່ຕໍ່ເດືອນ",
     th: "ACT จาก odg_sale_detail · Target จาก odg_sales_target · ROY ใช้ Target เป็น FC · บริการแยก Project ตามเป้าคงที่ต่อเดือน",

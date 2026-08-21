@@ -1625,3 +1625,186 @@ button.rule-link {
   border-color: var(--neg);
   box-shadow: 0 0 0 2px var(--neg-bg);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Monthly close — the Excel sheet re-cut for a screen.
+
+   The report is thirteen bucket columns wide and twenty-six rows deep, so on
+   paper it is read by tracing a finger along a row. A screen can do better:
+   the four headline numbers are lifted out into tiles above the sheet, the
+   sheet itself scrolls inside its own frame with the header rows and the two
+   identifying columns pinned, and the vertical rules are dropped in favour of
+   one divider per column group — thirteen hairlines were reading as a cage.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Period picker: year · month · steppers read as one control rather than four
+   loose ones sitting next to two buttons. */
+.ms-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  padding: 0.2rem;
+  box-shadow: var(--sh-1);
+}
+.ms-controls .select {
+  width: auto;
+  border: 0;
+  background-color: transparent;
+  padding: 0.3rem 1.5rem 0.3rem 0.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ms-controls .select:focus { box-shadow: none; }
+.ms-controls .btn { border: 0; background: transparent; color: var(--muted); }
+.ms-controls .btn:hover:not(:disabled) { background: var(--brand-soft); color: var(--brand); }
+.ms-sep { width: 1px; align-self: stretch; margin: 0.15rem 0.1rem; background: var(--line); }
+
+/* ── Headline tiles ───────────────────────────────────────────── */
+.ms-kpis {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1180px) { .ms-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .ms-kpis { grid-template-columns: minmax(0, 1fr); } }
+
+.ms-kpi { padding: 0.8rem 0.9rem; }
+.ms-kpi .stat-value { font-size: 1.4rem; margin-top: 0.25rem; }
+.ms-kpi-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+.ms-kpi-foot {
+  margin-top: 0.55rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ms-kpi .bar { margin-top: 0.5rem; }
+
+/* ── The sheet ────────────────────────────────────────────────── */
+.ms-scroll {
+  overflow: auto;
+  max-height: min(68vh, 46rem);
+  overscroll-behavior: contain;
+}
+
+.ms-sheet {
+  --ms-c1: 11rem;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+.ms-sheet th,
+.ms-sheet td { white-space: nowrap; text-align: right; }
+
+/* Column-group accents. Set once per column, read by header and body alike. */
+.ms-sheet .g-ws { --g: var(--brand); }
+.ms-sheet .g-retail { --g: var(--accent); }
+.ms-sheet .g-project { --g: var(--pos); }
+.ms-sheet .g-service { --g: var(--sky); }
+
+/* Two header rows, both pinned. Fixed heights, because the second row can only
+   be told where to stop once the first row's height is a known number. */
+.ms-sheet thead th {
+  position: sticky;
+  z-index: 2;
+  background: var(--surface-2);
+  padding: 0 0.65rem;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.ms-sheet thead tr:first-child th { top: 0; height: 2rem; }
+.ms-sheet thead tr:nth-child(2) th { top: 2rem; height: 1.75rem; }
+.ms-sheet thead .ms-group {
+  text-align: center;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--g) 72%, var(--ink));
+  background: color-mix(in srgb, var(--g) 11%, var(--surface-2));
+}
+.ms-sheet thead .ms-col { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--g) 55%, transparent); }
+
+/* Body */
+.ms-sheet tbody td {
+  padding: var(--row-y) 0.65rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.ms-sheet tbody tr:hover td { background: color-mix(in srgb, var(--brand) 5%, var(--surface)); }
+
+/* One divider where a group starts — the sheet used to draw thirteen. */
+.ms-sheet .is-gstart { border-left: 1px solid var(--line); }
+
+/* The row label and the company total stay put while the buckets scroll. */
+.ms-sheet .ms-c1,
+.ms-sheet .ms-c2 { position: sticky; z-index: 3; text-align: left; }
+.ms-sheet .ms-c1 { left: 0; width: var(--ms-c1); min-width: var(--ms-c1); }
+.ms-sheet .ms-c2 { left: var(--ms-c1); text-align: right; }
+.ms-sheet thead .ms-c1,
+.ms-sheet thead .ms-c2 { z-index: 4; }
+.ms-sheet tbody .ms-c1 { font-weight: 500; color: var(--ink-soft); }
+.ms-sheet .ms-c2 {
+  background: color-mix(in srgb, var(--brand) 5%, var(--surface));
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: 6px 0 12px -10px rgba(0, 51, 97, 0.5);
+}
+.dark .ms-sheet .ms-c2 { box-shadow: 6px 0 14px -10px rgba(0, 0, 0, 0.85); }
+.ms-sheet thead .ms-c2 { background: color-mix(in srgb, var(--brand) 9%, var(--surface-2)); }
+.ms-sheet tbody tr:hover .ms-c2 { background: color-mix(in srgb, var(--brand) 10%, var(--surface)); }
+
+/* Section band. The spreadsheet's own colour blocks, carrying the block's
+   achievement in the frozen columns so the headline survives a sideways scroll.
+   Flat colour rather than a gradient: every cell paints its own background, and
+   a gradient would restart at each one. */
+.ms-sheet tbody tr.ms-band td {
+  padding: 0;
+  border-bottom: 0;
+  background: var(--ms-band);
+}
+.ms-sheet tbody tr.ms-band .ms-c1,
+.ms-sheet tbody tr.ms-band .ms-c2 { background: var(--ms-band); box-shadow: none; }
+.ms-band-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+.ms-band .pill { background: rgba(255, 255, 255, 0.2); color: #fff; }
+.ms-band.is-month { --ms-band: var(--brand-deep); }
+.ms-band.is-ytd { --ms-band: var(--brand); }
+.ms-band.is-roy { --ms-band: var(--accent); }
+.ms-band.is-full { --ms-band: color-mix(in srgb, var(--brand-deep) 76%, #000); }
+.ms-sheet tbody tr.ms-band:hover td { background: var(--ms-band); }
+
+/* The ACT / FC line is the one people are looking for. */
+.ms-sheet tbody tr.ms-row-act td {
+  background: color-mix(in srgb, var(--brand) 4%, var(--surface));
+  font-weight: 700;
+  color: var(--ink);
+}
+.ms-sheet tbody tr.ms-row-act .ms-c2 { background: color-mix(in srgb, var(--brand) 9%, var(--surface)); }
+.ms-sheet tbody tr.ms-row-act:hover td { background: color-mix(in srgb, var(--brand) 8%, var(--surface)); }
+.ms-sheet tbody tr:last-child td { border-bottom: 0; }
+
+/* Comfortable / compact, for anyone who wants the whole sheet without scrolling. */
+.ms-sheet.is-compact { --row-y: 0.22rem; font-size: 11.5px; }
+
+/* Reloading in place: the old numbers stay legible rather than blinking out. */
+.ms-busy { opacity: 0.5; transition: opacity 0.2s ease; pointer-events: none; }
+
+/* Only shown where the sheet cannot fit — a scroll hint on a desktop is noise. */
+.ms-swipe { display: none; }
+@media (max-width: 900px) { .ms-swipe { display: inline-flex; } }
