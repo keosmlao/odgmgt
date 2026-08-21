@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { rows } from "@/lib/db";
+import { one, rows } from "@/lib/db";
 import { parseIntSafe, safeDiv } from "@/lib/helpers";
-import { MONTHLY_TABLE } from "@/lib/sale-monthly-sql.mjs";
-import { ensureFreshRollup } from "@/lib/sale-rollup";
+import { OVERRIDE_JOIN, REPORT_DATE } from "@/lib/sale-month-override";
+import { channelCodeSql } from "@/lib/sale-monthly-sql.mjs";
 
 /**
  * Company summary in the layout of the monthly Excel report:
@@ -91,11 +91,52 @@ function normalizeTargetChannel(value) {
 }
 
 /**
- * Keyed by year·month·rollup-build, so a rebuilt rollup retires its own
- * entries instead of serving numbers the refresh already superseded.
+ * What the ACT rows were computed from. The latest sale date goes in the header;
+ * the rest is a cheap stamp that moves whenever the source does, and the cache
+ * is keyed on it so an answer cannot outlive its data. A row count as well as
+ * the max date, because a back-dated bill lands without moving MAX(doc_date),
+ * and the month overrides too, because approving one moves kip between months
+ * without touching a single sale row.
+ *
+ * Cut on the ERP's own yeardoc rather than the reported year — this only has to
+ * change when the source changes, and yeardoc is the indexed column.
+ */
+async function readSourceStamp(years) {
+  const row = await one(
+    `SELECT to_char(MAX(d.doc_date), 'YYYY-MM-DD') AS data_through,
+            COUNT(*)::text AS source_rows,
+            (SELECT COUNT(*)::text || '@' || COALESCE(MAX(created_at)::text, '-')
+               FROM public.app_sale_month_override) AS override_stamp
+     FROM public.odg_sale_detail d
+     WHERE d.yeardoc = ANY(%s::int[])`,
+    [years],
+  );
+  return {
+    data_through: row?.data_through ?? null,
+    stamp: `${row?.source_rows ?? "0"}|${row?.data_through ?? "-"}|${row?.override_stamp ?? "-"}`,
+  };
+}
+
+/**
+ * Keyed by year·month·source-stamp, so new sales retire the entries they
+ * supersede instead of the page serving numbers the ERP has already moved past.
  */
 const cache = new Map();
 const CACHE_MAX = 24;
+
+/**
+ * The scan is seconds, not milliseconds: two page loads landing together share
+ * one instead of each paying for its own.
+ */
+const inFlight = new Map();
+
+function once(key, task) {
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+  const run = task().finally(() => inFlight.delete(key));
+  inFlight.set(key, run);
+  return run;
+}
 
 const bucketKey = (bu, channel, month) => `${bu}|${channel}|${month}`;
 
@@ -121,9 +162,11 @@ function sumStaff(map, months) {
   return total;
 }
 
-function buildActualMap(rowsIn) {
+/** Bucket map for one year out of the two-year scan. */
+function buildActualMap(rowsIn, year) {
   const map = new Map();
   for (const row of rowsIn) {
+    if (Number(row.year) !== year) continue;
     const key = bucketKey(
       String(row.bu_code ?? ""),
       String(row.channel_code ?? "OTHER"),
@@ -184,23 +227,33 @@ export async function GET(request) {
 
     const lastYear = year - 1;
 
-    // Opening the page tops the rollup up when the source has moved; the
-    // Refresh button (?refresh=1) rebuilds unconditionally.
+    // The Refresh button (?refresh=1) skips the cache; the stamp retires it on
+    // its own as soon as the source moves.
     const force = /^(1|true|force)$/i.test(String(sp.get("refresh") || ""));
-    const freshness = await ensureFreshRollup([year, lastYear], { force });
+    const source = await readSourceStamp([year, lastYear]);
 
-    const cacheKey = `${year}|${month}|${freshness.refreshed_at}`;
+    const cacheKey = `${year}|${month}|${source.stamp}`;
     const cached = cache.get(cacheKey);
-    if (cached) return NextResponse.json(cached);
+    if (!force && cached) return NextResponse.json(cached);
 
-    // Reads the pre-aggregated rollup (a few thousand rows) instead of scanning
-    // odg_sale_detail; refreshed by scripts/refresh-sale-monthly.mjs.
+    // ACT comes straight out of odg_sale_detail, aggregated per request rather
+    // than read from the odg_sale_monthly rollup, which is only ever as current
+    // as its last rebuild. Both years come off one scan of the table: splitting
+    // them into a query each scans 2.7 GB twice for the same answer.
+    //
+    // The month a sale counts in is REPORT_DATE, not the ERP's monthdoc — a bill
+    // approved into an earlier month in app_sale_month_override belongs to the
+    // month it was credited to.
     const actualSql = `
-      SELECT bu_code, monthdoc AS month, channel_code,
-             COALESCE(SUM(sum_amount), 0)::float AS amount
-      FROM ${MONTHLY_TABLE}
-      WHERE yeardoc = %s
-      GROUP BY bu_code, monthdoc, channel_code`;
+      SELECT EXTRACT(YEAR FROM ${REPORT_DATE})::int AS year,
+             EXTRACT(MONTH FROM ${REPORT_DATE})::int AS month,
+             COALESCE(NULLIF(d.bu_code, ''), '-') AS bu_code,
+             ${channelCodeSql("d.doc_no")} AS channel_code,
+             COALESCE(SUM(d.sum_amount), 0)::float AS amount
+      FROM public.odg_sale_detail d
+      ${OVERRIDE_JOIN}
+      WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])
+      GROUP BY 1, 2, 3, 4`;
     const targetSql = `
       SELECT bu_code, target_month AS month, sale_channel,
              COALESCE(SUM(target_amount), 0)::float AS amount
@@ -208,14 +261,13 @@ export async function GET(request) {
       WHERE target_year = %s
       GROUP BY bu_code, target_month, sale_channel`;
 
-    const [actualNow, actualPrev, targetNow] = await Promise.all([
-      rows(actualSql, [year]),
-      rows(actualSql, [lastYear]),
+    const [actualRows, targetNow] = await Promise.all([
+      once(`${year}|${lastYear}|${source.stamp}`, () => rows(actualSql, [[year, lastYear]])),
       rows(targetSql, [year]),
     ]);
 
-    const actual = buildActualMap(actualNow);
-    const actualLy = buildActualMap(actualPrev);
+    const actual = buildActualMap(actualRows, year);
+    const actualLy = buildActualMap(actualRows, lastYear);
     const target = buildTargetMap(targetNow);
 
     const monthOnly = [month];
@@ -279,9 +331,8 @@ export async function GET(request) {
           last_year: lastYear,
           service_project_monthly_target: SERVICE_PROJECT_MONTHLY_TARGET,
           generated_at: new Date().toISOString(),
-          /** Latest sale date behind these numbers, and when the rollup was built. */
-          data_through: freshness.data_through,
-          rollup_refreshed_at: freshness.refreshed_at,
+          /** Latest sale date behind these numbers. */
+          data_through: source.data_through,
         },
         groups: GROUPS,
         columns: COLUMNS.map(({ key, group, label }) => ({ key, group, label })),
