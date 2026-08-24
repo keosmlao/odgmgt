@@ -5,13 +5,18 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BarChart3,
+  Boxes,
+  CalendarDays,
   ChevronRight,
   Clock3,
   Layers,
   Map as MapIcon,
+  Percent,
   RefreshCw,
   Target,
   TrendingUp,
+  Users,
+  Wallet,
 } from "lucide-react";
 import api from "@/service/api";
 import { useAuth } from "@/context/AuthContext";
@@ -72,6 +77,36 @@ type Payload = {
   by_bu: Rank[];
   by_channel: Rank[];
   by_region: { code: string; amount: number }[];
+  daily: {
+    rows: { day: number; amount: number; bills: number; cumulative: number }[];
+    best: { day: number; amount: number; bills: number } | null;
+    per_day_target: number;
+  };
+  trend: { year: number; months: number[] }[];
+  sellers: (Rank & { bills: number })[];
+  customers: { rows: (Rank & { bills: number })[]; count: number; top_share: number };
+  margin: {
+    amount: number;
+    discount: number;
+    discount_pct: number;
+    profit: number;
+    gp_pct: number;
+    bills: number;
+  };
+  ar: {
+    balance: number;
+    overdue: number;
+    customers: number;
+    buckets: { label: string; amount: number }[];
+    top: { label: string; amount: number; days: number }[];
+  } | null;
+  stock: {
+    value: number;
+    items: number;
+    dead_value: number;
+    dead_items: number;
+    over_360: number;
+  } | null;
 };
 
 const MONTHS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
@@ -321,7 +356,7 @@ export default function SalesOverview() {
             <div className="min-w-0">
               <h1 className="sf-ph-title truncate">ພາບລວມການຂາຍ</h1>
               <p className="sf-ph-meta">
-                {user?.full_name || user?.username} · {user?.username} · {scopeLabel} · ຫົວໜ່ວຍ ກີບ
+                {user?.full_name || user?.username} · {user?.username} · {scopeLabel} · ຫົວໜ່ວຍ ບາດ
                 {data?.meta.data_through && (
                   <>
                     {" "}
@@ -438,7 +473,7 @@ export default function SalesOverview() {
                   <div>
                     <p className="so-hero-label">ຄາດການ</p>
                     <p className="so-hero-value">
-                      {full(data.forecast.projected)} <span>ກີບ</span>
+                      {full(data.forecast.projected)} <span>ບາດ</span>
                     </p>
                     <p className="so-hero-sub">
                       ຈາກເປົ້າ <b>{full(data.forecast.target)}</b> ·{" "}
@@ -463,7 +498,7 @@ export default function SalesOverview() {
 
                     <div className="so-bias">
                       <p>
-                        ຄາດການແກ້ອະຄະຕິແລ້ວ · <b>{full(data.forecast.adjusted)}</b> ກີບ
+                        ຄາດການແກ້ອະຄະຕິແລ້ວ · <b>{full(data.forecast.adjusted)}</b> ບາດ
                       </p>
                       <p className="so-bias-note">
                         {data.forecast.bias_months} ເດືອນຫຼ້າສຸດ ຄາດການ
@@ -627,6 +662,272 @@ export default function SalesOverview() {
                 </div>
               </section>
             </div>
+
+            {/* ══ ⑥ ລາຍວັນ ══ */}
+            <section className="sf-widget mt-3">
+              <div className="sf-widget-hd">
+                <div className="min-w-0 flex-1">
+                  <h3 className="sf-widget-title">
+                    <CalendarDays size={13} /> ⑥ ລາຍວັນ · {data.meta.year}-
+                    {MONTHS[data.meta.month - 1]}
+                  </h3>
+                  <p className="sf-widget-sub">
+                    ເສັ້ນຂີດ = ເປົ້າຕໍ່ວັນ {short(data.daily.per_day_target)} · ວັນອາທິດປິດ
+                  </p>
+                </div>
+                {data.daily.best && (
+                  <span className="pill pill-pos">
+                    ວັນດີສຸດ {data.daily.best.day} · {short(data.daily.best.amount)}
+                  </span>
+                )}
+              </div>
+              <div className="sf-widget-bd">
+                <div className="so-days">
+                  {data.daily.rows.map((row) => {
+                    const peak = Math.max(
+                      ...data.daily.rows.map((item) => item.amount),
+                      data.daily.per_day_target,
+                      1,
+                    );
+                    return (
+                      <span
+                        key={row.day}
+                        className="so-day"
+                        title={`ວັນທີ ${row.day} · ${full(row.amount)} · ${row.bills} ບິນ`}
+                      >
+                        <i
+                          style={{
+                            height: `${Math.max(2, (row.amount / peak) * 100)}%`,
+                            background:
+                              row.amount >= data.daily.per_day_target
+                                ? "var(--pos)"
+                                : "var(--brand)",
+                          }}
+                        />
+                        <b>{row.day}</b>
+                      </span>
+                    );
+                  })}
+                  <span
+                    className="so-day-target"
+                    style={{
+                      bottom: `${
+                        (data.daily.per_day_target /
+                          Math.max(
+                            ...data.daily.rows.map((item) => item.amount),
+                            data.daily.per_day_target,
+                            1,
+                          )) *
+                        100
+                      }%`,
+                    }}
+                  />
+                </div>
+                {!data.daily.rows.length && <p className="so-empty">ບໍ່ມີຂໍ້ມູນ</p>}
+              </div>
+            </section>
+
+            {/* ══ ⑦ 3 ປີ ══ */}
+            <section className="sf-widget mt-3">
+              <div className="sf-widget-hd">
+                <div className="min-w-0 flex-1">
+                  <h3 className="sf-widget-title">
+                    <TrendingUp size={13} /> ⑦ ສາມປີ · ລາຍເດືອນ
+                  </h3>
+                  <p className="sf-widget-sub">
+                    {data.trend.map((row) => row.year).join(" · ")} — ເດືອນຕໍ່ເດືອນ
+                  </p>
+                </div>
+              </div>
+              <div className="sf-widget-bd">
+                <div className="so-trend">
+                  {MONTHS.map((label, index) => {
+                    const peak = Math.max(
+                      ...data.trend.flatMap((row) => row.months),
+                      1,
+                    );
+                    return (
+                      <span key={label} className="so-trend-col">
+                        <span className="so-trend-bars">
+                          {data.trend.map((row, order) => (
+                            <i
+                              key={row.year}
+                              className={`is-y${order}`}
+                              style={{
+                                height: `${Math.max(1, (row.months[index] / peak) * 100)}%`,
+                              }}
+                              title={`${row.year}-${label} · ${full(row.months[index])}`}
+                            />
+                          ))}
+                        </span>
+                        <b>{label}</b>
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="so-legend">
+                  {data.trend.map((row, order) => (
+                    <span key={row.year}>
+                      <i className={`is-y${order}`} /> {row.year} · {short(
+                        row.months.reduce((sum, value) => sum + value, 0),
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* ══ ⑧ ທິມຂາຍ · ⑨ ລູກຄ້າ ══ */}
+            <div className="so-grid mt-3">
+              <section className="sf-widget">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Users size={13} /> ⑧ ທິມຂາຍ · {scopeWord}
+                    </h3>
+                    <p className="sf-widget-sub">12 ອັນດັບທຳອິດ ຕາມຍອດຂາຍ</p>
+                  </div>
+                </div>
+                <div className="sf-widget-bd">{rankRows(data.sellers)}</div>
+              </section>
+
+              <section className="sf-widget">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Users size={13} /> ⑨ ລູກຄ້າ · {scopeWord}
+                    </h3>
+                    <p className="sf-widget-sub">
+                      {full(data.customers.count)} ລູກຄ້າ · 12 ລາຍໃຫຍ່ກວມ{" "}
+                      {pct(data.customers.top_share)}
+                    </p>
+                  </div>
+                </div>
+                <div className="sf-widget-bd">{rankRows(data.customers.rows)}</div>
+              </section>
+            </div>
+
+            {/* ══ ⑩ ສ່ວນຫຼຸດ & ກຳໄລ · ⑪ ໜີ້ຄ້າງ ══ */}
+            <div className="so-grid mt-3">
+              <section className="sf-widget">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Percent size={13} /> ⑩ ສ່ວນຫຼຸດ & ກຳໄລ · {scopeWord}
+                    </h3>
+                    <p className="sf-widget-sub">ສ່ວນຫຼຸດຄິດຈາກລາຄາກ່ອນຫຼຸດ</p>
+                  </div>
+                </div>
+                <div className="sf-widget-bd">
+                  <div className="so-compare">
+                    <div>
+                      <p className="so-kpi-label">ສ່ວນຫຼຸດ</p>
+                      <p className="so-kpi-value">{full(data.margin.discount)}</p>
+                      <p className="so-kpi-note">
+                        {data.margin.discount_pct.toFixed(1)}% ຂອງລາຄາເຕັມ
+                      </p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ກຳໄລຂັ້ນຕົ້ນ</p>
+                      <p className="so-kpi-value" style={{ color: "var(--pos)" }}>
+                        {full(data.margin.profit)}
+                      </p>
+                      <p className="so-kpi-note">GP {data.margin.gp_pct.toFixed(1)}%</p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ຍອດຂາຍ</p>
+                      <p className="so-kpi-value">{full(data.margin.amount)}</p>
+                      <p className="so-kpi-note">{full(data.margin.bills)} ບິນ</p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ສະເລ່ຍຕໍ່ບິນ</p>
+                      <p className="so-kpi-value">
+                        {full(data.margin.amount / Math.max(1, data.margin.bills))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {data.ar && (
+                <section className="sf-widget">
+                  <div className="sf-widget-hd">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="sf-widget-title">
+                        <Wallet size={13} /> ⑪ ໜີ້ຄ້າງຮັບ
+                      </h3>
+                      <p className="sf-widget-sub">
+                        ທັງບໍລິສັດ · {full(data.ar.customers)} ລູກໜີ້ · ບໍ່ຂຶ້ນກັບຕົວກັ່ນຕອງ
+                      </p>
+                    </div>
+                    <span className="pill pill-neg">ເກີນກຳນົດ {short(data.ar.overdue)}</span>
+                  </div>
+                  <div className="sf-widget-bd">
+                    {rankRows(
+                      data.ar.buckets.map((bucket) => ({
+                        code: bucket.label,
+                        label: bucket.label,
+                        amount: bucket.amount,
+                        share: (bucket.amount / Math.max(1, data.ar!.balance)) * 100,
+                      })),
+                    )}
+                    <p className="so-kpi-note mt-2">
+                      ລູກໜີ້ໃຫຍ່ສຸດ:{" "}
+                      {data.ar.top
+                        .slice(0, 3)
+                        .map((row) => `${row.label} ${short(row.amount)}`)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* ══ ⑫ ສະຕັອກ ══ */}
+            {data.stock && (
+              <section className="sf-widget mt-3">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Boxes size={13} /> ⑫ ສະຕັອກ
+                    </h3>
+                    <p className="sf-widget-sub">
+                      ທັງບໍລິສັດ · ຂາຍບໍ່ອອກ = ບໍ່ມີການຂາຍ 90 ວັນ
+                    </p>
+                  </div>
+                  <span className="pill pill-warn">
+                    ຂາຍບໍ່ອອກ {pct((data.stock.dead_value / Math.max(1, data.stock.value)) * 100)}
+                  </span>
+                </div>
+                <div className="sf-widget-bd">
+                  <div className="so-compare">
+                    <div>
+                      <p className="so-kpi-label">ມູນຄ່າສະຕັອກ</p>
+                      <p className="so-kpi-value">{full(data.stock.value)}</p>
+                      <p className="so-kpi-note">{full(data.stock.items)} ລາຍການ</p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ຂາຍບໍ່ອອກ 90 ວັນ</p>
+                      <p className="so-kpi-value" style={{ color: "var(--neg)" }}>
+                        {full(data.stock.dead_value)}
+                      </p>
+                      <p className="so-kpi-note">{full(data.stock.dead_items)} ລາຍການ</p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ຄ້າງເກີນ 360 ວັນ</p>
+                      <p className="so-kpi-value">{full(data.stock.over_360)}</p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ສະຕັອກ ຕໍ່ ຍອດຂາຍເດືອນ</p>
+                      <p className="so-kpi-value">
+                        {(data.stock.value / Math.max(1, data.month.actual)).toFixed(1)}×
+                      </p>
+                      <p className="so-kpi-note">ຍິ່ງສູງ ຍິ່ງຄ້າງທຶນ</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
 
             <p className="so-note">
               ຍອດຈິງຈາກ odg_sale_detail (ນັບຕາມເດືອນທີ່ອະນຸມັດໃຫ້) · ເປົ້າຈາກ odg_sales_target ·

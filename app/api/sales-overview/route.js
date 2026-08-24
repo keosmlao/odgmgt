@@ -98,7 +98,12 @@ function once(key, task) {
  * ແຂວງ · ກ່ອນວັນຕັດ) ແລ້ວກັ່ນຕອງໃນ JS. ຖ້າໃສ່ WHERE ຕາມຕົວເລືອກຜູ້ໃຊ້ແທນ ທຸກ
  * ການກົດ chip ໜຶ່ງເທື່ອ = ສະແກນຕາຕະລາງ 2.7 GB ໃໝ່ອີກເທື່ອໜຶ່ງ.
  */
+const bucketCache = new Map();
+
 function loadBuckets(years, cutDay, stamp) {
+  const key = `${years.join("-")}|${cutDay}|${stamp}`;
+  const held = bucketCache.get(key);
+  if (held) return Promise.resolve(held);
   const sql = `
     SELECT EXTRACT(YEAR FROM ${REPORT_DATE})::int AS year,
            EXTRACT(MONTH FROM ${REPORT_DATE})::int AS month,
@@ -111,8 +116,104 @@ function loadBuckets(years, cutDay, stamp) {
     ${OVERRIDE_JOIN}
     WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])
     GROUP BY 1, 2, 3, 4, 5, 6`;
-  return once(`${years.join("-")}|${cutDay}|${stamp}`, () => rows(sql, [cutDay, years]));
+  return once(key, async () => {
+    const loaded = await rows(sql, [cutDay, years]);
+    // ໜຶ່ງກ້ອນຕໍ່ໜຶ່ງສະແຕມ — ກົດ chip ປ່ຽນຕົວກັ່ນຕອງແລ້ວບໍ່ຕ້ອງສະແກນຄືນ.
+    if (bucketCache.size >= 4) bucketCache.clear();
+    bucketCache.set(key, loaded);
+    return loaded;
+  });
 }
+
+/**
+ * ລາຍລະອຽດຂອງຂອບເຂດທີ່ເລືອກ — ຄຳຖາມດຽວຄືນທຸກຢ່າງທີ່ຕ້ອງແຍກເປັນລາຍແຖວ
+ * (ລາຍວັນ · ທິມຂາຍ · ລູກຄ້າ · ສ່ວນຫຼຸດ & ກຳໄລ). ຖ້າແຍກເປັນຄຳຖາມລະອັນ
+ * ໜ້າໜຶ່ງເທື່ອ = ສະແກນຕາຕະລາງການຂາຍສີ່ຮອບ.
+ */
+function scopeDetailSql(whereExtra) {
+  return `
+    WITH scope AS (
+      SELECT ${REPORT_DATE} AS report_date,
+             EXTRACT(MONTH FROM ${REPORT_DATE})::int AS month,
+             EXTRACT(DAY FROM ${REPORT_DATE})::int AS day,
+             d.doc_no,
+             COALESCE(NULLIF(d.bu_code, ''), '-') AS bu_code,
+             ${channelCodeSql("d.doc_no")} AS channel_code,
+             COALESCE(NULLIF(d.province, ''), '-') AS province,
+             COALESCE(NULLIF(d.salename, ''), 'ບໍ່ລະບຸ') AS sale_name,
+             COALESCE(NULLIF(d.customer_code, ''), '-') AS customer_code,
+             COALESCE(NULLIF(d.customername, ''), d.customer_code, '-') AS customer_name,
+             d.sum_amount::float AS amount,
+             -- ສ່ວນຫຼຸດເອົາ discount_amount_2: discount_amount ເກັບເປັນເງິນກີບ
+             -- ຕົ້ນສະບັບ (ບວກເຂົ້າກັນແລ້ວໄດ້ 460 ລ້ານ ຈາກຍອດ 54 ລ້ານ), ສ່ວນ _2
+             -- ແມ່ນຫົວໜ່ວຍດຽວກັບ sum_amount.
+             COALESCE(d.discount_amount_2, 0)::float AS discount,
+             COALESCE(d.profit, 0)::float AS profit
+      FROM public.odg_sale_detail d
+      ${OVERRIDE_JOIN}
+      WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = %s
+        AND EXTRACT(MONTH FROM ${REPORT_DATE})::int BETWEEN %s AND %s
+    ), kept AS (
+      SELECT * FROM scope ${whereExtra ? `WHERE ${whereExtra}` : ""}
+    )
+    SELECT json_build_object(
+      'daily', (
+        SELECT COALESCE(json_agg(row_to_json(x) ORDER BY x.day), '[]'::json) FROM (
+          SELECT day, SUM(amount)::float AS amount, COUNT(DISTINCT doc_no)::int AS bills
+          FROM kept WHERE month = %s GROUP BY day
+        ) x
+      ),
+      'sellers', (
+        SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+          SELECT sale_name, SUM(amount)::float AS amount, COUNT(DISTINCT doc_no)::int AS bills
+          FROM kept GROUP BY sale_name ORDER BY 2 DESC LIMIT 12
+        ) x
+      ),
+      'customers', (
+        SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+          SELECT customer_code, MAX(customer_name) AS customer_name,
+                 SUM(amount)::float AS amount, COUNT(DISTINCT doc_no)::int AS bills
+          FROM kept GROUP BY customer_code ORDER BY 3 DESC LIMIT 12
+        ) x
+      ),
+      'totals', (
+        SELECT row_to_json(x) FROM (
+          SELECT SUM(amount)::float AS amount,
+                 SUM(discount)::float AS discount,
+                 SUM(profit)::float AS profit,
+                 COUNT(DISTINCT customer_code)::int AS customers,
+                 COUNT(DISTINCT doc_no)::int AS bills
+          FROM kept
+        ) x
+      )
+    ) AS payload`;
+}
+
+/** ໜີ້ຄ້າງ ແລະ ສະຕັອກ — ຕາຕະລາງນ້ອຍ, ບໍ່ຂຶ້ນກັບຕົວກັ່ນຕອງຂອງໜ້າ. */
+const AR_SQL = `
+  SELECT COALESCE(SUM(balance_amount), 0)::float AS balance,
+         COALESCE(SUM(balance_amount) FILTER (WHERE COALESCE(date_diff, 0) > 0), 0)::float AS overdue,
+         COALESCE(SUM(balance_amount) FILTER (WHERE COALESCE(date_diff, 0) BETWEEN 1 AND 30), 0)::float AS d1_30,
+         COALESCE(SUM(balance_amount) FILTER (WHERE COALESCE(date_diff, 0) BETWEEN 31 AND 60), 0)::float AS d31_60,
+         COALESCE(SUM(balance_amount) FILTER (WHERE COALESCE(date_diff, 0) BETWEEN 61 AND 90), 0)::float AS d61_90,
+         COALESCE(SUM(balance_amount) FILTER (WHERE COALESCE(date_diff, 0) > 90), 0)::float AS d90p,
+         COUNT(DISTINCT ar_code)::int AS customers
+  FROM public.odg_ar_aging`;
+
+const AR_TOP_SQL = `
+  SELECT COALESCE(NULLIF(TRIM(ar_name), ''), ar_code) AS name,
+         COALESCE(SUM(balance_amount), 0)::float AS balance,
+         COALESCE(MAX(date_diff), 0)::int AS days
+  FROM public.odg_ar_aging
+  GROUP BY 1 ORDER BY 2 DESC LIMIT 8`;
+
+const STOCK_SQL = `
+  SELECT COALESCE(SUM(stockamount) FILTER (WHERE stockqty > 0), 0)::float AS stock_value,
+         COUNT(*) FILTER (WHERE stockqty > 0)::int AS items,
+         COALESCE(SUM(stockamount) FILTER (WHERE stockqty > 0 AND COALESCE(sale_90, 0) = 0), 0)::float AS dead_value,
+         COUNT(*) FILTER (WHERE stockqty > 0 AND COALESCE(sale_90, 0) = 0)::int AS dead_items,
+         COALESCE(SUM(stockamount) FILTER (WHERE stockqty > 0 AND agingday > 360), 0)::float AS over_360
+  FROM public.odg_stock_aging`;
 
 const targetSql = `
   SELECT bu_code, target_month AS month, sale_channel,
@@ -191,6 +292,8 @@ export async function GET(request) {
       region === "ALL" ? null : new Set(region === "U" ? [] : provincesOf(region));
 
     const lastYear = year - 1;
+    /** ສາມປີ — ປີນີ້ ທຽບປີກ່ອນ ແລະ ປີກ່ອນນັ້ນ, ຢູ່ໃນສະແກນອັນດຽວກັນ. */
+    const trendYears = [year, lastYear, year - 2];
     const source = await readSourceStamp([year, lastYear]);
 
     /**
@@ -242,11 +345,37 @@ export async function GET(request) {
       ) x
       ${billWhere.length ? `WHERE ${billWhere.join(" AND ")}` : ""}`;
 
-    const [buckets, targetRows, billRow] = await Promise.all([
-      loadBuckets([year, lastYear], cutDay, source.stamp),
+    /** ຕົວກັ່ນຕອງອັນດຽວກັນ ຂຽນເປັນ SQL ໃຫ້ຄຳຖາມລາຍລະອຽດ. */
+    // ລຳດັບພາຣາມິເຕີຕ້ອງຕາມລຳດັບທີ່ %s ປາກົດໃນ SQL: ປີ · ເດືອນເລີ່ມ · ເດືອນຈົບ ·
+    // ຕົວກັ່ນຕອງ · ແລ້ວຈຶ່ງເດືອນຂອງແຖວລາຍວັນ (ຢູ່ທ້າຍສຸດ).
+    const detailWhere = [];
+    const detailParams = [year, mode === "ytd" ? 1 : month, month];
+    if (buWanted) {
+      detailWhere.push("bu_code = ANY(%s::text[])");
+      detailParams.push([...buWanted]);
+    }
+    if (channelWanted) {
+      detailWhere.push("channel_code = ANY(%s::text[])");
+      detailParams.push([...channelWanted]);
+    }
+    if (provinceWanted) {
+      detailWhere.push(
+        region === "U" ? "NOT (province = ANY(%s::text[]))" : "province = ANY(%s::text[])",
+      );
+      detailParams.push(region === "U" ? KNOWN_PROVINCES : [...provinceWanted]);
+    }
+    detailParams.push(month);
+
+    const [buckets, targetRows, billRow, detailRow, arRow, arTop, stockRow] = await Promise.all([
+      loadBuckets(trendYears, cutDay, source.stamp),
       rows(targetSql, [year]),
       one(billSql, billParams),
+      one(scopeDetailSql(detailWhere.join(" AND ")), detailParams),
+      one(AR_SQL).catch(() => null),
+      rows(AR_TOP_SQL).catch(() => []),
+      one(STOCK_SQL).catch(() => null),
     ]);
+    const detail = detailRow?.payload || {};
 
     const keep = (row) => {
       if (buWanted && !buWanted.has(String(row.bu_code))) return false;
@@ -350,6 +479,43 @@ export async function GET(request) {
       byRegion.set(regionKey, (byRegion.get(regionKey) || 0) + amount);
     }
 
+    /**
+     * ສາມປີ: ຍອດລາຍເດືອນຂອງແຕ່ລະປີ — ເສັ້ນທຽບກັນ ບອກລະດູການ ແລະ ບອກວ່າ
+     * ເດືອນນີ້ຜິດປົກກະຕິ ຫຼື ເປັນຮູບແບບເກົ່າຂອງມັນເອງ.
+     */
+    const trend = trendYears.map((trendYear) => ({
+      year: trendYear,
+      months: Array.from({ length: 12 }, (_, index) => sumMonth(trendYear, index + 1)),
+    }));
+
+    const totals = detail.totals || {};
+    const scopeAmount = Number(totals.amount || 0);
+    const discount = Number(totals.discount || 0);
+    const profit = Number(totals.profit || 0);
+    const dailyRows = Array.isArray(detail.daily) ? detail.daily : [];
+    let running = 0;
+    const daily = dailyRows.map((row) => {
+      running += Number(row.amount || 0);
+      return {
+        day: Number(row.day),
+        amount: Number(row.amount || 0),
+        bills: Number(row.bills || 0),
+        cumulative: running,
+      };
+    });
+    const bestDay = daily.reduce((best, row) => (row.amount > (best?.amount ?? 0) ? row : best), null);
+
+    const rankFrom = (list, pick) => {
+      const total = list.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      return list.map((row) => ({
+        code: String(pick(row).code),
+        label: String(pick(row).label),
+        amount: Number(row.amount || 0),
+        share: safeDiv(Number(row.amount || 0), total) * 100,
+        bills: Number(row.bills || 0),
+      }));
+    };
+
     const scopeActual = mode === "ytd" ? ytdActual : monthActual;
     const scopeTarget = mode === "ytd" ? ytdTarget : monthTarget;
     const scopeLastYear = mode === "ytd" ? lastYearYtdActual : lastYearMonthActual;
@@ -419,6 +585,67 @@ export async function GET(request) {
         by_region: [...byRegion.entries()]
           .map(([key, amount]) => ({ code: key, amount }))
           .sort((a, b) => b.amount - a.amount),
+        daily: {
+          rows: daily,
+          best: bestDay,
+          per_day_target: perDayTarget,
+        },
+        trend,
+        sellers: rankFrom(Array.isArray(detail.sellers) ? detail.sellers : [], (row) => ({
+          code: row.sale_name,
+          label: row.sale_name,
+        })),
+        customers: {
+          rows: rankFrom(Array.isArray(detail.customers) ? detail.customers : [], (row) => ({
+            code: row.customer_code,
+            label: row.customer_name,
+          })),
+          count: Number(totals.customers || 0),
+          /** ນ້ຳໜັກຂອງ 12 ລູກຄ້າໃຫຍ່ — ຄວາມສ່ຽງທີ່ຍອດຝາກໄວ້ກັບຄົນໜ້ອຍຄົນ. */
+          top_share:
+            safeDiv(
+              (Array.isArray(detail.customers) ? detail.customers : []).reduce(
+                (sum, row) => sum + Number(row.amount || 0),
+                0,
+              ),
+              scopeAmount,
+            ) * 100,
+        },
+        margin: {
+          amount: scopeAmount,
+          discount,
+          discount_pct: safeDiv(discount, scopeAmount + discount) * 100,
+          profit,
+          gp_pct: safeDiv(profit, scopeAmount) * 100,
+          bills: Number(totals.bills || 0),
+        },
+        ar: arRow
+          ? {
+              balance: Number(arRow.balance || 0),
+              overdue: Number(arRow.overdue || 0),
+              customers: Number(arRow.customers || 0),
+              buckets: [
+                { label: "1–30 ວັນ", amount: Number(arRow.d1_30 || 0) },
+                { label: "31–60 ວັນ", amount: Number(arRow.d31_60 || 0) },
+                { label: "61–90 ວັນ", amount: Number(arRow.d61_90 || 0) },
+                { label: "ເກີນ 90 ວັນ", amount: Number(arRow.d90p || 0) },
+              ],
+              top: arTop.map((row) => ({
+                label: String(row.name),
+                amount: Number(row.balance || 0),
+                days: Number(row.days || 0),
+              })),
+            }
+          : null,
+        stock: stockRow
+          ? {
+              value: Number(stockRow.stock_value || 0),
+              items: Number(stockRow.items || 0),
+              dead_value: Number(stockRow.dead_value || 0),
+              dead_items: Number(stockRow.dead_items || 0),
+              over_360: Number(stockRow.over_360 || 0),
+            }
+          : null,
       },
     };
 
