@@ -59,6 +59,28 @@ const GROUPS = [
 ];
 
 /**
+ * ພາກໃຕ້ — ສະຫວັນນະເຂດ and everything below it. Province codes are numbered
+ * north to south in the ERP, so the south is 14 ສະຫວັນນະເຂດ · 15 ສາລະວັນ ·
+ * 16 ຈໍາປາສັກ · 17 ເຊກອງ · 18 ອັດຕະປື; ສຳນັກງານໃຫ່ຍ is everything else, foreign
+ * customers and rows with no province included.
+ *
+ * The split is on the province the sale was made in, not on the branch that
+ * issued the bill: the targets are set per province, and head office bills a
+ * good part of the southern provinces itself.
+ */
+const SOUTH_PROVINCES = ["14", "15", "16", "17", "18"];
+
+const REGIONS = ["all", "south", "hq"];
+
+/** 'south' / 'hq' for a province column, as SQL. */
+const sideSql = (column) =>
+  `CASE WHEN COALESCE(${column}, '') IN (${SOUTH_PROVINCES.map((code) => `'${code}'`).join(", ")})
+        THEN 'south' ELSE 'hq' END`;
+
+/** Rows of the region being reported; every row when it is the whole company. */
+const inRegion = (row, region) => region === "all" || row.side === region;
+
+/**
  * Service targets are stored as one lump per month (sale_channel = 'ALL').
  * The Excel splits a flat project figure out of it and leaves the rest as
  * retail, so the same constant is applied here.
@@ -162,11 +184,12 @@ function sumStaff(map, months) {
   return total;
 }
 
-/** Bucket map for one year out of the two-year scan. */
-function buildActualMap(rowsIn, year) {
+/** Bucket map for one year of the two-year scan, for one region. */
+function buildActualMap(rowsIn, year, region) {
   const map = new Map();
   for (const row of rowsIn) {
     if (Number(row.year) !== year) continue;
+    if (!inRegion(row, region)) continue;
     const key = bucketKey(
       String(row.bu_code ?? ""),
       String(row.channel_code ?? "OTHER"),
@@ -180,8 +203,12 @@ function buildActualMap(rowsIn, year) {
 /**
  * Target rows keep the service BU in one 'ALL' channel; split it into the
  * project / retail buckets the report expects.
+ *
+ * Only the wholesale plan is entered province by province. Retail, project,
+ * ຂາຍຊ່າງ, online and service are planned as one company figure (province_code
+ * 'ALL') and belong to ສຳນັກງານໃຫ່ຍ, which is where those counters are.
  */
-function buildTargetMap(rowsIn) {
+function buildTargetMap(rowsIn, region) {
   const map = new Map();
   const add = (bu, channel, month, amount) => {
     const key = bucketKey(bu, channel, month);
@@ -190,6 +217,7 @@ function buildTargetMap(rowsIn) {
 
   const serviceByMonth = new Map();
   for (const row of rowsIn) {
+    if (!inRegion(row, region)) continue;
     const bu = String(row.bu_code ?? "");
     const month = Number(row.month);
     const amount = Number(row.amount || 0);
@@ -224,6 +252,8 @@ export async function GET(request) {
     const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const year = parseIntSafe(sp.get("year"), previous.getFullYear());
     const month = Math.min(12, Math.max(1, parseIntSafe(sp.get("month"), previous.getMonth() + 1)));
+    const requested = String(sp.get("region") || "all").toLowerCase();
+    const region = REGIONS.includes(requested) ? requested : "all";
 
     const lastYear = year - 1;
 
@@ -232,7 +262,7 @@ export async function GET(request) {
     const force = /^(1|true|force)$/i.test(String(sp.get("refresh") || ""));
     const source = await readSourceStamp([year, lastYear]);
 
-    const cacheKey = `${year}|${month}|${source.stamp}`;
+    const cacheKey = `${year}|${month}|${region}|${source.stamp}`;
     const cached = cache.get(cacheKey);
     if (!force && cached) return NextResponse.json(cached);
 
@@ -249,26 +279,30 @@ export async function GET(request) {
              EXTRACT(MONTH FROM ${REPORT_DATE})::int AS month,
              COALESCE(NULLIF(d.bu_code, ''), '-') AS bu_code,
              ${channelCodeSql("d.doc_no")} AS channel_code,
+             ${sideSql("d.province")} AS side,
              COALESCE(SUM(d.sum_amount), 0)::float AS amount
       FROM public.odg_sale_detail d
       ${OVERRIDE_JOIN}
       WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])
-      GROUP BY 1, 2, 3, 4`;
+      GROUP BY 1, 2, 3, 4, 5`;
     const targetSql = `
       SELECT bu_code, target_month AS month, sale_channel,
+             ${sideSql("province_code")} AS side,
              COALESCE(SUM(target_amount), 0)::float AS amount
       FROM public.odg_sales_target
       WHERE target_year = %s
-      GROUP BY bu_code, target_month, sale_channel`;
+      GROUP BY bu_code, target_month, sale_channel, side`;
 
     const [actualRows, targetNow] = await Promise.all([
+      // Region-free key: the scan carries every side, and each request keeps
+      // only the rows its own region asked for.
       once(`${year}|${lastYear}|${source.stamp}`, () => rows(actualSql, [[year, lastYear]])),
       rows(targetSql, [year]),
     ]);
 
-    const actual = buildActualMap(actualRows, year);
-    const actualLy = buildActualMap(actualRows, lastYear);
-    const target = buildTargetMap(targetNow);
+    const actual = buildActualMap(actualRows, year, region);
+    const actualLy = buildActualMap(actualRows, lastYear, region);
+    const target = buildTargetMap(targetNow, region);
 
     const monthOnly = [month];
     const ytdMonths = range(1, month);
@@ -329,6 +363,8 @@ export async function GET(request) {
           year,
           month,
           last_year: lastYear,
+          /** all · south (ສະຫວັນນະເຂດ ລົງໄປ) · hq (ສ່ວນທີ່ເຫຼືອ). */
+          region,
           service_project_monthly_target: SERVICE_PROJECT_MONTHLY_TARGET,
           generated_at: new Date().toISOString(),
           /** Latest sale date behind these numbers. */

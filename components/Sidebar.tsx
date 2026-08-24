@@ -14,6 +14,8 @@ import {
   CalendarDays,
   CalendarClock,
   CalendarRange,
+  Building2,
+  Compass,
   Award,
   BadgePercent,
   ChevronDown,
@@ -73,6 +75,8 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/sales-summary", i18nKey: "sidebar.summary", icon: <Table size={17} /> },
       { path: "/month-summary", i18nKey: "sidebar.monthSummary", icon: <CalendarRange size={17} /> },
+      { path: "/month-summary/hq", i18nKey: "sidebar.monthSummaryHq", icon: <Building2 size={17} /> },
+      { path: "/month-summary/south", i18nKey: "sidebar.monthSummarySouth", icon: <Compass size={17} /> },
       { path: "/sales-delivery", i18nKey: "sidebar.salesDelivery", icon: <PackageCheck size={17} /> },
       { path: "/retail-incentive", i18nKey: "sidebar.incentive", icon: <Award size={17} /> },
       { path: "/incentive-daily", i18nKey: "sidebar.incentiveDaily", icon: <CalendarCheck size={17} /> },
