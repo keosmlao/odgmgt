@@ -256,7 +256,11 @@ const dict: Record<string, Record<Locale, string>> = {
     th: "สรุปรายเดือน · YTD · ROY",
     en: "Month · YTD · ROY Summary",
   },
-  "monthSummary.regionSouth": { lo: "ພາກໃຕ້", th: "ภาคใต้", en: "Southern region" },
+  "monthSummary.regionSouth": {
+    lo: "ພາກໃຕ້ + ສະຫວັນນະເຂດ",
+    th: "ภาคใต้ + สะหวันนะเขต",
+    en: "South + Savannakhet",
+  },
   "monthSummary.regionHq": { lo: "ສຳນັກງານໃຫ່ຍ", th: "สำนักงานใหญ่", en: "Head office" },
   "monthSummary.month": { lo: "ເດືອນ", th: "เดือน", en: "Month" },
   "monthSummary.refresh": { lo: "ໂຫຼດໃໝ່", th: "รีเฟรช", en: "Refresh" },
@@ -1161,15 +1165,17 @@ const dict: Record<string, Record<Locale, string>> = {
   "sidebar.assignment": { lo: "ແຈກງານຂາຍ", th: "มอบหมายงานขาย", en: "Sales Assignment" },
   "sidebar.summary": { lo: "ສະຫຼຸບການຂາຍ", th: "สรุปการขาย", en: "Sales Summary" },
   "sidebar.monthSummary": { lo: "ສະຫຼຸບເດືອນ / ROY", th: "สรุปรายเดือน / ROY", en: "Month & ROY Summary" },
+  /* The sidebar truncates at about 20 characters, and these two sit right under
+     ສະຫຼຸບເດືອນ / ROY — the region alone is enough to tell them apart. */
   "sidebar.monthSummaryHq": {
-    lo: "ສະຫຼຸບເດືອນ · ສຳນັກງານໃຫ່ຍ",
-    th: "สรุปรายเดือน · สำนักงานใหญ่",
-    en: "Month Summary · Head office",
+    lo: "ສຳນັກງານໃຫ່ຍ",
+    th: "สำนักงานใหญ่",
+    en: "Head office",
   },
   "sidebar.monthSummarySouth": {
-    lo: "ສະຫຼຸບເດືອນ · ພາກໃຕ້",
-    th: "สรุปรายเดือน · ภาคใต้",
-    en: "Month Summary · South",
+    lo: "ພາກໃຕ້ + ສະຫວັນນະເຂດ",
+    th: "ภาคใต้ + สะหวันนะเขต",
+    en: "South + Savannakhet",
   },
   "sidebar.salesDelivery": { lo: "ສົມທຽບຂາຍ / ຈັດສົ່ງ", th: "เทียบยอดขาย / จัดส่ง", en: "Sales vs Delivery" },
   "sidebar.saleMonthOverride": { lo: "ຍ້າຍເດືອນບິນ", th: "ย้ายเดือนบิล", en: "Bill month override" },
