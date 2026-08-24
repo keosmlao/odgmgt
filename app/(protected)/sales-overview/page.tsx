@@ -13,6 +13,9 @@ import {
   Map as MapIcon,
   Percent,
   RefreshCw,
+  Ruler,
+  ShieldCheck,
+  Siren,
   Target,
   TrendingUp,
   Users,
@@ -107,6 +110,26 @@ type Payload = {
     dead_value: number;
     dead_items: number;
     over_360: number;
+  } | null;
+  gaps: { label: string; target: number; actual: number; gap: number; pct: number }[];
+  accuracy: {
+    year: number;
+    month: number;
+    projected: number;
+    actual: number;
+    error_pct: number;
+  }[];
+  dimensions: {
+    provinces: { code: string; label: string; amount: number }[];
+    branches: { code: string; label: string; amount: number }[];
+    groups: { code: string; label: string; amount: number }[];
+  };
+  leak: {
+    returns: number;
+    return_bills: number;
+    loss_lines: number;
+    loss_lines_profit: number;
+    deep_discount: number;
   } | null;
 };
 
@@ -334,6 +357,58 @@ export default function SalesOverview() {
   );
 
   const scopeWord = mode === "ytd" ? "ສະສົມ" : "ເດືອນນີ້";
+
+  /** ແຖວອັນດັບຈາກລາຍການທີ່ມີແຕ່ຍອດ — ຄິດສ່ວນແບ່ງໃຫ້ເອງ. */
+  const amountRanks = (list: { code: string; label: string; amount: number }[]) => {
+    const total = list.reduce((sum, row) => sum + row.amount, 0);
+    return list.map((row) => ({ ...row, share: (row.amount / Math.max(1, total)) * 100 }));
+  };
+
+  /**
+   * ສຸຂະພາບ 360°: ຫົກຕົວທີ່ບອກວ່າທຸລະກິດແຂງແຮງ ຫຼື ບໍ່ — ອ່ານແຖວດຽວແທນການ
+   * ໄລ່ເບິ່ງທຸກກາດຂ້າງເທິງ. ເກນສີ: ຂຽວ = ດີ · ເຫຼືອງ = ເຝົ້າ · ແດງ = ຕ້ອງແກ້.
+   */
+  const health = data
+    ? [
+        {
+          label: "ບັນລຸເປົ້າ",
+          value: pct(data.month.pct),
+          tone: tone(data.month.pct),
+        },
+        {
+          label: "ເຕີບໂຕ",
+          value: pct(data.scope.growth),
+          tone: data.scope.growth >= 100 ? "pos" : data.scope.growth >= 95 ? "warn" : "neg",
+        },
+        {
+          label: "GP",
+          value: `${data.margin.gp_pct.toFixed(1)}%`,
+          tone: data.margin.gp_pct >= 22 ? "pos" : data.margin.gp_pct >= 18 ? "warn" : "neg",
+        },
+        {
+          label: "ໜີ້ເກີນກຳນົດ",
+          value: data.ar
+            ? pct((data.ar.overdue / Math.max(1, data.ar.balance)) * 100)
+            : "–",
+          tone: data.ar && data.ar.overdue / Math.max(1, data.ar.balance) > 0.5 ? "neg" : "warn",
+        },
+        {
+          label: "ສະຕັອກຂາຍບໍ່ອອກ",
+          value: data.stock
+            ? pct((data.stock.dead_value / Math.max(1, data.stock.value)) * 100)
+            : "–",
+          tone:
+            data.stock && data.stock.dead_value / Math.max(1, data.stock.value) > 0.2
+              ? "neg"
+              : "warn",
+        },
+        {
+          label: "ພຶ່ງລູກຄ້າໃຫຍ່",
+          value: pct(data.customers.top_share),
+          tone: data.customers.top_share > 30 ? "warn" : "pos",
+        },
+      ]
+    : [];
 
   return (
     <div className="sf-app min-h-screen bg-transparent">
@@ -926,6 +1001,196 @@ export default function SalesOverview() {
                 </div>
               </section>
             )}
+
+            {/* ══ ⑬ ຊ່ອງຫວ່າງ · ⑭ ຄວາມແມ່ນຄາດການ ══ */}
+            <div className="so-grid mt-3">
+              {data.gaps.length > 0 && (
+                <section className="sf-widget">
+                  <div className="sf-widget-hd">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="sf-widget-title">
+                        <Siren size={13} /> ⑬ ຊ່ອງຫວ່າງ · {scopeWord}
+                      </h3>
+                      <p className="sf-widget-sub">ຕົກເປົ້າຫຼາຍສຸດ ຮຽງຈາກຫຼາຍໄປໜ້ອຍ</p>
+                    </div>
+                  </div>
+                  <div className="sf-widget-bd">
+                    {data.gaps
+                      .filter((row) => row.gap > 0)
+                      .slice(0, 8)
+                      .map((row) => (
+                        <div key={row.label} className="so-rank">
+                          <span className="so-rank-label" style={{ width: "9rem" }} title={row.label}>
+                            {row.label}
+                          </span>
+                          <span className="so-rank-bar">
+                            <span
+                              style={{
+                                width: `${Math.max(2, Math.min(100, row.pct))}%`,
+                                background: `var(--${tone(row.pct)})`,
+                              }}
+                            />
+                          </span>
+                          <span className="so-rank-value" style={{ color: "var(--neg)" }}>
+                            −{short(row.gap)}
+                          </span>
+                          <span className="so-rank-share">{pct(row.pct)}</span>
+                        </div>
+                      ))}
+                  </div>
+                </section>
+              )}
+
+              <section className="sf-widget">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Ruler size={13} /> ⑭ ຄວາມແມ່ນຂອງຄາດການ
+                    </h3>
+                    <p className="sf-widget-sub">
+                      ຄາດການ ນະ ວັນທີ {data.days.cut_day} ທຽບຍອດຈິງທີ່ອອກມາ · 12 ເດືອນຫຼ້າສຸດ
+                    </p>
+                  </div>
+                  <span className="pill pill-muted">
+                    ສະເລ່ຍ {data.forecast.bias_pct >= 0 ? "+" : ""}
+                    {data.forecast.bias_pct.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="sf-widget-bd">
+                  {data.accuracy.map((row) => (
+                    <div key={`${row.year}-${row.month}`} className="so-rank">
+                      <span className="so-rank-label" style={{ width: "4.5rem" }}>
+                        {row.year}-{MONTHS[row.month - 1]}
+                      </span>
+                      <span className="so-rank-bar">
+                        <span
+                          style={{
+                            width: `${Math.min(100, Math.abs(row.error_pct) * 3)}%`,
+                            background: Math.abs(row.error_pct) > 15 ? "var(--warn)" : "var(--pos)",
+                          }}
+                        />
+                      </span>
+                      <span className="so-rank-value">{short(row.actual)}</span>
+                      <span className="so-rank-share">
+                        {row.error_pct >= 0 ? "+" : ""}
+                        {row.error_pct.toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                  {!data.accuracy.length && <p className="so-empty">ບໍ່ມີຂໍ້ມູນ</p>}
+                </div>
+              </section>
+            </div>
+
+            {/* ══ ⑮ ມິຕິ ══ */}
+            <section className="sf-widget mt-3">
+              <div className="sf-widget-hd">
+                <div className="min-w-0 flex-1">
+                  <h3 className="sf-widget-title">
+                    <Layers size={13} /> ⑮ ມິຕິອື່ນ · {scopeWord}
+                  </h3>
+                  <p className="sf-widget-sub">ແຂວງ · ສາຂາ · ກຸ່ມສິນຄ້າ</p>
+                </div>
+              </div>
+              <div className="sf-widget-bd so-trio">
+                <div>
+                  <p className="so-kpi-label">ແຂວງ</p>
+                  {rankRows(amountRanks(data.dimensions.provinces))}
+                </div>
+                <div>
+                  <p className="so-kpi-label">ສາຂາທີ່ອອກບິນ</p>
+                  {rankRows(amountRanks(data.dimensions.branches))}
+                </div>
+                <div>
+                  <p className="so-kpi-label">ກຸ່ມສິນຄ້າ</p>
+                  {rankRows(amountRanks(data.dimensions.groups))}
+                </div>
+              </div>
+            </section>
+
+            {/* ══ ⑯ ຮົ່ວໄຫຼ · ⑰ ສຸຂະພາບ 360° ══ */}
+            <div className="so-grid mt-3">
+              {data.leak && (
+                <section className="sf-widget">
+                  <div className="sf-widget-hd">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="sf-widget-title">
+                        <Siren size={13} /> ⑯ ຮົ່ວໄຫຼ · {scopeWord}
+                      </h3>
+                      <p className="sf-widget-sub">ເງິນທີ່ອອກຈາກຍອດໂດຍບໍ່ໄດ້ຕັ້ງໃຈ</p>
+                    </div>
+                  </div>
+                  <div className="sf-widget-bd">
+                    <div className="so-compare">
+                      <div>
+                        <p className="so-kpi-label">ສິນຄ້າສົ່ງຄືນ</p>
+                        <p className="so-kpi-value" style={{ color: "var(--neg)" }}>
+                          {full(Math.abs(data.leak.returns))}
+                        </p>
+                        <p className="so-kpi-note">{full(data.leak.return_bills)} ບິນ</p>
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ແຖວທີ່ຂາດທຶນ</p>
+                        <p className="so-kpi-value" style={{ color: "var(--neg)" }}>
+                          {full(Math.abs(data.leak.loss_lines_profit))}
+                        </p>
+                        <p className="so-kpi-note">{full(data.leak.loss_lines)} ແຖວ</p>
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ຫຼຸດເກີນ 10%</p>
+                        <p className="so-kpi-value" style={{ color: "var(--warn)" }}>
+                          {full(data.leak.deep_discount)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ລວມຮົ່ວໄຫຼ</p>
+                        <p className="so-kpi-value">
+                          {full(
+                            Math.abs(data.leak.returns) +
+                              Math.abs(data.leak.loss_lines_profit) +
+                              data.leak.deep_discount,
+                          )}
+                        </p>
+                        <p className="so-kpi-note">
+                          {pct(
+                            ((Math.abs(data.leak.returns) +
+                              Math.abs(data.leak.loss_lines_profit) +
+                              data.leak.deep_discount) /
+                              Math.max(1, data.margin.amount)) *
+                              100,
+                          )}{" "}
+                          ຂອງຍອດຂາຍ
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              <section className="sf-widget">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <ShieldCheck size={13} /> ⑰ ສຸຂະພາບ 360°
+                    </h3>
+                    <p className="sf-widget-sub">ຫົກຕົວທີ່ບອກສະພາບລວມ</p>
+                  </div>
+                </div>
+                <div className="sf-widget-bd">
+                  <div className="so-health">
+                    {health.map((item) => (
+                      <div key={item.label}>
+                        <span className={`so-dot is-${item.tone}`} />
+                        <p className="so-kpi-label">{item.label}</p>
+                        <p className="so-kpi-value" style={{ color: `var(--${item.tone})` }}>
+                          {item.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </div>
 
             <p className="so-note">
               ຍອດຈິງຈາກ odg_sale_detail (ນັບຕາມເດືອນທີ່ອະນຸມັດໃຫ້) · ເປົ້າຈາກ odg_sales_target ·

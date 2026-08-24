@@ -5,7 +5,13 @@ import { getCurrentUser } from "@/lib/route-auth";
 import { OWNER_CODES } from "@/lib/employee-auth";
 import { OVERRIDE_JOIN, REPORT_DATE } from "@/lib/sale-month-override";
 import { channelCodeSql, CHANNEL_NAMES } from "@/lib/sale-monthly-sql.mjs";
-import { isRegionKey, provincesOf, REGIONS, regionOf } from "@/lib/sales-regions.mjs";
+import {
+  isRegionKey,
+  provinceLabel,
+  provincesOf,
+  REGIONS,
+  regionOf,
+} from "@/lib/sales-regions.mjs";
 
 /** ທຸກລະຫັດແຂວງທີ່ຮູ້ຈັກ — ໃຊ້ພິສູດ "ບໍ່ລະບຸພື້ນທີ່" ດ້ວຍການປະຕິເສດ. */
 const KNOWN_PROVINCES = REGIONS.flatMap((region) => region.provinces);
@@ -143,6 +149,8 @@ function scopeDetailSql(whereExtra) {
              COALESCE(NULLIF(d.salename, ''), 'ບໍ່ລະບຸ') AS sale_name,
              COALESCE(NULLIF(d.customer_code, ''), '-') AS customer_code,
              COALESCE(NULLIF(d.customername, ''), d.customer_code, '-') AS customer_name,
+             COALESCE(NULLIF(d.branch_name, ''), 'ບໍ່ລະບຸ') AS branch_name,
+             COALESCE(NULLIF(d.itemmaingroup, ''), 'ບໍ່ລະບຸ') AS item_group,
              d.sum_amount::float AS amount,
              -- ສ່ວນຫຼຸດເອົາ discount_amount_2: discount_amount ເກັບເປັນເງິນກີບ
              -- ຕົ້ນສະບັບ (ບວກເຂົ້າກັນແລ້ວໄດ້ 460 ລ້ານ ຈາກຍອດ 54 ລ້ານ), ສ່ວນ _2
@@ -174,6 +182,37 @@ function scopeDetailSql(whereExtra) {
           SELECT customer_code, MAX(customer_name) AS customer_name,
                  SUM(amount)::float AS amount, COUNT(DISTINCT doc_no)::int AS bills
           FROM kept GROUP BY customer_code ORDER BY 3 DESC LIMIT 12
+        ) x
+      ),
+      'provinces', (
+        SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+          SELECT province, SUM(amount)::float AS amount
+          FROM kept GROUP BY province ORDER BY 2 DESC LIMIT 10
+        ) x
+      ),
+      'branches', (
+        SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+          SELECT branch_name, SUM(amount)::float AS amount
+          FROM kept GROUP BY branch_name ORDER BY 2 DESC LIMIT 8
+        ) x
+      ),
+      'groups', (
+        SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+          SELECT item_group, SUM(amount)::float AS amount
+          FROM kept GROUP BY item_group ORDER BY 2 DESC LIMIT 10
+        ) x
+      ),
+      -- ຮົ່ວໄຫຼ: ເງິນທີ່ອອກຈາກຍອດໂດຍບໍ່ໄດ້ຕັ້ງໃຈ — ສິນຄ້າສົ່ງຄືນ, ແຖວທີ່ຂາຍຕໍ່າ
+      -- ກວ່າຕົ້ນທຶນ, ແລະ ບິນທີ່ຫຼຸດເກີນ 10% ຂອງລາຄາເຕັມ.
+      'leak', (
+        SELECT row_to_json(x) FROM (
+          SELECT
+            COALESCE(SUM(amount) FILTER (WHERE amount < 0), 0)::float AS returns,
+            COUNT(DISTINCT doc_no) FILTER (WHERE amount < 0)::int AS return_bills,
+            COALESCE(SUM(profit) FILTER (WHERE profit < 0), 0)::float AS loss_lines_profit,
+            COUNT(*) FILTER (WHERE profit < 0)::int AS loss_lines,
+            COALESCE(SUM(discount) FILTER (WHERE discount > amount * 0.1), 0)::float AS deep_discount
+          FROM kept
         ) x
       ),
       'totals', (
@@ -488,6 +527,74 @@ export async function GET(request) {
       months: Array.from({ length: 12 }, (_, index) => sumMonth(trendYear, index + 1)),
     }));
 
+    /**
+     * ຊ່ອງຫວ່າງ: ຄູ່ (BU × ຊ່ອງທາງ) ທີ່ຕົກເປົ້າຫຼາຍສຸດ — ບ່ອນທີ່ຄວນລົງແຮງກ່ອນ.
+     * ເປົ້າຢູ່ລະດັບ BU+ຊ່ອງທາງ (ບໍ່ໄດ້ແຍກແຂວງ ນອກຈາກຂາຍສົ່ງ) ຈຶ່ງຄິດສະເພາະ
+     * ຕອນເບິ່ງທັງປະເທດ; ເລືອກພາກແລ້ວ ບລ໋ອກນີ້ຈະບໍ່ມີເປົ້າໃຫ້ທຽບ.
+     */
+    const gapRows = [];
+    if (region === "ALL") {
+      const actualPair = new Map();
+      for (const row of buckets) {
+        if (Number(row.year) !== year || !scopeMonths.includes(Number(row.month))) continue;
+        if (!keep(row)) continue;
+        const key = `${row.bu_code}|${row.channel_code}`;
+        actualPair.set(key, (actualPair.get(key) || 0) + Number(row.amount || 0));
+      }
+      const targetPair = new Map();
+      for (const row of targetRows) {
+        if (!scopeMonths.includes(Number(row.month))) continue;
+        if (buWanted && !buWanted.has(String(row.bu_code))) continue;
+        const targetChannel = normalizeTargetChannel(row.sale_channel);
+        if (channelWanted && targetChannel !== "ALL" && !channelWanted.has(targetChannel)) continue;
+        const key = `${row.bu_code}|${targetChannel}`;
+        targetPair.set(key, (targetPair.get(key) || 0) + Number(row.amount || 0));
+      }
+      /** ຍອດຈິງທັງ BU — ໃຊ້ກັບເປົ້າທີ່ຕັ້ງລວມທຸກຊ່ອງທາງ (ສູນບໍລິການ). */
+      const actualByBu = new Map();
+      for (const [key, value] of actualPair) {
+        const buCode = key.split("|")[0];
+        actualByBu.set(buCode, (actualByBu.get(buCode) || 0) + value);
+      }
+      for (const [key, target] of targetPair) {
+        const [buCode, channelCode] = key.split("|");
+        const actualValue =
+          channelCode === "ALL" ? actualByBu.get(buCode) || 0 : actualPair.get(key) || 0;
+        gapRows.push({
+          label: `${BU_NAMES[buCode] || buCode} · ${
+            channelCode === "ALL" ? "ທຸກຊ່ອງທາງ" : CHANNEL_NAMES[channelCode] || channelCode
+          }`,
+          target,
+          actual: actualValue,
+          gap: target - actualValue,
+          pct: safeDiv(actualValue, target) * 100,
+        });
+      }
+      gapRows.sort((a, b) => b.gap - a.gap);
+    }
+
+    /**
+     * ຄວາມແມ່ນ: ຄາດການທີ່ຈະໄດ້ ນະ ວັນຕັດດຽວກັນ ຂອງ 12 ເດືອນຫຼ້າສຸດ ທຽບກັບຍອດຈິງ
+     * ທີ່ອອກມາ — ຕົວດຽວກັນທີ່ໃຊ້ຄິດອະຄະຕິຂ້າງເທິງ, ວາງໃຫ້ເຫັນເປັນແຖວ.
+     */
+    const accuracy = monthsBack(year, month, 12)
+      .filter((past) => trendYears.includes(past.year))
+      .map((past) => {
+        const pastCut = sumMonth(past.year, past.month, true);
+        const pastFull = sumMonth(past.year, past.month);
+        const pastElapsed = sellingDays(past.year, past.month, cutDay);
+        const projection = safeDiv(pastCut, pastElapsed) * sellingDays(past.year, past.month);
+        return {
+          year: past.year,
+          month: past.month,
+          projected: projection,
+          actual: pastFull,
+          error_pct: projection ? (pastFull / projection - 1) * 100 : 0,
+        };
+      })
+      .filter((row) => row.actual > 0)
+      .reverse();
+
     const totals = detail.totals || {};
     const scopeAmount = Number(totals.amount || 0);
     const discount = Number(totals.discount || 0);
@@ -635,6 +742,34 @@ export async function GET(request) {
                 amount: Number(row.balance || 0),
                 days: Number(row.days || 0),
               })),
+            }
+          : null,
+        gaps: gapRows.slice(0, 10),
+        accuracy,
+        dimensions: {
+          provinces: (Array.isArray(detail.provinces) ? detail.provinces : []).map((row) => ({
+            code: String(row.province),
+            label: provinceLabel(row.province),
+            amount: Number(row.amount || 0),
+          })),
+          branches: (Array.isArray(detail.branches) ? detail.branches : []).map((row) => ({
+            code: String(row.branch_name),
+            label: String(row.branch_name),
+            amount: Number(row.amount || 0),
+          })),
+          groups: (Array.isArray(detail.groups) ? detail.groups : []).map((row) => ({
+            code: String(row.item_group),
+            label: String(row.item_group),
+            amount: Number(row.amount || 0),
+          })),
+        },
+        leak: detail.leak
+          ? {
+              returns: Number(detail.leak.returns || 0),
+              return_bills: Number(detail.leak.return_bills || 0),
+              loss_lines: Number(detail.leak.loss_lines || 0),
+              loss_lines_profit: Number(detail.leak.loss_lines_profit || 0),
+              deep_discount: Number(detail.leak.deep_discount || 0),
             }
           : null,
         stock: stockRow

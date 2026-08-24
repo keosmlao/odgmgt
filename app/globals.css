@@ -2188,3 +2188,14 @@ button.rule-link {
 .is-y1 { background: color-mix(in srgb, var(--brand) 45%, var(--surface-2)); }
 .is-y2 { background: color-mix(in srgb, var(--brand) 20%, var(--surface-2)); }
 .so-legend i.is-y0, .so-legend i.is-y1, .so-legend i.is-y2 { border-radius: 999px; }
+
+.so-trio { display: grid; gap: 1rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .so-trio { grid-template-columns: minmax(0, 1fr); } }
+.so-trio > div > .so-kpi-label { margin-bottom: 0.3rem; }
+.so-health { display: grid; gap: 0.6rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .so-health { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.so-health > div { position: relative; border: 1px solid var(--line-soft); border-radius: var(--r-sm); padding: 0.55rem 0.7rem; }
+.so-dot { position: absolute; top: 0.55rem; right: 0.6rem; height: 0.45rem; width: 0.45rem; border-radius: 999px; }
+.so-dot.is-pos { background: var(--pos); }
+.so-dot.is-warn { background: var(--warn); }
+.so-dot.is-neg { background: var(--neg); }
