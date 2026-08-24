@@ -436,11 +436,54 @@ const AR_SQL = `
          COUNT(DISTINCT ar_code)::int AS customers
   FROM public.odg_ar_aging`;
 
-const AR_TOP_SQL = `
-  SELECT COALESCE(NULLIF(TRIM(ar_name), ''), ar_code) AS name,
+/**
+ * ໜີ້ຄ້າງແບບເຕັມ — ຫຼາຍກວ່າຍອດລວມ: ອາຍຸໜີ້, ໃຜເປັນເຈົ້າຂອງ (ພະນັກງານຂາຍ),
+ * ສາຂາໃດອອກບິນ, ບິນເກົ່າສຸດ, ແລະ ລູກຄ້າທີ່ໃຊ້ວົງເງິນເກີນ. ໜີ້ 75 ລ້ານ ບອກໄດ້
+ * ພຽງວ່າມີໜີ້; "ຂອງໃຜ ຄ້າງມາດົນປານໃດ" ຄືສິ່ງທີ່ຕາມເກັບໄດ້.
+ */
+const AR_BY_SALE_SQL = `
+  SELECT COALESCE(NULLIF(TRIM(sale_name), ''), 'ບໍ່ລະບຸ') AS name,
          COALESCE(SUM(balance_amount), 0)::float AS balance,
-         COALESCE(MAX(date_diff), 0)::int AS days
+         COALESCE(SUM(balance_amount) FILTER (WHERE COALESCE(date_diff, 0) > 0), 0)::float AS overdue,
+         COUNT(DISTINCT ar_code)::int AS customers
   FROM public.odg_ar_aging
+  GROUP BY 1 ORDER BY 2 DESC LIMIT 8`;
+
+const AR_BY_BRANCH_SQL = `
+  SELECT COALESCE(NULLIF(TRIM(branch), ''), 'ບໍ່ລະບຸ') AS name,
+         COALESCE(SUM(balance_amount), 0)::float AS balance
+  FROM public.odg_ar_aging
+  GROUP BY 1 ORDER BY 2 DESC LIMIT 6`;
+
+/** ບິນທີ່ຄ້າງດົນສຸດ — ອັນທີ່ຄວນຕັດສິນໃຈວ່າຈະຕາມ ຫຼື ຕັດໜີ້ສູນ. */
+const AR_OLDEST_SQL = `
+  SELECT a.doc_no,
+         COALESCE(NULLIF(TRIM(c.name_1), ''), a.ar_code) AS name,
+         COALESCE(a.balance_amount, 0)::float AS balance,
+         COALESCE(a.date_diff, 0)::int AS days
+  FROM public.odg_ar_aging a
+  LEFT JOIN public.ar_customer c ON c.code = a.ar_code
+  WHERE COALESCE(a.balance_amount, 0) > 0
+  ORDER BY a.date_diff DESC NULLS LAST LIMIT 6`;
+
+/** ວົງເງິນເຄຣດິດທີ່ໃຊ້ເກີນ — ຄວາມສ່ຽງທີ່ອະນຸມັດຂາຍຕໍ່ໄປບໍ່ໄດ້. */
+const AR_CREDIT_SQL = `
+  SELECT COUNT(*)::int AS customers,
+         COALESCE(SUM(debt_balance), 0)::float AS balance
+  FROM public.odg_customer_health
+  WHERE credit_used_pct > 100`;
+
+/**
+ * ⚠️ odg_ar_aging ເກັບແຕ່ ar_code ບໍ່ມີຊື່ລູກຄ້າ — ຊື່ຢູ່ public.ar_customer.
+ * ກ່ອນນີ້ຄຳຖາມນີ້ອ້າງ ar_name ທີ່ບໍ່ມີຈິງ ແລ້ວ .catch() ກືນ error ໄປ ບລ໋ອກຈຶ່ງ
+ * ຫວ່າງເປົ່າໂດຍບໍ່ມີໃຜຮູ້.
+ */
+const AR_TOP_SQL = `
+  SELECT COALESCE(NULLIF(TRIM(c.name_1), ''), a.ar_code) AS name,
+         COALESCE(SUM(a.balance_amount), 0)::float AS balance,
+         COALESCE(MAX(a.date_diff), 0)::int AS days
+  FROM public.odg_ar_aging a
+  LEFT JOIN public.ar_customer c ON c.code = a.ar_code
   GROUP BY 1 ORDER BY 2 DESC LIMIT 8`;
 
 const STOCK_SQL = `
@@ -627,6 +670,10 @@ export async function GET(request) {
       stockRow,
       visitRow,
       healthRow,
+      arBySale,
+      arByBranch,
+      arOldest,
+      arCredit,
       planRow,
     ] = await Promise.all([
       loadBuckets(trendYears, cutDay, source.stamp),
@@ -638,6 +685,10 @@ export async function GET(request) {
       one(STOCK_SQL).catch(() => null),
       one(VISIT_SQL, [year, mode === "ytd" ? 1 : month, month]).catch(() => null),
       one(healthSql(healthWhere.join(" AND "))).catch(() => null),
+      rows(AR_BY_SALE_SQL).catch(() => []),
+      rows(AR_BY_BRANCH_SQL).catch(() => []),
+      rows(AR_OLDEST_SQL).catch(() => []),
+      one(AR_CREDIT_SQL).catch(() => null),
       one(PLAN_SQL, [year, mode === "ytd" ? 1 : month, month]).catch(() => null),
     ]);
     const detail = detailRow?.payload || {};
@@ -971,6 +1022,34 @@ export async function GET(request) {
                 amount: Number(row.balance || 0),
                 days: Number(row.days || 0),
               })),
+              by_sale: arBySale.map((row) => ({
+                label: String(row.name),
+                amount: Number(row.balance || 0),
+                overdue: Number(row.overdue || 0),
+                customers: Number(row.customers || 0),
+              })),
+              by_branch: arByBranch.map((row) => ({
+                label: String(row.name),
+                amount: Number(row.balance || 0),
+              })),
+              oldest: arOldest.map((row) => ({
+                label: `${row.doc_no} · ${row.name}`,
+                amount: Number(row.balance || 0),
+                days: Number(row.days || 0),
+              })),
+              over_credit: arCredit
+                ? {
+                    customers: Number(arCredit.customers || 0),
+                    balance: Number(arCredit.balance || 0),
+                  }
+                : null,
+              /**
+               * ໜີ້ເທົ່າກັບຍອດຂາຍຈັກມື້ (DSO ຢ່າງງ່າຍ) — ໃຊ້ຄວາມໄວການຂາຍຂອງ
+               * ເດືອນນີ້ເປັນຖານ, ບອກວ່າເງິນຈົມຢູ່ກັບລູກຄ້າດົນປານໃດ.
+               */
+              days_of_sales: perDayActual
+                ? Number(arRow.balance || 0) / perDayActual
+                : 0,
             }
           : null,
         health: customerHealth

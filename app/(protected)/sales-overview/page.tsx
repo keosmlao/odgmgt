@@ -105,6 +105,11 @@ type Payload = {
     customers: number;
     buckets: { label: string; amount: number }[];
     top: { label: string; amount: number; days: number }[];
+    by_sale: { label: string; amount: number; overdue: number; customers: number }[];
+    by_branch: { label: string; amount: number }[];
+    oldest: { label: string; amount: number; days: number }[];
+    over_credit: { customers: number; balance: number } | null;
+    days_of_sales: number;
   } | null;
   stock: {
     value: number;
@@ -975,8 +980,10 @@ export default function SalesOverview() {
                 </div>
               </section>
 
-              {data.ar && (
-                <section className="sf-widget">
+            </div>
+
+            {data.ar && (
+              <section className="sf-widget mt-3">
                   <div className="sf-widget-hd">
                     <div className="min-w-0 flex-1">
                       <h3 className="sf-widget-title">
@@ -989,25 +996,108 @@ export default function SalesOverview() {
                     <span className="pill pill-neg">ເກີນກຳນົດ {short(data.ar.overdue)}</span>
                   </div>
                   <div className="sf-widget-bd">
-                    {rankRows(
-                      data.ar.buckets.map((bucket) => ({
-                        code: bucket.label,
-                        label: bucket.label,
-                        amount: bucket.amount,
-                        share: (bucket.amount / Math.max(1, data.ar!.balance)) * 100,
-                      })),
-                    )}
-                    <p className="so-kpi-note mt-2">
-                      ລູກໜີ້ໃຫຍ່ສຸດ:{" "}
-                      {data.ar.top
-                        .slice(0, 3)
-                        .map((row) => `${row.label} ${short(row.amount)}`)
-                        .join(" · ")}
-                    </p>
+                    <div className="so-compare">
+                      <div>
+                        <p className="so-kpi-label">ໜີ້ລວມ</p>
+                        <p className="so-kpi-value">{full(data.ar.balance)}</p>
+                        <p className="so-kpi-note">{full(data.ar.customers)} ລູກໜີ້</p>
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ເກີນກຳນົດ</p>
+                        <p className="so-kpi-value" style={{ color: "var(--neg)" }}>
+                          {full(data.ar.overdue)}
+                        </p>
+                        <p className="so-kpi-note">
+                          {pct((data.ar.overdue / Math.max(1, data.ar.balance)) * 100)} ຂອງໜີ້
+                        </p>
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ເທົ່າກັບຍອດຂາຍ</p>
+                        <p className="so-kpi-value">
+                          {Math.round(data.ar.days_of_sales)} ວັນ
+                        </p>
+                        <p className="so-kpi-note">ຕາມຄວາມໄວການຂາຍເດືອນນີ້</p>
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ໃຊ້ວົງເງິນເກີນ</p>
+                        <p className="so-kpi-value" style={{ color: "var(--warn)" }}>
+                          {full(data.ar.over_credit?.customers || 0)}
+                        </p>
+                        <p className="so-kpi-note">
+                          {short(data.ar.over_credit?.balance || 0)} ຄ້າງຢູ່
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="so-trio mt-3">
+                      <div>
+                        <p className="so-kpi-label">ອາຍຸໜີ້</p>
+                        {rankRows(
+                          data.ar.buckets.map((bucket) => ({
+                            code: bucket.label,
+                            label: bucket.label,
+                            amount: bucket.amount,
+                            share: (bucket.amount / Math.max(1, data.ar!.balance)) * 100,
+                          })),
+                        )}
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ຕາມພະນັກງານຂາຍ</p>
+                        {rankRows(
+                          amountRanks(
+                            data.ar.by_sale.map((row) => ({
+                              code: row.label,
+                              label: row.label,
+                              amount: row.amount,
+                            })),
+                          ),
+                        )}
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ຕາມສາຂາ</p>
+                        {rankRows(
+                          amountRanks(
+                            data.ar.by_branch.map((row) => ({
+                              code: row.label,
+                              label: row.label,
+                              amount: row.amount,
+                            })),
+                          ),
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="so-grid mt-3">
+                      <div>
+                        <p className="so-kpi-label">ລູກໜີ້ໃຫຍ່ສຸດ</p>
+                        {data.ar.top.map((row) => (
+                          <div key={row.label} className="so-rank">
+                            <span className="so-rank-label" style={{ width: "11rem" }} title={row.label}>
+                              {row.label}
+                            </span>
+                            <span className="so-rank-value">{short(row.amount)}</span>
+                            <span className="so-rank-share">{row.days} ມື້</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <p className="so-kpi-label">ບິນທີ່ຄ້າງດົນສຸດ</p>
+                        {data.ar.oldest.map((row) => (
+                          <div key={row.label} className="so-rank">
+                            <span className="so-rank-label" style={{ width: "11rem" }} title={row.label}>
+                              {row.label}
+                            </span>
+                            <span className="so-rank-value">{short(row.amount)}</span>
+                            <span className="so-rank-share" style={{ color: "var(--neg)" }}>
+                              {row.days} ມື້
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </section>
-              )}
-            </div>
+              </section>
+            )}
 
             {/* ══ ⑫ ສະຕັອກ ══ */}
             {data.stock && (
