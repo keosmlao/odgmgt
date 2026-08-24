@@ -153,6 +153,19 @@ type Payload = {
     opportunities: { label: string; deals: number; value: number }[];
     quotes: number;
   } | null;
+  seller_visits: {
+    rows: {
+      code: string;
+      label: string;
+      visits: number;
+      customers: number;
+      amount: number;
+      bills: number;
+      per_visit: number;
+    }[];
+    sellers: number;
+    sellers_visiting: number;
+  } | null;
   visits: {
     totals: {
       visits: number;
@@ -1477,6 +1490,65 @@ export default function SalesOverview() {
                       ຍັງບໍ່ພຽງພໍທີ່ຈະສະຫຼຸບຜົນງານທິມ
                     </p>
                   )}
+                </div>
+              </section>
+            )}
+
+            {/* ══ ㉑ ພົບ ທຽບ ຂາຍ ══ */}
+            {data.seller_visits && data.seller_visits.rows.length > 0 && (
+              <section className="sf-widget mt-3">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Route size={13} /> ㉑ ພົບ ທຽບ ຂາຍ · {scopeWord}
+                    </h3>
+                    <p className="sf-widget-sub">
+                      ພະນັກງານທີ່ບັນທຶກການເຂົ້າພົບ ຂາຍໄດ້ເທົ່າໃດ · ບິນຜູກກັບຄົນຂາຍຜ່ານ
+                      odg_sale_owner
+                    </p>
+                  </div>
+                  <span className="pill pill-warn">
+                    {data.seller_visits.sellers_visiting}/{data.seller_visits.sellers}{" "}
+                    ຄົນຂາຍທີ່ບັນທຶກການພົບ
+                  </span>
+                </div>
+                <div className="sf-widget-bd">
+                  {data.seller_visits.rows.map((row) => (
+                    <div key={row.code} className="so-rank">
+                      <span className="so-rank-label" style={{ width: "9rem" }} title={row.label}>
+                        {row.label}
+                      </span>
+                      <span className="so-rank-bar">
+                        <span
+                          style={{
+                            width: `${Math.max(
+                              2,
+                              Math.min(
+                                100,
+                                (row.amount /
+                                  Math.max(
+                                    1,
+                                    ...data.seller_visits!.rows.map((item) => item.amount),
+                                  )) *
+                                  100,
+                              ),
+                            )}%`,
+                            background: row.amount ? "var(--brand)" : "var(--neg)",
+                          }}
+                        />
+                      </span>
+                      <span className="so-rank-value">{short(row.amount)}</span>
+                      <span className="so-rank-share" title="ຄັ້ງທີ່ພົບ">
+                        {row.visits} ຄັ້ງ
+                      </span>
+                      <span className="so-rank-share" title="ຂາຍໄດ້ຕໍ່ 1 ຄັ້ງທີ່ພົບ">
+                        {short(row.per_visit)}
+                      </span>
+                    </div>
+                  ))}
+                  <p className="so-kpi-note mt-2">
+                    ຖັນຂວາສຸດ = ຂາຍໄດ້ຕໍ່ 1 ຄັ້ງທີ່ພົບ · ແຖບແດງ = ພົບແຕ່ຍັງບໍ່ມີຍອດຂາຍໃນຂອບເຂດນີ້
+                  </p>
                 </div>
               </section>
             )}

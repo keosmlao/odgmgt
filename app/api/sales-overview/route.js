@@ -425,6 +425,55 @@ const PLAN_SQL = `
     'quotes', (SELECT COUNT(*)::int FROM public.odg_quote)
   ) AS payload`;
 
+/**
+ * ພົບ ທຽບ ຂາຍ — ຄຳຖາມທີ່ call card ມີໄວ້ຕອບ: ພະນັກງານທີ່ອອກພົບລູກຄ້າ ຂາຍໄດ້
+ * ເທົ່າໃດ.
+ *
+ * ບິນຜູກກັບພະນັກງານຜ່ານ public.odg_sale_owner (doc_no → sale_id) ຊຶ່ງ sale_id
+ * ຄືລະຫັດພະນັກງານອັນດຽວກັບ app_customer_visit.employee_code.
+ *
+ * ⚠️ ຝັ່ງການຂາຍໃຊ້ yeardoc/monthdoc ຂອງ ERP ບໍ່ແມ່ນເດືອນທີ່ອະນຸມັດໃຫ້ (REPORT_DATE)
+ * ຄືບລ໋ອກອື່ນ — ຕ່າງກັນສະເພາະບິນທີ່ຖືກຍ້າຍເດືອນ ຊຶ່ງມີໜ້ອຍ, ແລກກັບການບໍ່ຕ້ອງ
+ * ສະແກນຕາຕະລາງການຂາຍທັງໝົດເພື່ອຕອບ join ນີ້.
+ */
+const SELLER_VISIT_SQL = `
+  WITH v AS (
+    SELECT employee_code,
+           COUNT(*)::int AS visits,
+           COUNT(DISTINCT customer_code)::int AS customers
+    FROM public.app_customer_visit
+    WHERE EXTRACT(YEAR FROM visited_at)::int = %s
+      AND EXTRACT(MONTH FROM visited_at)::int BETWEEN %s AND %s
+    GROUP BY 1
+  ), s AS (
+    SELECT o.sale_id,
+           COALESCE(SUM(d.sum_amount), 0)::float AS amount,
+           COUNT(DISTINCT d.doc_no)::int AS bills
+    FROM public.odg_sale_detail d
+    JOIN public.odg_sale_owner o ON o.doc_no = d.doc_no
+    WHERE d.yeardoc = %s AND d.monthdoc BETWEEN %s AND %s
+    GROUP BY 1
+  )
+  SELECT json_build_object(
+    'rows', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT v.employee_code,
+               COALESCE(NULLIF(e.fullname_lo, ''), NULLIF(e.fullname_en, ''), v.employee_code) AS name,
+               v.visits, v.customers,
+               COALESCE(s.amount, 0)::float AS amount,
+               COALESCE(s.bills, 0)::int AS bills
+        FROM v
+        LEFT JOIN s ON s.sale_id = v.employee_code
+        LEFT JOIN public.odg_employee e ON e.employee_code = v.employee_code
+        ORDER BY 5 DESC
+      ) x
+    ),
+    'sellers', (SELECT COUNT(*)::int FROM s WHERE amount > 0),
+    'sellers_visiting', (
+      SELECT COUNT(*)::int FROM s JOIN v ON v.employee_code = s.sale_id WHERE s.amount > 0
+    )
+  ) AS payload`;
+
 /** ໜີ້ຄ້າງ ແລະ ສະຕັອກ — ຕາຕະລາງນ້ອຍ, ບໍ່ຂຶ້ນກັບຕົວກັ່ນຕອງຂອງໜ້າ. */
 const AR_SQL = `
   SELECT COALESCE(SUM(balance_amount), 0)::float AS balance,
@@ -675,6 +724,7 @@ export async function GET(request) {
       arOldest,
       arCredit,
       planRow,
+      sellerVisitRow,
     ] = await Promise.all([
       loadBuckets(trendYears, cutDay, source.stamp),
       rows(targetSql, [year]),
@@ -690,11 +740,20 @@ export async function GET(request) {
       rows(AR_OLDEST_SQL).catch(() => []),
       one(AR_CREDIT_SQL).catch(() => null),
       one(PLAN_SQL, [year, mode === "ytd" ? 1 : month, month]).catch(() => null),
+      one(SELLER_VISIT_SQL, [
+        year,
+        mode === "ytd" ? 1 : month,
+        month,
+        year,
+        mode === "ytd" ? 1 : month,
+        month,
+      ]).catch(() => null),
     ]);
     const detail = detailRow?.payload || {};
     const visit = visitRow?.payload || null;
     const customerHealth = healthRow?.payload || null;
     const plan = planRow?.payload || null;
+    const sellerVisit = sellerVisitRow?.payload || null;
 
     const keep = (row) => {
       if (buWanted && !buWanted.has(String(row.bu_code))) return false;
@@ -1083,6 +1142,23 @@ export async function GET(request) {
                 value: Number(row.value || 0),
               })),
               quotes: Number(plan.quotes || 0),
+            }
+          : null,
+        seller_visits: sellerVisit
+          ? {
+              rows: (sellerVisit.rows || []).map((row) => ({
+                code: String(row.employee_code),
+                label: String(row.name),
+                visits: Number(row.visits || 0),
+                customers: Number(row.customers || 0),
+                amount: Number(row.amount || 0),
+                bills: Number(row.bills || 0),
+                per_visit: Number(row.visits || 0)
+                  ? Number(row.amount || 0) / Number(row.visits)
+                  : 0,
+              })),
+              sellers: Number(sellerVisit.sellers || 0),
+              sellers_visiting: Number(sellerVisit.sellers_visiting || 0),
             }
           : null,
         visits: visit
