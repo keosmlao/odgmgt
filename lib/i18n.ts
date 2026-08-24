@@ -274,6 +274,11 @@ const dict: Record<string, Record<Locale, string>> = {
   "monthSummary.roomy": { lo: "ຫຼວມ", th: "หลวม", en: "Roomy" },
   "monthSummary.swipe": { lo: "ເລື່ອນຊ້າຍ-ຂວາ", th: "เลื่อนซ้าย-ขวา", en: "Scroll sideways" },
   "monthSummary.forecast": { lo: "ຄາດຄະເນ", th: "คาดการณ์", en: "Forecast" },
+  "monthSummary.outside": {
+    lo: "ນອກຄໍລຳ",
+    th: "นอกคอลัมน์",
+    en: "Outside the columns",
+  },
   "monthSummary.note": {
     lo: "ACT ຈາກ odg_sale_detail · Target ຈາກ odg_sales_target · ROY (ເດືອນທີ່ຍັງເຫຼືອ) ໃຊ້ Target ເປັນ FC · ບໍລິການແຍກ Project ຕາມເປົ້າຄົງທີ່ຕໍ່ເດືອນ",
     th: "ACT จาก odg_sale_detail · Target จาก odg_sales_target · ROY ใช้ Target เป็น FC · บริการแยก Project ตามเป้าคงที่ต่อเดือน",

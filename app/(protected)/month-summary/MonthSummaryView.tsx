@@ -28,6 +28,8 @@ type Section = {
   cells: Record<string, Cell>;
   total: { target: number; value: number; last_year: number; pct: number; growth: number };
   staff: number | null;
+  /** ກິບທີ່ບໍ່ມີຄໍລຳຮັບ — ນັບຢູ່ໜ້າພາບລວມການຂາຍ ແຕ່ບໍ່ຢູ່ໃນຕາຕະລາງນີ້. */
+  outside: number | null;
 };
 
 type Column = { key: string; group: string; label: string };
@@ -541,6 +543,13 @@ export default function MonthSummaryView({ region = "all" }: { region?: Region }
 
             <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
               {t("monthSummary.note")}
+              {data.sections
+                .filter((section) => section.outside)
+                .map(
+                  (section) =>
+                    ` · ${t("monthSummary.outside")} ${shortLabel(section)} ${fmt(section.outside || 0)}`,
+                )
+                .join("")}
             </p>
           </div>
         )}

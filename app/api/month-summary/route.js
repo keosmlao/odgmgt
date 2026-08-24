@@ -175,6 +175,24 @@ function sumBuckets(map, column, months) {
   return total;
 }
 
+/**
+ * ກິບທີ່ບໍ່ມີຄໍລຳຮັບ — ຍອດທັງໝົດຂອງເດືອນ ລົບດ້ວຍທຸກຄໍລຳ ແລະ ຂາຍພະນັກງານ.
+ *
+ * ຕາຕະລາງນີ້ນັບສະເພາະຄູ່ (BU × ຊ່ອງທາງ) ທີ່ມີຄໍລຳ ຈຶ່ງມີບາງສ່ວນຕົກຄ້າງ — ເຊັ່ນ
+ * ຂາຍຊ່າງໄຟຟ້າ ແລະ ໂຄງການອາໄຫຼ່. ບອກຈຳນວນໄວ້ໃຫ້ເຫັນ ດີກວ່າປ່ອຍໃຫ້ຜູ້ອ່ານໄປພົບ
+ * ເອງວ່າຍອດຢູ່ໜ້ານີ້ ກັບ ໜ້າພາບລວມການຂາຍ ບໍ່ຕົງກັນ ແລ້ວບໍ່ຮູ້ວ່າອັນໃດຜິດ.
+ */
+function sumOutside(map, columns, months, staff) {
+  let all = 0;
+  for (const [key, value] of map) {
+    const [, , month] = key.split("|");
+    if (months.includes(Number(month))) all += value;
+  }
+  let inColumns = 0;
+  for (const column of columns) inColumns += sumBuckets(map, column, months);
+  return all - inColumns - staff;
+}
+
 function sumStaff(map, months) {
   let total = 0;
   for (const [key, value] of map) {
@@ -353,6 +371,10 @@ export async function GET(request) {
           growth: safeDiv(total.value, total.last_year) * 100,
         },
         staff: forecast ? null : sumStaff(actual, valueMonths),
+        /** ACT ເທົ່ານັ້ນ — ເປົ້າ ແລະ ຄາດການບໍ່ມີກິບນອກຄໍລຳ. */
+        outside: forecast
+          ? null
+          : sumOutside(actual, COLUMNS, valueMonths, sumStaff(actual, valueMonths)),
       };
     };
 
