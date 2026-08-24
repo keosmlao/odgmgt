@@ -22,6 +22,7 @@ import api from "@/service/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { REGIONS, regionLabel } from "@/lib/sales-regions.mjs";
+import { isExecutive } from "@/lib/home-route";
 
 /**
  * ພາບລວມການຂາຍ — ໜ້າຂອງຜູ້ບໍລິຫານ ແລະ ຄົນທີ່ຖືກອະນຸຍາດ.
@@ -132,9 +133,6 @@ const CHANNEL_CHIPS = [
   { code: "104", label: "ພະນັກງານ" },
 ];
 
-/** ຜູ້ທີ່ເປີດໜ້ານີ້ໄດ້ — ຕົງກັບ ALLOWED_ROLES ຢູ່ຝັ່ງ API. */
-const ALLOWED_ROLES = new Set(["ceo", "gm", "sale_bu_manager", "sale_supervisor"]);
-
 const full = (value: number) => Math.round(Number(value || 0)).toLocaleString("en-US");
 
 /** ຫຍໍ້ໃຫ້ອ່ານໄວ — ໃຊ້ໃນແຖບ ແລະ ບ່ອນແຄບ, ບໍ່ໃຊ້ກັບຕົວເລກຫຼັກ. */
@@ -176,8 +174,8 @@ export default function SalesOverview() {
   const [error, setError] = useState("");
   const [restored, setRestored] = useState(false);
 
-  const role = String(user?.role || "").toLowerCase();
-  const allowed = !user || ALLOWED_ROLES.has(role);
+  /** ຜູ້ທີ່ເປີດໜ້ານີ້ໄດ້ — ຕົງກັບ ALLOWED_ROLES ຢູ່ຝັ່ງ API. */
+  const allowed = !user || isExecutive(user);
 
   /** ຄົນທີ່ບໍ່ມີສິດພິມ URL ເຂົ້າມາ — ສົ່ງກັບ; API ກໍ່ປະຕິເສດຢູ່ແລ້ວ. */
   useEffect(() => {

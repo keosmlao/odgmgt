@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { homeFor } from "@/lib/home-route";
 
 export default function Home() {
   const router = useRouter();
@@ -11,7 +12,7 @@ export default function Home() {
   useEffect(() => {
     if (!hydrated) return;
     if (user) {
-      router.replace("/dashboard");
+      router.replace(homeFor(user));
     } else {
       router.replace("/login");
     }

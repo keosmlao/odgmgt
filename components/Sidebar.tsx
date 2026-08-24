@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
+import { EXECUTIVE_ROLES } from "@/lib/home-route";
 
 const EXPANDED_MENUS_KEY = "odg_sidebar_expanded_menus";
 
@@ -60,10 +61,11 @@ type MenuItem = {
   children?: SubMenuItem[];
   /** ບອກໄວ້ ໝາຍວ່າສະເພາະ role ເຫຼົ່ານີ້ຈຶ່ງເຫັນເມນູ — ບໍ່ບອກ = ເຫັນທຸກຄົນ. */
   roles?: string[];
+  /** ກົງກັນຂ້າມ: role ເຫຼົ່ານີ້ບໍ່ເຫັນ ເພາະມີເມນູທີ່ແທນມັນຢູ່ແລ້ວ. */
+  hideForRoles?: string[];
 };
 
-/** ຜູ້ບໍລິຫານ ແລະ ຄົນທີ່ຖືກອະນຸຍາດ — ຕົງກັບ ALLOWED_ROLES ຂອງ /api/sales-overview. */
-const EXECUTIVE_ROLES = ["ceo", "gm", "sale_bu_manager", "sale_supervisor"];
+
 type MenuGroup = { key: string; items: MenuItem[] };
 
 /** Grouped so the nav reads as sections rather than one long list. */
@@ -71,7 +73,21 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     key: "sidebar.groupOverview",
     items: [
-      { path: "/dashboard", i18nKey: "sidebar.dashboard", icon: <LayoutDashboard size={17} /> },
+      // ໜ້າແລກຂອງຜູ້ບໍລິຫານ — ຢູ່ເທິງສຸດ ເພາະ login ແລ້ວລົງທີ່ນີ້.
+      {
+        path: "/sales-overview",
+        i18nKey: "sidebar.salesOverview",
+        icon: <Target size={17} />,
+        roles: EXECUTIVE_ROLES,
+      },
+      // ຜູ້ບໍລິຫານໃຊ້ ພາບລວມການຂາຍ ແທນ — Business Intelligence Dashboard ຍັງເປີດ
+      // ດ້ວຍ URL ໄດ້ຢູ່, ພຽງແຕ່ບໍ່ວາງສອງໜ້າພາບລວມຄຽງກັນໃນເມນູ.
+      {
+        path: "/dashboard",
+        i18nKey: "sidebar.dashboard",
+        icon: <LayoutDashboard size={17} />,
+        hideForRoles: EXECUTIVE_ROLES,
+      },
       { path: "/analytics", i18nKey: "sidebar.analytics", icon: <BarChart2 size={17} /> },
       { path: "/meeting-schedule", i18nKey: "sidebar.meetingSchedule", icon: <CalendarDays size={17} /> },
     ],
@@ -79,12 +95,6 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     key: "sidebar.groupReports",
     items: [
-      {
-        path: "/sales-overview",
-        i18nKey: "sidebar.salesOverview",
-        icon: <Target size={17} />,
-        roles: EXECUTIVE_ROLES,
-      },
       { path: "/sales-summary", i18nKey: "sidebar.summary", icon: <Table size={17} /> },
       { path: "/month-summary", i18nKey: "sidebar.monthSummary", icon: <CalendarRange size={17} /> },
       { path: "/month-summary/hq", i18nKey: "sidebar.monthSummaryHq", icon: <Building2 size={17} /> },
@@ -185,7 +195,9 @@ export default function Sidebar() {
   const pathname = usePathname();
   const role = String(user?.role || "").toLowerCase();
   /** ເມນູທີ່ຖືກຈຳກັດ role — ເຊື່ອງໄວ້ຈາກຄົນທີ່ເປີດບໍ່ໄດ້ຢູ່ແລ້ວ. */
-  const maySee = (item: MenuItem) => !item.roles || item.roles.includes(role);
+  const maySee = (item: MenuItem) =>
+    (!item.roles || item.roles.includes(role)) &&
+    !(item.hideForRoles && item.hideForRoles.includes(role));
   const [mobileOpen, setMobileOpen] = React.useState(false);
   /** Sections the user folded away — every group starts open. */
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});

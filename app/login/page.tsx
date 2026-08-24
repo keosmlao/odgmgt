@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { homeFor } from "@/lib/home-route";
 
 const LOCALE_FLAGS: Record<string, string> = { lo: "🇱🇦", th: "🇹🇭", en: "🇬🇧" };
 
@@ -56,7 +57,8 @@ export default function Login() {
     setError("");
     try {
       const res = await login(form.username, form.password);
-      if (res.success) router.push("/dashboard");
+      // ຜູ້ບໍລິຫານລົງທີ່ ພາບລວມການຂາຍ, ຄົນອື່ນລົງ dashboard ຄືເກົ່າ.
+      if (res.success) router.push(homeFor(res.user));
       else setError(res.message || t("login.errorUsername"));
     } catch {
       setError(t("login.errorConnection"));
