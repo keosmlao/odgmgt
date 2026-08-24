@@ -13,6 +13,7 @@ import {
   Map as MapIcon,
   Percent,
   RefreshCw,
+  Route,
   Ruler,
   ShieldCheck,
   Siren,
@@ -124,6 +125,28 @@ type Payload = {
     branches: { code: string; label: string; amount: number }[];
     groups: { code: string; label: string; amount: number }[];
   };
+  visits: {
+    totals: {
+      visits: number;
+      people: number;
+      customers: number;
+      completed: number;
+      open_visits: number;
+      order_amount: number;
+      collection_amount: number;
+    };
+    people: {
+      employee_code: string;
+      name: string;
+      visits: number;
+      customers: number;
+      completed: number;
+    }[];
+    outcomes: { label: string; visits: number }[];
+    types: { label: string; visits: number }[];
+    first_day: string | null;
+    last_day: string | null;
+  } | null;
   leak: {
     returns: number;
     return_bills: number;
@@ -1191,6 +1214,115 @@ export default function SalesOverview() {
                 </div>
               </section>
             </div>
+
+            {/* ══ ⑱ Call card — ການເຂົ້າພົບລູກຄ້າ ══ */}
+            {data.visits && (
+              <section className="sf-widget mt-3">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Route size={13} /> ⑱ Call card · ການເຂົ້າພົບລູກຄ້າ · {scopeWord}
+                    </h3>
+                    <p className="sf-widget-sub">
+                      ຈາກແອັບພະນັກງານຂາຍ (salewole)
+                      {data.visits.first_day &&
+                        ` · ບັນທຶກ ${data.visits.first_day} ຫາ ${data.visits.last_day}`}
+                    </p>
+                  </div>
+                  <span className="pill pill-muted">
+                    {full(data.visits.totals.visits)} ຄັ້ງ · {data.visits.totals.people} ຄົນ
+                  </span>
+                </div>
+                <div className="sf-widget-bd">
+                  <div className="so-compare">
+                    <div>
+                      <p className="so-kpi-label">ຈຳນວນຄັ້ງ</p>
+                      <p className="so-kpi-value">{full(data.visits.totals.visits)}</p>
+                      <p className="so-kpi-note">
+                        {full(data.visits.totals.customers)} ລູກຄ້າ · {data.visits.totals.people}{" "}
+                        ພະນັກງານ
+                      </p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ປິດງານແລ້ວ</p>
+                      <p className="so-kpi-value" style={{ color: "var(--pos)" }}>
+                        {pct(
+                          (data.visits.totals.completed /
+                            Math.max(1, data.visits.totals.visits)) *
+                            100,
+                        )}
+                      </p>
+                      <p className="so-kpi-note">
+                        ຄ້າງບໍ່ເຊັກເອົາ {full(data.visits.totals.open_visits)} ຄັ້ງ
+                      </p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ຄັ້ງຕໍ່ພະນັກງານ</p>
+                      <p className="so-kpi-value">
+                        {(
+                          data.visits.totals.visits / Math.max(1, data.visits.totals.people)
+                        ).toFixed(1)}
+                      </p>
+                      <p className="so-kpi-note">ໃນຂອບເຂດທີ່ເລືອກ</p>
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ອໍເດີ / ເກັບເງິນ ທີ່ບັນທຶກ</p>
+                      <p className="so-kpi-value">
+                        {short(data.visits.totals.order_amount)} /{" "}
+                        {short(data.visits.totals.collection_amount)}
+                      </p>
+                      <p className="so-kpi-note">ຕົວເລກທີ່ພະນັກງານພິມເອງ</p>
+                    </div>
+                  </div>
+
+                  <div className="so-trio mt-3">
+                    <div>
+                      <p className="so-kpi-label">ພະນັກງານ</p>
+                      {rankRows(
+                        amountRanks(
+                          data.visits.people.map((row) => ({
+                            code: row.employee_code,
+                            label: row.name,
+                            amount: row.visits,
+                          })),
+                        ).map((row) => ({ ...row, bills: 0 })),
+                      )}
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ຜົນຂອງການພົບ</p>
+                      {rankRows(
+                        amountRanks(
+                          data.visits.outcomes.map((row) => ({
+                            code: row.label,
+                            label: row.label,
+                            amount: row.visits,
+                          })),
+                        ),
+                      )}
+                    </div>
+                    <div>
+                      <p className="so-kpi-label">ຮູບແບບ</p>
+                      {rankRows(
+                        amountRanks(
+                          data.visits.types.map((row) => ({
+                            code: row.label,
+                            label: row.label,
+                            amount: row.visits,
+                          })),
+                        ),
+                      )}
+                    </div>
+                  </div>
+
+                  {data.visits.totals.visits < 50 && (
+                    <p className="so-kpi-note mt-2">
+                      ⚠️ ຂໍ້ມູນຍັງໜ້ອຍ ({full(data.visits.totals.visits)} ຄັ້ງ) — ຫາກໍເລີ່ມເກັບ,
+                      ຍັງບໍ່ພຽງພໍທີ່ຈະສະຫຼຸບຜົນງານທິມ
+                    </p>
+                  )}
+                </div>
+              </section>
+            )}
 
             <p className="so-note">
               ຍອດຈິງຈາກ odg_sale_detail (ນັບຕາມເດືອນທີ່ອະນຸມັດໃຫ້) · ເປົ້າຈາກ odg_sales_target ·

@@ -42,6 +42,22 @@ const BU_NAMES = {
   17: "ອອນລາຍ",
 };
 
+/** ຄ່າທີ່ແອັບບັນທຶກໄວ້ເປັນອັງກິດ — ແປໃຫ້ຜູ້ອ່ານລາຍງານ. */
+const VISIT_OUTCOME = {
+  followup: "ຕ້ອງຕິດຕາມຕໍ່",
+  negotiation: "ກຳລັງເຈລະຈາ",
+  not_interested: "ບໍ່ສົນໃຈ",
+  order: "ໄດ້ອໍເດີ",
+  won: "ປິດການຂາຍໄດ້",
+  lost: "ເສຍລູກຄ້າ",
+};
+
+const VISIT_TYPE = {
+  visit: "ເຂົ້າພົບ",
+  call: "ໂທຫາ",
+  other: "ອື່ນໆ",
+};
+
 const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
 
 /**
@@ -228,6 +244,66 @@ function scopeDetailSql(whereExtra) {
     ) AS payload`;
 }
 
+/**
+ * Call card — ການເຂົ້າພົບລູກຄ້າ ທີ່ພະນັກງານຂາຍບັນທຶກຜ່ານແອັບ salewole
+ * (public.app_customer_visit, ຖານດຽວກັນ). ເລີ່ມເກັບ 08/2026 ຈຶ່ງຍັງໜ້ອຍ —
+ * ບລ໋ອກນີ້ຈຶ່ງບອກຈຳນວນທີ່ມີຈິງໄວ້ ບໍ່ໃຫ້ອ່ານຜິດວ່າທັງທິມອອກພົບເທົ່ານີ້.
+ *
+ * ຮັບເດືອນເລີ່ມ–ເດືອນຈົບ ຂອງປີທີ່ເລືອກ ຄືກັບບລ໋ອກອື່ນ; ບໍ່ມີ BU/ພາກ ໃນຕາຕະລາງ
+ * ຈຶ່ງບໍ່ຖືກຫັ່ນດ້ວຍສອງຕົວນັ້ນ.
+ */
+const VISIT_SQL = `
+  WITH scope AS (
+    SELECT v.id, v.employee_code, v.customer_code, v.status, v.outcome, v.visit_type,
+           v.visited_at::date AS day,
+           COALESCE(v.order_amount, 0)::float AS order_amount,
+           COALESCE(v.collection_amount, 0)::float AS collection_amount,
+           (v.checked_out_at IS NOT NULL) AS checked_out
+    FROM public.app_customer_visit v
+    WHERE EXTRACT(YEAR FROM v.visited_at)::int = %s
+      AND EXTRACT(MONTH FROM v.visited_at)::int BETWEEN %s AND %s
+  )
+  SELECT json_build_object(
+    'totals', (
+      SELECT row_to_json(x) FROM (
+        SELECT COUNT(*)::int AS visits,
+               COUNT(DISTINCT employee_code)::int AS people,
+               COUNT(DISTINCT customer_code)::int AS customers,
+               COUNT(*) FILTER (WHERE status = 'completed')::int AS completed,
+               COUNT(*) FILTER (WHERE NOT checked_out)::int AS open_visits,
+               COALESCE(SUM(order_amount), 0)::float AS order_amount,
+               COALESCE(SUM(collection_amount), 0)::float AS collection_amount
+        FROM scope
+      ) x
+    ),
+    'people', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT s.employee_code,
+               COALESCE(NULLIF(e.fullname_lo, ''), NULLIF(e.fullname_en, ''), s.employee_code) AS name,
+               COUNT(*)::int AS visits,
+               COUNT(DISTINCT s.customer_code)::int AS customers,
+               COUNT(*) FILTER (WHERE s.status = 'completed')::int AS completed
+        FROM scope s
+        LEFT JOIN public.odg_employee e ON e.employee_code = s.employee_code
+        GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 12
+      ) x
+    ),
+    'outcomes', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT COALESCE(NULLIF(outcome, ''), 'ບໍ່ໄດ້ບັນທຶກ') AS outcome, COUNT(*)::int AS visits
+        FROM scope GROUP BY 1 ORDER BY 2 DESC
+      ) x
+    ),
+    'types', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT COALESCE(NULLIF(visit_type, ''), 'ບໍ່ລະບຸ') AS visit_type, COUNT(*)::int AS visits
+        FROM scope GROUP BY 1 ORDER BY 2 DESC
+      ) x
+    ),
+    'first_day', (SELECT MIN(day)::text FROM scope),
+    'last_day', (SELECT MAX(day)::text FROM scope)
+  ) AS payload`;
+
 /** ໜີ້ຄ້າງ ແລະ ສະຕັອກ — ຕາຕະລາງນ້ອຍ, ບໍ່ຂຶ້ນກັບຕົວກັ່ນຕອງຂອງໜ້າ. */
 const AR_SQL = `
   SELECT COALESCE(SUM(balance_amount), 0)::float AS balance,
@@ -405,7 +481,8 @@ export async function GET(request) {
     }
     detailParams.push(month);
 
-    const [buckets, targetRows, billRow, detailRow, arRow, arTop, stockRow] = await Promise.all([
+    const [buckets, targetRows, billRow, detailRow, arRow, arTop, stockRow, visitRow] =
+      await Promise.all([
       loadBuckets(trendYears, cutDay, source.stamp),
       rows(targetSql, [year]),
       one(billSql, billParams),
@@ -413,8 +490,10 @@ export async function GET(request) {
       one(AR_SQL).catch(() => null),
       rows(AR_TOP_SQL).catch(() => []),
       one(STOCK_SQL).catch(() => null),
+      one(VISIT_SQL, [year, mode === "ytd" ? 1 : month, month]).catch(() => null),
     ]);
     const detail = detailRow?.payload || {};
+    const visit = visitRow?.payload || null;
 
     const keep = (row) => {
       if (buWanted && !buWanted.has(String(row.bu_code))) return false;
@@ -742,6 +821,22 @@ export async function GET(request) {
                 amount: Number(row.balance || 0),
                 days: Number(row.days || 0),
               })),
+            }
+          : null,
+        visits: visit
+          ? {
+              totals: visit.totals || {},
+              people: visit.people || [],
+              outcomes: (visit.outcomes || []).map((row) => ({
+                label: VISIT_OUTCOME[row.outcome] || row.outcome,
+                visits: Number(row.visits || 0),
+              })),
+              types: (visit.types || []).map((row) => ({
+                label: VISIT_TYPE[row.visit_type] || row.visit_type,
+                visits: Number(row.visits || 0),
+              })),
+              first_day: visit.first_day || null,
+              last_day: visit.last_day || null,
             }
           : null,
         gaps: gapRows.slice(0, 10),
