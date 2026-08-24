@@ -2043,3 +2043,123 @@ button.rule-link {
 .sf-gauge-value { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
 .sf-gauge-label { margin-top: 0.15rem; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .sf-gauge-ends { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ══ ພາບລວມການຂາຍ (sales overview) ══════════════════════════════
+   Chip filters, the month-end forecast block and the ranked breakdowns.
+   Everything else on the page borrows the Lightning shell above (sf-*). */
+.so-filters {
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--sf-r);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  padding: 0.55rem 0.7rem;
+  display: grid;
+  gap: 0.4rem;
+}
+.so-row { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.so-row-label {
+  flex: none;
+  width: 4.2rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Chips scroll rather than wrap: twelve months on one line keeps the filter
+   block the same height whatever the screen. */
+.so-chips { display: flex; gap: 0.3rem; overflow-x: auto; padding-bottom: 0.1rem; }
+.so-chip {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: 0.25rem 0.6rem;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.so-chip:hover { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); }
+.so-chip.is-active { background: var(--brand-deep); border-color: var(--brand-deep); color: #fff; }
+
+.so-error {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--neg);
+  border-radius: var(--r-md);
+  background: var(--neg-bg);
+  padding: 0.7rem 0.9rem;
+  font-size: 13px;
+  color: var(--neg);
+}
+
+/* ── The forecast block ── */
+.so-hero { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+@media (max-width: 900px) { .so-hero { grid-template-columns: minmax(0, 1fr); } }
+.so-hero-label { font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.so-hero-value {
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--neg);
+  font-variant-numeric: tabular-nums;
+}
+.so-hero-value span { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.so-hero-sub { margin-top: 0.15rem; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Booked kip and what today's pace adds, on one rule — the plan is the full width. */
+.so-bar {
+  margin-top: 0.7rem;
+  display: flex;
+  height: 1.6rem;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.so-bar > span { display: block; height: 100%; }
+.so-bar .is-booked { background: var(--brand); }
+.so-bar .is-pace { background: color-mix(in srgb, var(--brand) 28%, var(--surface-2)); }
+.so-legend { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 11px; color: var(--muted); }
+.so-legend i { display: inline-block; height: 0.5rem; width: 0.5rem; border-radius: 999px; margin-right: 0.3rem; }
+.so-legend .is-booked { background: var(--brand); }
+.so-legend .is-pace { background: color-mix(in srgb, var(--brand) 35%, var(--surface-2)); }
+
+.so-bias {
+  margin-top: 0.7rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  padding: 0.55rem 0.7rem;
+  font-size: 12.5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.so-bias-note { margin-top: 0.15rem; font-size: 11px; color: var(--muted); }
+
+.so-kpis { display: grid; gap: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line-soft); border-radius: var(--r-sm); overflow: hidden; }
+.so-kpis > div { padding: 0.6rem 0.75rem; border-top: 1px solid var(--line-soft); border-left: 1px solid var(--line-soft); }
+.so-kpis > div:nth-child(-n + 2) { border-top: 0; }
+.so-kpis > div:nth-child(odd) { border-left: 0; }
+.so-kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.so-kpi-value { margin-top: 0.1rem; font-size: 1.05rem; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.so-kpi-note { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── Ranked breakdowns ── */
+.so-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) { .so-grid { grid-template-columns: minmax(0, 1fr); } }
+.so-rank { display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0; font-size: 12.5px; }
+.so-rank + .so-rank { border-top: 1px solid var(--line-soft); }
+.so-rank-label { flex: none; width: 6.5rem; color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.so-rank-bar { flex: 1 1 auto; height: 0.5rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.so-rank-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+.so-rank-value { flex: none; width: 4.2rem; text-align: right; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.so-rank-share { flex: none; width: 2.6rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.so-empty { padding: 0.6rem 0; font-size: 12px; color: var(--muted); }
+
+.so-compare { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.so-note { margin-top: 0.75rem; font-size: 11px; line-height: 1.7; color: var(--muted); }

@@ -1163,6 +1163,7 @@ const dict: Record<string, Record<Locale, string>> = {
   "sidebar.dashboard": { lo: "ພາບລວມ", th: "ภาพรวม", en: "Overview" },
   "sidebar.target": { lo: "ຈັດການເປົ້າໝາຍ", th: "จัดการเป้าหมาย", en: "Target Management" },
   "sidebar.assignment": { lo: "ແຈກງານຂາຍ", th: "มอบหมายงานขาย", en: "Sales Assignment" },
+  "sidebar.salesOverview": { lo: "ພາບລວມການຂາຍ", th: "ภาพรวมการขาย", en: "Sales Overview" },
   "sidebar.summary": { lo: "ສະຫຼຸບການຂາຍ", th: "สรุปการขาย", en: "Sales Summary" },
   "sidebar.monthSummary": { lo: "ສະຫຼຸບເດືອນ / ROY", th: "สรุปรายเดือน / ROY", en: "Month & ROY Summary" },
   /* The sidebar truncates at about 20 characters, and these two sit right under

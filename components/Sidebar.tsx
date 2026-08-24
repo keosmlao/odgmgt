@@ -48,6 +48,7 @@ import {
   X,
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 
 const EXPANDED_MENUS_KEY = "odg_sidebar_expanded_menus";
 
@@ -57,7 +58,12 @@ type MenuItem = {
   i18nKey: string;
   icon: React.ReactNode;
   children?: SubMenuItem[];
+  /** ບອກໄວ້ ໝາຍວ່າສະເພາະ role ເຫຼົ່ານີ້ຈຶ່ງເຫັນເມນູ — ບໍ່ບອກ = ເຫັນທຸກຄົນ. */
+  roles?: string[];
 };
+
+/** ຜູ້ບໍລິຫານ ແລະ ຄົນທີ່ຖືກອະນຸຍາດ — ຕົງກັບ ALLOWED_ROLES ຂອງ /api/sales-overview. */
+const EXECUTIVE_ROLES = ["ceo", "gm", "sale_bu_manager", "sale_supervisor"];
 type MenuGroup = { key: string; items: MenuItem[] };
 
 /** Grouped so the nav reads as sections rather than one long list. */
@@ -73,6 +79,12 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     key: "sidebar.groupReports",
     items: [
+      {
+        path: "/sales-overview",
+        i18nKey: "sidebar.salesOverview",
+        icon: <Target size={17} />,
+        roles: EXECUTIVE_ROLES,
+      },
       { path: "/sales-summary", i18nKey: "sidebar.summary", icon: <Table size={17} /> },
       { path: "/month-summary", i18nKey: "sidebar.monthSummary", icon: <CalendarRange size={17} /> },
       { path: "/month-summary/hq", i18nKey: "sidebar.monthSummaryHq", icon: <Building2 size={17} /> },
@@ -169,7 +181,11 @@ const activePathFor = (pathname: string) =>
 
 export default function Sidebar() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const pathname = usePathname();
+  const role = String(user?.role || "").toLowerCase();
+  /** ເມນູທີ່ຖືກຈຳກັດ role — ເຊື່ອງໄວ້ຈາກຄົນທີ່ເປີດບໍ່ໄດ້ຢູ່ແລ້ວ. */
+  const maySee = (item: MenuItem) => !item.roles || item.roles.includes(role);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   /** Sections the user folded away — every group starts open. */
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
@@ -297,7 +313,7 @@ export default function Sidebar() {
                 />
               </button>
               <div className={`space-y-0.5 ${isOpen ? "" : "hidden"}`}>
-                {group.items.map((item) => {
+                {group.items.filter(maySee).map((item) => {
                   const isActive = item.path === activePath;
                   if (item.children) {
                     const hasActiveChild = item.children.some((child) => child.path === activePath);
