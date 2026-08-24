@@ -58,6 +58,32 @@ const VISIT_TYPE = {
   other: "ອື່ນໆ",
 };
 
+/** ກຸ່ມລູກຄ້າ ຕາມທີ່ odg_customer_health ຈັດໄວ້. */
+const SEGMENT_LABEL = {
+  repeat: "ຊື້ຊ້ຳ",
+  one_time: "ຊື້ເທື່ອດຽວ",
+  new: "ລູກຄ້າໃໝ່",
+  at_risk: "ສ່ຽງເສຍ",
+  lapsed: "ຫາຍໄປ",
+  dormant: "ນອນ (ບໍ່ຊື້ 1 ປີ)",
+};
+
+const PLAN_STATUS = {
+  planned: "ວາງແຜນໄວ້",
+  checked_in: "ເຊັກອິນແລ້ວ",
+  completed: "ເຮັດແລ້ວ",
+  skipped: "ຂ້າມ",
+};
+
+const OPPORTUNITY_STAGE = {
+  new: "ໃໝ່",
+  qualify: "ກວດຄຸນສົມບັດ",
+  proposal: "ສະເໜີລາຄາ",
+  negotiation: "ເຈລະຈາ",
+  won: "ປິດໄດ້",
+  lost: "ເສຍ",
+};
+
 const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
 
 /**
@@ -333,6 +359,72 @@ const VISIT_SQL = `
     'last_day', (SELECT MAX(day)::text FROM scope)
   ) AS payload`;
 
+/**
+ * ສຸຂະພາບລູກຄ້າ — public.odg_customer_health, ຕາຕະລາງທີ່ salewole ສ້າງໄວ້ ແລະ
+ * ໜ້ານີ້ຍັງບໍ່ເຄີຍອ່ານ: ໜຶ່ງແຖວຕໍ່ໜຶ່ງລູກຄ້າ ພ້ອມຄະແນນສຸຂະພາບ, ກຸ່ມ (ຊື້ຊ້ຳ ·
+ * ຊື້ເທື່ອດຽວ · ສ່ຽງ · ຫາຍ · ນອນ), ຍອດ 365 ວັນ ແລະ ມື້ທີ່ງຽບໄປ.
+ *
+ * ມີ province_code ແລະ channel ຢູ່ໃນຕາຕະລາງ ຈຶ່ງຫັ່ນຕາມພາກ ແລະ ຊ່ອງທາງໄດ້;
+ * ບໍ່ມີ BU ຈຶ່ງບໍ່ຫັ່ນຕາມ BU.
+ */
+const healthSql = (whereExtra) => `
+  SELECT json_build_object(
+    'segments', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT segment, COUNT(*)::int AS customers,
+               COALESCE(SUM(sales_365), 0)::float AS sales_365,
+               ROUND(AVG(health))::int AS health
+        FROM public.odg_customer_health h
+        ${whereExtra ? `WHERE ${whereExtra}` : ""}
+        GROUP BY segment ORDER BY 2 DESC
+      ) x
+    ),
+    'at_risk', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT customer_code, name, COALESCE(sales_365, 0)::float AS sales_365,
+               quiet_days, health
+        FROM public.odg_customer_health h
+        WHERE segment IN ('at_risk', 'lapsed') AND COALESCE(sales_365, 0) > 0
+          ${whereExtra ? `AND ${whereExtra}` : ""}
+        ORDER BY sales_365 DESC LIMIT 8
+      ) x
+    ),
+    'totals', (
+      SELECT row_to_json(x) FROM (
+        SELECT COUNT(*)::int AS customers,
+               ROUND(AVG(health))::int AS health,
+               COUNT(*) FILTER (WHERE segment IN ('at_risk', 'lapsed'))::int AS slipping,
+               COALESCE(SUM(sales_365) FILTER (WHERE segment IN ('at_risk', 'lapsed')), 0)::float AS slipping_value
+        FROM public.odg_customer_health h
+        ${whereExtra ? `WHERE ${whereExtra}` : ""}
+      ) x
+    )
+  ) AS payload`;
+
+/**
+ * ແຜນເຂົ້າພົບ (app_route_plan) ແລະ ທໍ່ຂາຍ (app_opportunity · odg_quote).
+ * ສາມຕາຕະລາງນີ້ຫາກໍເລີ່ມໃຊ້ ຈຶ່ງມີແຖວໜ້ອຍ — ໜ້າຈະບອກຈຳນວນຈິງໄວ້ນຳ.
+ */
+const PLAN_SQL = `
+  SELECT json_build_object(
+    'plans', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT status, COUNT(*)::int AS plans
+        FROM public.app_route_plan
+        WHERE EXTRACT(YEAR FROM planned_date)::int = %s
+          AND EXTRACT(MONTH FROM planned_date)::int BETWEEN %s AND %s
+        GROUP BY status ORDER BY 2 DESC
+      ) x
+    ),
+    'opportunities', (
+      SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
+        SELECT stage, COUNT(*)::int AS deals, COALESCE(SUM(value), 0)::float AS value
+        FROM public.app_opportunity GROUP BY stage ORDER BY 3 DESC
+      ) x
+    ),
+    'quotes', (SELECT COUNT(*)::int FROM public.odg_quote)
+  ) AS payload`;
+
 /** ໜີ້ຄ້າງ ແລະ ສະຕັອກ — ຕາຕະລາງນ້ອຍ, ບໍ່ຂຶ້ນກັບຕົວກັ່ນຕອງຂອງໜ້າ. */
 const AR_SQL = `
   SELECT COALESCE(SUM(balance_amount), 0)::float AS balance,
@@ -510,8 +602,33 @@ export async function GET(request) {
     }
     detailParams.push(month);
 
-    const [buckets, targetRows, billRow, detailRow, arRow, arTop, stockRow, visitRow] =
-      await Promise.all([
+    /** ຕົວກັ່ນຕອງທີ່ຕາຕະລາງສຸຂະພາບລູກຄ້າຮັບໄດ້ — ພາກ ແລະ ຊ່ອງທາງ. */
+    const healthWhere = [];
+    if (provinceWanted) {
+      healthWhere.push(
+        region === "U"
+          ? `NOT (COALESCE(h.province_code, '') = ANY(ARRAY[${KNOWN_PROVINCES.map((code) => `'${code}'`).join(",")}]))`
+          : `h.province_code = ANY(ARRAY[${[...provinceWanted].map((code) => `'${code}'`).join(",")}])`,
+      );
+    }
+    if (channelWanted) {
+      healthWhere.push(
+        `h.channel = ANY(ARRAY[${[...channelWanted].map((code) => `'${code}'`).join(",")}])`,
+      );
+    }
+
+    const [
+      buckets,
+      targetRows,
+      billRow,
+      detailRow,
+      arRow,
+      arTop,
+      stockRow,
+      visitRow,
+      healthRow,
+      planRow,
+    ] = await Promise.all([
       loadBuckets(trendYears, cutDay, source.stamp),
       rows(targetSql, [year]),
       one(billSql, billParams),
@@ -520,9 +637,13 @@ export async function GET(request) {
       rows(AR_TOP_SQL).catch(() => []),
       one(STOCK_SQL).catch(() => null),
       one(VISIT_SQL, [year, mode === "ytd" ? 1 : month, month]).catch(() => null),
+      one(healthSql(healthWhere.join(" AND "))).catch(() => null),
+      one(PLAN_SQL, [year, mode === "ytd" ? 1 : month, month]).catch(() => null),
     ]);
     const detail = detailRow?.payload || {};
     const visit = visitRow?.payload || null;
+    const customerHealth = healthRow?.payload || null;
+    const plan = planRow?.payload || null;
 
     const keep = (row) => {
       if (buWanted && !buWanted.has(String(row.bu_code))) return false;
@@ -850,6 +971,39 @@ export async function GET(request) {
                 amount: Number(row.balance || 0),
                 days: Number(row.days || 0),
               })),
+            }
+          : null,
+        health: customerHealth
+          ? {
+              totals: customerHealth.totals || {},
+              segments: (customerHealth.segments || []).map((row) => ({
+                code: row.segment,
+                label: SEGMENT_LABEL[row.segment] || row.segment,
+                customers: Number(row.customers || 0),
+                sales_365: Number(row.sales_365 || 0),
+                health: Number(row.health || 0),
+              })),
+              at_risk: (customerHealth.at_risk || []).map((row) => ({
+                code: row.customer_code,
+                label: row.name || row.customer_code,
+                amount: Number(row.sales_365 || 0),
+                quiet_days: Number(row.quiet_days || 0),
+                health: Number(row.health || 0),
+              })),
+            }
+          : null,
+        plan: plan
+          ? {
+              plans: (plan.plans || []).map((row) => ({
+                label: PLAN_STATUS[row.status] || row.status,
+                plans: Number(row.plans || 0),
+              })),
+              opportunities: (plan.opportunities || []).map((row) => ({
+                label: OPPORTUNITY_STAGE[row.stage] || row.stage,
+                deals: Number(row.deals || 0),
+                value: Number(row.value || 0),
+              })),
+              quotes: Number(plan.quotes || 0),
             }
           : null,
         visits: visit

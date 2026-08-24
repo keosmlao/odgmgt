@@ -13,6 +13,7 @@ import {
   Map as MapIcon,
   Percent,
   RefreshCw,
+  HeartPulse,
   Route,
   Ruler,
   ShieldCheck,
@@ -125,6 +126,28 @@ type Payload = {
     branches: { code: string; label: string; amount: number }[];
     groups: { code: string; label: string; amount: number }[];
   };
+  health: {
+    totals: { customers: number; health: number; slipping: number; slipping_value: number };
+    segments: {
+      code: string;
+      label: string;
+      customers: number;
+      sales_365: number;
+      health: number;
+    }[];
+    at_risk: {
+      code: string;
+      label: string;
+      amount: number;
+      quiet_days: number;
+      health: number;
+    }[];
+  } | null;
+  plan: {
+    plans: { label: string; plans: number }[];
+    opportunities: { label: string; deals: number; value: number }[];
+    quotes: number;
+  } | null;
   visits: {
     totals: {
       visits: number;
@@ -1364,6 +1387,120 @@ export default function SalesOverview() {
                       ຍັງບໍ່ພຽງພໍທີ່ຈະສະຫຼຸບຜົນງານທິມ
                     </p>
                   )}
+                </div>
+              </section>
+            )}
+
+            {/* ══ ⑲ ສຸຂະພາບລູກຄ້າ ══ */}
+            {data.health && (
+              <section className="sf-widget mt-3">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <HeartPulse size={13} /> ⑲ ສຸຂະພາບລູກຄ້າ
+                    </h3>
+                    <p className="sf-widget-sub">
+                      {full(data.health.totals.customers)} ລູກຄ້າ · ຄະແນນສະເລ່ຍ{" "}
+                      {data.health.totals.health} · ຈັດກຸ່ມຈາກການຊື້ 365 ວັນ
+                    </p>
+                  </div>
+                  <span className="pill pill-neg">
+                    ສ່ຽງເສຍ {full(data.health.totals.slipping)} ລາຍ ·{" "}
+                    {short(data.health.totals.slipping_value)}
+                  </span>
+                </div>
+                <div className="sf-widget-bd so-grid">
+                  <div>
+                    <p className="so-kpi-label">ກຸ່ມລູກຄ້າ</p>
+                    {data.health.segments.map((row) => (
+                      <div key={row.code} className="so-rank">
+                        <span className="so-rank-label" title={row.label}>
+                          {row.label}
+                        </span>
+                        <span className="so-rank-bar">
+                          <span
+                            style={{
+                              width: `${Math.max(
+                                2,
+                                (row.customers /
+                                  Math.max(1, data.health!.totals.customers)) *
+                                  100,
+                              )}%`,
+                              background:
+                                row.health >= 70
+                                  ? "var(--pos)"
+                                  : row.health >= 45
+                                    ? "var(--warn)"
+                                    : "var(--neg)",
+                            }}
+                          />
+                        </span>
+                        <span className="so-rank-value">{full(row.customers)}</span>
+                        <span className="so-rank-share">{short(row.sales_365)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="so-kpi-label">ລູກຄ້າໃຫຍ່ທີ່ກຳລັງງຽບ — ຄວນໄປພົບ</p>
+                    {data.health.at_risk.map((row) => (
+                      <div key={row.code} className="so-rank">
+                        <span className="so-rank-label" style={{ width: "10rem" }} title={row.label}>
+                          {row.label}
+                        </span>
+                        <span className="so-rank-value">{short(row.amount)}</span>
+                        <span className="so-rank-share">{row.quiet_days} ມື້</span>
+                      </div>
+                    ))}
+                    {!data.health.at_risk.length && <p className="so-empty">ບໍ່ມີ</p>}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ══ ⑳ ແຜນເຂົ້າພົບ · ທໍ່ຂາຍ ══ */}
+            {data.plan && (
+              <section className="sf-widget mt-3">
+                <div className="sf-widget-hd">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="sf-widget-title">
+                      <Route size={13} /> ⑳ ແຜນເຂົ້າພົບ ແລະ ທໍ່ຂາຍ · {scopeWord}
+                    </h3>
+                    <p className="sf-widget-sub">
+                      ແຜນຈາກແອັບຂາຍ · ໂອກາດ ແລະ ໃບສະເໜີລາຄາ ຫາກໍເລີ່ມໃຊ້
+                    </p>
+                  </div>
+                </div>
+                <div className="sf-widget-bd so-trio">
+                  <div>
+                    <p className="so-kpi-label">ແຜນເຂົ້າພົບ</p>
+                    {rankRows(
+                      amountRanks(
+                        data.plan.plans.map((row) => ({
+                          code: row.label,
+                          label: row.label,
+                          amount: row.plans,
+                        })),
+                      ),
+                    )}
+                  </div>
+                  <div>
+                    <p className="so-kpi-label">ໂອກາດການຂາຍ</p>
+                    {rankRows(
+                      amountRanks(
+                        data.plan.opportunities.map((row) => ({
+                          code: row.label,
+                          label: `${row.label} · ${row.deals}`,
+                          amount: row.value,
+                        })),
+                      ),
+                    )}
+                    {!data.plan.opportunities.length && <p className="so-empty">ຍັງບໍ່ມີ</p>}
+                  </div>
+                  <div>
+                    <p className="so-kpi-label">ໃບສະເໜີລາຄາ</p>
+                    <p className="so-kpi-value">{full(data.plan.quotes)}</p>
+                    <p className="so-kpi-note">ທັງໝົດໃນລະບົບ</p>
+                  </div>
                 </div>
               </section>
             )}
