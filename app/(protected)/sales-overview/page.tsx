@@ -143,6 +143,13 @@ type Payload = {
       completed: number;
     }[];
     outcomes: { label: string; visits: number }[];
+    quality: {
+      visits: number;
+      checklist: number;
+      stock: number;
+      photo: number;
+      score: number;
+    } | null;
     types: { label: string; visits: number }[];
     first_day: string | null;
     last_day: string | null;
@@ -1313,6 +1320,43 @@ export default function SalesOverview() {
                       )}
                     </div>
                   </div>
+
+                  {data.visits.quality && data.visits.quality.visits > 0 && (
+                    <div className="so-quality mt-3">
+                      <div>
+                        <p className="so-kpi-label">ຄຸນນະພາບການເຂົ້າພົບ (Perfect Store)</p>
+                        <p className="so-kpi-note">
+                          ສູດດຽວກັບ salewole · ນັບສະເພາະການໄປຮອດຮ້ານທີ່ເຊັກເອົາແລ້ວ (
+                          {data.visits.quality.visits} ຄັ້ງ)
+                        </p>
+                      </div>
+                      <div className="so-quality-cells">
+                        {[
+                          { label: "ຄະແນນຮວມ", value: data.visits.quality.score },
+                          { label: "Checklist", value: data.visits.quality.checklist },
+                          { label: "ສຳຫຼວດສະຕັອກ", value: data.visits.quality.stock },
+                          { label: "ຮູບ", value: data.visits.quality.photo },
+                        ].map((cell) => (
+                          <div key={cell.label}>
+                            <p className="so-kpi-label">{cell.label}</p>
+                            <p
+                              className="so-kpi-value"
+                              style={{
+                                color:
+                                  cell.value >= 70
+                                    ? "var(--pos)"
+                                    : cell.value >= 40
+                                      ? "var(--warn)"
+                                      : "var(--neg)",
+                              }}
+                            >
+                              {pct(cell.value)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {data.visits.totals.visits < 50 && (
                     <p className="so-kpi-note mt-2">

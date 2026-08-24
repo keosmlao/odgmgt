@@ -251,6 +251,12 @@ function scopeDetailSql(whereExtra) {
  *
  * ຮັບເດືອນເລີ່ມ–ເດືອນຈົບ ຂອງປີທີ່ເລືອກ ຄືກັບບລ໋ອກອື່ນ; ບໍ່ມີ BU/ພາກ ໃນຕາຕະລາງ
  * ຈຶ່ງບໍ່ຖືກຫັ່ນດ້ວຍສອງຕົວນັ້ນ.
+ *
+ * ⚠️ ຄະແນນຄຸນນະພາບ (checklist · ສຳຫຼວດສະຕັອກ · ຮູບ) ຄັດລອກສູດມາຈາກ salewole
+ * ບ່ອນ src/lib/visit-quality.ts ທຸກປະການ — ນັບສະເພາະການ "ໄປຮອດຮ້ານ" ທີ່ເຊັກເອົາ
+ * ແລ້ວ. ນິຍາມເປັນຂອງ salewole ເຈົ້າຂອງແອັບ; ຢູ່ນີ້ພຽງອ່ານມາສະແດງ ຈຶ່ງບໍ່ຕ້ອງ
+ * ແກ້ສອງລະບົບເມື່ອຢາກເບິ່ງຕົວເລກນີ້ ແລະ ສອງບ່ອນຈະບໍ່ໃຫ້ຄ່າຄົນລະຢ່າງ. ຖ້າ
+ * salewole ປ່ຽນສູດ ຕ້ອງມາປ່ຽນບ່ອນນີ້ນຳ.
  */
 const VISIT_SQL = `
   WITH scope AS (
@@ -298,6 +304,29 @@ const VISIT_SQL = `
       SELECT COALESCE(json_agg(row_to_json(x)), '[]'::json) FROM (
         SELECT COALESCE(NULLIF(visit_type, ''), 'ບໍ່ລະບຸ') AS visit_type, COUNT(*)::int AS visits
         FROM scope GROUP BY 1 ORDER BY 2 DESC
+      ) x
+    ),
+    'quality', (
+      SELECT row_to_json(x) FROM (
+        SELECT COUNT(*)::int AS visits,
+               COALESCE(AVG(CASE WHEN total_items > 0
+                                 THEN LEAST(1.0, answered::float / total_items) ELSE 0 END), 0)::float AS checklist,
+               COALESCE(AVG(CASE WHEN has_stock THEN 1.0 ELSE 0.0 END), 0)::float AS stock,
+               COALESCE(AVG(CASE WHEN has_photo THEN 1.0 ELSE 0.0 END), 0)::float AS photo
+        FROM (
+          SELECT v.id,
+                 (SELECT COUNT(*)::int FROM public.odg_sale_visit_checklist c
+                   WHERE c.visit_id = v.id
+                     AND (c.done OR COALESCE(NULLIF(TRIM(c.value), ''), '') <> '')) AS answered,
+                 (SELECT COUNT(*)::int FROM public.odg_sale_checklist_item i
+                   WHERE i.is_active) AS total_items,
+                 EXISTS (SELECT 1 FROM public.odg_sale_stock_check s WHERE s.visit_id = v.id) AS has_stock,
+                 EXISTS (SELECT 1 FROM public.odg_sale_visit_photo p WHERE p.visit_id = v.id) AS has_photo
+          FROM public.app_customer_visit v
+          WHERE v.id IN (SELECT id FROM scope)
+            AND v.checked_out_at IS NOT NULL
+            AND COALESCE(v.visit_type, 'visit') = 'visit'
+        ) q
       ) x
     ),
     'first_day', (SELECT MIN(day)::text FROM scope),
@@ -835,6 +864,20 @@ export async function GET(request) {
                 label: VISIT_TYPE[row.visit_type] || row.visit_type,
                 visits: Number(row.visits || 0),
               })),
+              quality: visit.quality
+                ? {
+                    visits: Number(visit.quality.visits || 0),
+                    checklist: Number(visit.quality.checklist || 0) * 100,
+                    stock: Number(visit.quality.stock || 0) * 100,
+                    photo: Number(visit.quality.photo || 0) * 100,
+                    score:
+                      ((Number(visit.quality.checklist || 0) +
+                        Number(visit.quality.stock || 0) +
+                        Number(visit.quality.photo || 0)) /
+                        3) *
+                      100,
+                  }
+                : null,
               first_day: visit.first_day || null,
               last_day: visit.last_day || null,
             }
