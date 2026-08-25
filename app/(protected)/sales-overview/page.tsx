@@ -409,9 +409,17 @@ export default function SalesOverview() {
     </div>
   );
 
-  const rankRows = (list: Rank[]) => (
+  /**
+   * ແຖວອັນດັບ. `right` ປ່ຽນຖັນຂວາສຸດຈາກ % ເປັນຢ່າງອື່ນ — ບລ໋ອກທິມຂາຍ ແລະ ລູກຄ້າ
+   * ໃຊ້ຈຳນວນບິນ ເພາະ "ຂາຍໄດ້ 12 ບິນ" ບອກໄດ້ຫຼາຍກວ່າ "ກວມ 4%".
+   */
+  const rankRows = (
+    list: (Rank & { bills?: number })[],
+    right?: (item: Rank & { bills?: number }) => string,
+    limit = 8,
+  ) => (
     <>
-      {list.slice(0, 8).map((item) => (
+      {list.slice(0, limit).map((item) => (
         <div key={item.code} className="so-rank">
           <span className="so-rank-label" title={item.label}>
             {item.label}
@@ -420,12 +428,15 @@ export default function SalesOverview() {
             <span style={{ width: `${Math.max(2, Math.min(100, item.share))}%` }} />
           </span>
           <span className="so-rank-value">{short(item.amount)}</span>
-          <span className="so-rank-share">{pct(item.share)}</span>
+          <span className="so-rank-share">{right ? right(item) : pct(item.share)}</span>
         </div>
       ))}
       {!list.length && <p className="so-empty">ບໍ່ມີຂໍ້ມູນ</p>}
     </>
   );
+
+  /** ຖັນຂວາເປັນຈຳນວນບິນ. */
+  const asBills = (item: { bills?: number }) => `${full(item.bills || 0)} ບິນ`;
 
   const scopeWord = mode === "ytd" ? "ສະສົມ" : "ເດືອນນີ້";
 
@@ -929,10 +940,12 @@ export default function SalesOverview() {
                     <h3 className="sf-widget-title">
                       <Users size={13} /> ⑧ ທິມຂາຍ · {scopeWord}
                     </h3>
-                    <p className="sf-widget-sub">12 ອັນດັບທຳອິດ ຕາມຍອດຂາຍ</p>
+                    <p className="sf-widget-sub">
+                      12 ອັນດັບທຳອິດ ຕາມຍອດຂາຍ · ຫັ່ນຕາມ BU/ຊ່ອງທາງ/ພາກ ຂ້າງເທິງໄດ້
+                    </p>
                   </div>
                 </div>
-                <div className="sf-widget-bd">{rankRows(data.sellers)}</div>
+                <div className="sf-widget-bd">{rankRows(data.sellers, asBills, 12)}</div>
               </section>
 
               <section className="sf-widget">
@@ -947,7 +960,7 @@ export default function SalesOverview() {
                     </p>
                   </div>
                 </div>
-                <div className="sf-widget-bd">{rankRows(data.customers.rows)}</div>
+                <div className="sf-widget-bd">{rankRows(data.customers.rows, asBills, 12)}</div>
               </section>
             </div>
 
