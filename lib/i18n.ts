@@ -285,6 +285,20 @@ const dict: Record<string, Record<Locale, string>> = {
     en: "ACT from odg_sale_detail · Target from odg_sales_target · ROY uses target as forecast · Service split uses a flat monthly project target",
   },
 
+  // ── Wholesale, region by region ──
+  "wholesaleRegion.title": {
+    lo: "ຂາຍສົ່ງ ແຍກຕາມພາກ",
+    th: "ขายส่ง แยกตามภาค",
+    en: "Wholesale by region",
+  },
+  "wholesaleRegion.total": { lo: "ລວມຂາຍສົ່ງ", th: "รวมขายส่ง", en: "Wholesale total" },
+  "wholesaleRegion.outside": { lo: "ນອກ 4 ພາກ", th: "นอก 4 ภาค", en: "Outside the four blocks" },
+  "wholesaleRegion.note": {
+    lo: "ຂາຍສົ່ງເທົ່ານັ້ນ (ຂາຍຊ່າງນັບສະເພາະແອ ຄືກັບໜ້າສະຫຼຸບເດືອນ) · ACT ຈາກ odg_sale_detail · Target ຈາກ odg_sales_target ຕາມແຂວງ · ພາກໃຕ້ = ສະຫວັນນະເຂດ ລົງໄປ (5 ແຂວງ) · ລວມຂາຍສົ່ງ ນັບທຸກແຂວງ ລວມທັງທີ່ຢູ່ນອກ 4 ພາກ",
+    th: "เฉพาะขายส่ง (ขายช่างนับเฉพาะแอร์ เหมือนหน้าสรุปเดือน) · ACT จาก odg_sale_detail · Target จาก odg_sales_target ตามจังหวัด · ภาคใต้ = สะหวันนะเขตลงไป (5 แขวง) · รวมขายส่ง นับทุกแขวงรวมที่อยู่นอก 4 ภาค",
+    en: "Wholesale only (ຂາຍຊ່າງ counted for Air alone, as on the month sheet) · ACT from odg_sale_detail · Target from odg_sales_target by province · South = Savannakhet down (5 provinces) · The wholesale total counts every province, those outside the four blocks included",
+  },
+
   // ── Bills credited to another month ──
   "saleMonthOverride.title": {
     lo: "ຍ້າຍເດືອນບິນ",
@@ -1183,6 +1197,7 @@ const dict: Record<string, Record<Locale, string>> = {
     th: "ภาคใต้ + สะหวันนะเขต",
     en: "South + Savannakhet",
   },
+  "sidebar.wholesaleRegion": { lo: "ຂາຍສົ່ງ ຕາມພາກ", th: "ขายส่ง ตามภาค", en: "Wholesale by region" },
   "sidebar.salesDelivery": { lo: "ສົມທຽບຂາຍ / ຈັດສົ່ງ", th: "เทียบยอดขาย / จัดส่ง", en: "Sales vs Delivery" },
   "sidebar.saleMonthOverride": { lo: "ຍ້າຍເດືອນບິນ", th: "ย้ายเดือนบิล", en: "Bill month override" },
   "assignment.allProvinces": { lo: "ທຸກແຂວງ", th: "ทุกแขวง", en: "All provinces" },
