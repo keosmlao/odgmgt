@@ -292,11 +292,10 @@ const dict: Record<string, Record<Locale, string>> = {
     en: "Wholesale by region",
   },
   "wholesaleRegion.total": { lo: "ລວມຂາຍສົ່ງ", th: "รวมขายส่ง", en: "Wholesale total" },
-  "wholesaleRegion.outside": { lo: "ນອກ 4 ພາກ", th: "นอก 4 ภาค", en: "Outside the four blocks" },
   "wholesaleRegion.note": {
-    lo: "ຂາຍສົ່ງເທົ່ານັ້ນ (ຂາຍຊ່າງນັບສະເພາະແອ ຄືກັບໜ້າສະຫຼຸບເດືອນ) · ACT ຈາກ odg_sale_detail · Target ຈາກ odg_sales_target ຕາມແຂວງ · ພາກໃຕ້ = ສະຫວັນນະເຂດ ລົງໄປ (5 ແຂວງ) · ລວມຂາຍສົ່ງ ນັບທຸກແຂວງ ລວມທັງທີ່ຢູ່ນອກ 4 ພາກ",
-    th: "เฉพาะขายส่ง (ขายช่างนับเฉพาะแอร์ เหมือนหน้าสรุปเดือน) · ACT จาก odg_sale_detail · Target จาก odg_sales_target ตามจังหวัด · ภาคใต้ = สะหวันนะเขตลงไป (5 แขวง) · รวมขายส่ง นับทุกแขวงรวมที่อยู่นอก 4 ภาค",
-    en: "Wholesale only (ຂາຍຊ່າງ counted for Air alone, as on the month sheet) · ACT from odg_sale_detail · Target from odg_sales_target by province · South = Savannakhet down (5 provinces) · The wholesale total counts every province, those outside the four blocks included",
+    lo: "ຂາຍສົ່ງເທົ່ານັ້ນ (ຂາຍຊ່າງນັບສະເພາະແອ ຄືກັບໜ້າສະຫຼຸບເດືອນ) · ACT ຈາກ odg_sale_detail · Target ຈາກ odg_sales_target ຕາມແຂວງ · ພາກໃຕ້ = ສະຫວັນນະເຂດ ລົງໄປ (5 ແຂວງ) · ສຳນັກງານໃຫ່ຍ = ສ່ວນທີ່ເຫຼືອ ລວມຕ່າງປະເທດ, ບໍ່ລະບຸແຂວງ ແລະ ເປົ້າທີ່ຕັ້ງລວມ · Total = ສຳນັກງານໃຫ່ຍ + ພາກໃຕ້",
+    th: "เฉพาะขายส่ง (ขายช่างนับเฉพาะแอร์ เหมือนหน้าสรุปเดือน) · ACT จาก odg_sale_detail · Target จาก odg_sales_target ตามจังหวัด · ภาคใต้ = สะหวันนะเขตลงไป (5 แขวง) · สำนักงานใหญ่ = ส่วนที่เหลือ รวมต่างประเทศ ไม่ระบุจังหวัด และเป้าที่ตั้งรวม · Total = สำนักงานใหญ่ + ภาคใต้",
+    en: "Wholesale only (ຂາຍຊ່າງ counted for Air alone, as on the month sheet) · ACT from odg_sale_detail · Target from odg_sales_target by province · South = Savannakhet down (5 provinces) · HQ = everything else, foreign customers, bills with no province and company-wide targets included · Total = HQ + South",
   },
 
   // ── Bills credited to another month ──

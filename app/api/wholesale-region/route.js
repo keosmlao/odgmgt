@@ -8,7 +8,7 @@ import { channelCodeSql } from "@/lib/sale-monthly-sql.mjs";
  * ຂາຍສົ່ງ ແຍກຕາມພາກ — the wholesale sheet of the monthly Excel report:
  *
  *   PreviousMonth_M/YYYY · YTD 1-M/YYYY
- *   × wholesale total · WS Metro · WS north · WS central · WS 5 ແຂວງພາກໃຕ້
+ *   × Total · HQ · WS 5 ແຂວງພາກໃຕ້
  *   × PIPE · CE+SDA · Air · Sarepart
  *   rows: Target · ACT · % · last year · YYYY/YYYY-1
  *
@@ -20,22 +20,26 @@ import { channelCodeSql } from "@/lib/sale-monthly-sql.mjs";
  */
 
 /**
- * The four blocks of the sheet, by province code (public.erp_province).
+ * ພາກໃຕ້ — ສະຫວັນນະເຂດ and everything below it, the same five provinces as
+ * /month-summary/south and as the Excel header. ສຳນັກງານໃຫ່ຍ is everything
+ * else: foreign customers, bills with no province, and a wholesale target
+ * entered against province 'ALL' all land there rather than nowhere.
  *
- * ⚠️ Deliberately NOT lib/sales-regions.mjs. That file follows the official
- * split, where ສະຫວັນນະເຂດ (14) sits in ພາກກາງ. The sales side plans and
- * reviews the south as **5 provinces** — ສະຫວັນນະເຂດ ລົງໄປ — and the Excel
- * header says so in as many words, so 14 is counted below, not in the centre.
- * The same 14-18 boundary as /month-summary/south.
- *
- * ນະຄອນຫຼວງ stands alone as "Metro": it is most of the country's wholesale on
- * its own, and folded into the centre it would hide every other province there.
+ * ⚠️ Deliberately NOT lib/sales-regions.mjs, which follows the official split
+ * and leaves ສະຫວັນນະເຂດ (14) in ພາກກາງ. The sales side plans and reviews the
+ * south as **5 provinces**, so 14 is counted below, not in the centre.
  */
-const REGIONS = [
-  { key: "metro", label: "WS Metro", provinces: ["01"] },
-  { key: "north", label: "WS north", provinces: ["02", "03", "04", "05", "06", "07", "08"] },
-  { key: "central", label: "WS central", provinces: ["09", "10", "11", "12", "13"] },
-  { key: "south", label: "WS 5 ແຂວງພາກໃຕ້", provinces: ["14", "15", "16", "17", "18"] },
+const SOUTH_PROVINCES = ["14", "15", "16", "17", "18"];
+
+/**
+ * The three blocks of the sheet. Two sides carry the numbers and the third is
+ * their sum, so the columns add up to the total exactly — nothing sits outside
+ * the blocks the way it did when the sheet ran four regions wide.
+ */
+const BLOCKS = [
+  { key: "total", label: "Total", sides: ["hq", "south"] },
+  { key: "hq", label: "HQ", sides: ["hq"] },
+  { key: "south", label: "WS 5 ແຂວງພາກໃຕ້", sides: ["south"] },
 ];
 
 /**
@@ -50,22 +54,14 @@ const PRODUCTS = [
   { key: "sparepart", label: "Sarepart", bu: ["14"], channels: ["102"] },
 ];
 
-const PROVINCE_TO_REGION = new Map(
-  REGIONS.flatMap((region) => region.provinces.map((province) => [province, region.key])),
-);
+const SOUTH_SET = new Set(SOUTH_PROVINCES);
 
-/** ນອກ 4 ພາກ — ຕ່າງປະເທດ (19, 20), ລະຫັດວ່າງ ແລະ ເປົ້າທີ່ຕັ້ງເປັນ 'ALL'. */
-const OUTSIDE = "outside";
+const sideOf = (province) => (SOUTH_SET.has(String(province ?? "").trim()) ? "south" : "hq");
 
-const regionOf = (province) => PROVINCE_TO_REGION.get(String(province ?? "").trim()) ?? OUTSIDE;
-
-/** SQL side of the same mapping, so the scan groups on 5 values instead of 21. */
-const regionSql = (column) =>
-  `CASE ${REGIONS.map(
-    (region) =>
-      `WHEN COALESCE(${column}, '') IN (${region.provinces.map((p) => `'${p}'`).join(", ")}) THEN '${region.key}'`,
-  ).join("\n        ")}
-        ELSE '${OUTSIDE}' END`;
+/** SQL side of the same mapping, so the scan groups on two values, not 21. */
+const sideSql = (column) =>
+  `CASE WHEN COALESCE(${column}, '') IN (${SOUTH_PROVINCES.map((code) => `'${code}'`).join(", ")})
+        THEN 'south' ELSE 'hq' END`;
 
 /** Same channel mapping as the target rows of /month-summary. */
 function normalizeTargetChannel(value) {
@@ -122,35 +118,22 @@ function once(key, task) {
   return run;
 }
 
-const bucketKey = (bu, channel, region, month) => `${bu}|${channel}|${region}|${month}`;
+const bucketKey = (bu, channel, side, month) => `${bu}|${channel}|${side}|${month}`;
 
-/** Sums one product over the months asked for, in one region or in all of them. */
-function sumBuckets(map, product, regionKey, months) {
-  const regionKeys = regionKey ? [regionKey] : [...REGIONS.map((r) => r.key), OUTSIDE];
+/** Sums one product over the months asked for, on one side or on both. */
+function sumBuckets(map, product, sides, months) {
   let total = 0;
   for (const bu of product.bu) {
     for (const channel of product.channels) {
-      for (const region of regionKeys) {
+      for (const side of sides) {
         for (const month of months) {
-          total += map.get(bucketKey(bu, channel, region, month)) || 0;
+          total += map.get(bucketKey(bu, channel, side, month)) || 0;
         }
       }
     }
   }
   return total;
 }
-
-/**
- * ກິບຂາຍສົ່ງທີ່ບໍ່ຕົກໃສ່ພາກໃດ.
- *
- * On the ACT side that is foreign customers and bills with no province on them.
- * On the Target side it is also ຂາຍຊ່າງແອ, whose plan is entered as one company
- * figure (province_code 'ALL') while its sales land province by province — so
- * the four blocks are short of that target and the total is not. Reported
- * rather than spread around, because guessing a split would be an invention.
- */
-const sumOutsideRegions = (map, months) =>
-  PRODUCTS.reduce((total, product) => total + sumBuckets(map, product, OUTSIDE, months), 0);
 
 function buildActualMap(rowsIn, year) {
   const map = new Map();
@@ -159,7 +142,7 @@ function buildActualMap(rowsIn, year) {
     const key = bucketKey(
       String(row.bu_code ?? ""),
       String(row.channel_code ?? "OTHER"),
-      String(row.region ?? OUTSIDE),
+      String(row.side ?? "hq"),
       Number(row.month),
     );
     map.set(key, (map.get(key) || 0) + Number(row.amount || 0));
@@ -168,17 +151,16 @@ function buildActualMap(rowsIn, year) {
 }
 
 /**
- * Wholesale target rows, by province. A wholesale plan entered against province
- * 'ALL' has no region to land in; it is kept under OUTSIDE so the company total
- * still adds up and the page can say how much sits there.
+ * Wholesale target rows, by province. A plan entered against province 'ALL' —
+ * ຂາຍຊ່າງແອ is planned as one company figure — has no province to land in and
+ * counts under ສຳນັກງານໃຫ່ຍ, where /month-summary puts it too.
  */
 function buildTargetMap(rowsIn) {
   const map = new Map();
   for (const row of rowsIn) {
     const bu = String(row.bu_code ?? "");
     const channel = normalizeTargetChannel(row.sale_channel);
-    const region = regionOf(row.province_code);
-    const key = bucketKey(bu, channel, region, Number(row.month));
+    const key = bucketKey(bu, channel, sideOf(row.province_code), Number(row.month));
     map.set(key, (map.get(key) || 0) + Number(row.amount || 0));
   }
   return map;
@@ -215,7 +197,7 @@ export async function GET(request) {
              EXTRACT(MONTH FROM ${REPORT_DATE})::int AS month,
              COALESCE(NULLIF(d.bu_code, ''), '-') AS bu_code,
              ${channelCodeSql("d.doc_no")} AS channel_code,
-             ${regionSql("d.province")} AS region,
+             ${sideSql("d.province")} AS side,
              COALESCE(SUM(d.sum_amount), 0)::float AS amount
       FROM public.odg_sale_detail d
       ${OVERRIDE_JOIN}
@@ -237,10 +219,10 @@ export async function GET(request) {
     const actualLy = buildActualMap(actualRows, lastYear);
     const target = buildTargetMap(targetNow);
 
-    const columns = REGIONS.flatMap((region) =>
+    const columns = BLOCKS.flatMap((block) =>
       PRODUCTS.map((product) => ({
-        key: `${region.key}_${product.key}`,
-        region: region.key,
+        key: `${block.key}_${product.key}`,
+        block: block.key,
         product: product.key,
         label: product.label,
       })),
@@ -249,7 +231,7 @@ export async function GET(request) {
     /** One report block: Target, ACT, %, last year and the year-on-year ratio. */
     const buildSection = (key, label, months) => {
       const cells = {};
-      const regionTotals = {};
+      const blockTotals = {};
 
       const accumulate = (bucket, cell) => ({
         target: bucket.target + cell.target,
@@ -262,46 +244,29 @@ export async function GET(request) {
         growth: safeDiv(bucket.value, bucket.last_year) * 100,
       });
 
-      for (const region of REGIONS) {
+      for (const block of BLOCKS) {
         let running = { target: 0, value: 0, last_year: 0 };
         for (const product of PRODUCTS) {
           const cell = {
-            target: sumBuckets(target, product, region.key, months),
-            value: sumBuckets(actual, product, region.key, months),
-            last_year: sumBuckets(actualLy, product, region.key, months),
+            target: sumBuckets(target, product, block.sides, months),
+            value: sumBuckets(actual, product, block.sides, months),
+            last_year: sumBuckets(actualLy, product, block.sides, months),
           };
-          cells[`${region.key}_${product.key}`] = withRatios(cell);
+          cells[`${block.key}_${product.key}`] = withRatios(cell);
           running = accumulate(running, cell);
         }
-        regionTotals[region.key] = withRatios(running);
+        blockTotals[block.key] = withRatios(running);
       }
-
-      // The wholesale total counts every province, the four blocks included and
-      // whatever fell outside them — the sheet's own columns would otherwise
-      // quietly drop foreign sales from the company figure.
-      const total = PRODUCTS.reduce(
-        (bucket, product) =>
-          accumulate(bucket, {
-            target: sumBuckets(target, product, null, months),
-            value: sumBuckets(actual, product, null, months),
-            last_year: sumBuckets(actualLy, product, null, months),
-          }),
-        { target: 0, value: 0, last_year: 0 },
-      );
 
       return {
         key,
         label,
         value_label: "ACT",
         cells,
-        region_totals: regionTotals,
-        total: withRatios(total),
-        /** ສ່ວນທີ່ບໍ່ຕົກໃສ່ພາກໃດ — ບອກໄວ້ ດີກວ່າໃຫ້ໄປພົບເອງວ່າຄໍລຳບວກແລ້ວບໍ່ເທົ່າຍອດລວມ. */
-        outside: {
-          target: sumOutsideRegions(target, months),
-          value: sumOutsideRegions(actual, months),
-          last_year: sumOutsideRegions(actualLy, months),
-        },
+        block_totals: blockTotals,
+        // Every province is on one side or the other, so this is the Total
+        // block's own sum — the sheet's columns add up to it with nothing left.
+        total: blockTotals.total,
       };
     };
 
@@ -316,7 +281,7 @@ export async function GET(request) {
           /** Latest sale date behind these numbers. */
           data_through: source.data_through,
         },
-        regions: REGIONS.map(({ key, label }) => ({ key, label })),
+        blocks: BLOCKS.map(({ key, label }) => ({ key, label })),
         products: PRODUCTS.map(({ key, label }) => ({ key, label })),
         columns,
         sections: [

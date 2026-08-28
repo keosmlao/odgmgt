@@ -1683,9 +1683,8 @@ button.rule-link {
 @media (max-width: 1180px) { .ms-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .ms-kpis { grid-template-columns: minmax(0, 1fr); } }
 
-/* Wholesale by region: the company figure plus its four blocks, one row. */
-.ws-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-@media (max-width: 1400px) { .ws-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Wholesale by region: the company figure and the two sides it is made of. */
+.ws-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1180px) { .ws-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .ws-kpis { grid-template-columns: minmax(0, 1fr); } }
 
@@ -1727,13 +1726,12 @@ button.rule-link {
 .ms-sheet .g-project { --g: var(--pos); }
 .ms-sheet .g-service { --g: var(--sky); }
 
-/* ຂາຍສົ່ງ ແຍກຕາມພາກ — one accent per region block, in the order they run down
-   the country, so a reader who scrolls sideways always knows which block is
-   under the cursor without reading back up to the header. */
-.ms-sheet .g-metro { --g: var(--pos); }
-.ms-sheet .g-north { --g: var(--accent); }
-.ms-sheet .g-central { --g: var(--brand); }
-.ms-sheet .g-south { --g: var(--neg); }
+/* ຂາຍສົ່ງ ແຍກຕາມພາກ — one accent per block: the company total, then the two
+   sides it splits into, so a reader who scrolls sideways always knows which
+   block is under the cursor without reading back up to the header. */
+.ms-sheet .g-total { --g: var(--brand); }
+.ms-sheet .g-hq { --g: var(--accent); }
+.ms-sheet .g-south { --g: var(--pos); }
 
 /* Two header rows, both pinned. Fixed heights, because the second row can only
    be told where to stop once the first row's height is a known number. */

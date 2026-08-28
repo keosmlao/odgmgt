@@ -21,21 +21,18 @@ type Cell = {
   growth: number;
 };
 
-type Bucket = { target: number; value: number; last_year: number };
-
 type Section = {
   key: string;
   label: string;
   value_label: string;
   cells: Record<string, Cell>;
-  region_totals: Record<string, Cell>;
+  block_totals: Record<string, Cell>;
+  /** ລວມ = ສຳນັກງານໃຫ່ຍ + ພາກໃຕ້, ບໍ່ມີສ່ວນໃດຕົກນອກ. */
   total: Cell;
-  /** ຂາຍສົ່ງທີ່ບໍ່ຕົກໃສ່ພາກໃດ — ຕ່າງປະເທດ, ບໍ່ລະບຸແຂວງ, ເປົ້າທີ່ຕັ້ງລວມ. */
-  outside: Bucket;
 };
 
-type Column = { key: string; region: string; product: string; label: string };
-type Region = { key: string; label: string };
+type Column = { key: string; block: string; product: string; label: string };
+type Block = { key: string; label: string };
 
 type Payload = {
   meta: {
@@ -44,7 +41,7 @@ type Payload = {
     last_year: number;
     data_through?: string | null;
   };
-  regions: Region[];
+  blocks: Block[];
   products: { key: string; label: string }[];
   columns: Column[];
   sections: Section[];
@@ -169,19 +166,19 @@ export default function WholesaleRegionView() {
     return years.includes(String(Math.floor(index / 12)));
   };
 
-  const regionSpans = useMemo(() => {
+  const blockSpans = useMemo(() => {
     if (!data) return [];
-    return data.regions
-      .map((region) => ({
-        ...region,
-        span: data.columns.filter((column) => column.region === region.key).length,
+    return data.blocks
+      .map((block) => ({
+        ...block,
+        span: data.columns.filter((column) => column.block === block.key).length,
       }))
-      .filter((region) => region.span > 0);
+      .filter((block) => block.span > 0);
   }, [data]);
 
-  /** True where a column opens a new region — the sheet's only vertical rules. */
-  const regionStart = (index: number) =>
-    index === 0 || data?.columns[index - 1]?.region !== data?.columns[index]?.region;
+  /** True where a column opens a new block — the sheet's only vertical rules. */
+  const blockStart = (index: number) =>
+    index === 0 || data?.columns[index - 1]?.block !== data?.columns[index]?.block;
 
   /** Short titles for the screen; the API keeps the spreadsheet's own wording. */
   const shortLabel = (section: Section) => {
@@ -199,7 +196,7 @@ export default function WholesaleRegionView() {
       t("wholesaleRegion.total"),
       ...data.columns.map(
         (column) =>
-          `${data.regions.find((region) => region.key === column.region)?.label ?? column.region} ${column.label}`,
+          `${data.blocks.find((block) => block.key === column.block)?.label ?? column.block} ${column.label}`,
       ),
     ];
     const rows: (string | number)[][] = [];
@@ -303,7 +300,7 @@ export default function WholesaleRegionView() {
             return (
               <td
                 key={column.key}
-                className={`g-${column.region} ${regionStart(index) ? "is-gstart" : ""}`}
+                className={`g-${column.block} ${blockStart(index) ? "is-gstart" : ""}`}
               >
                 {render(cell ? pick(cell) : 0)}
               </td>
@@ -443,7 +440,7 @@ export default function WholesaleRegionView() {
         {loading && !data && (
           <>
             <div className="ms-kpis ws-kpis">
-              {[0, 1, 2, 3, 4].map((index) => (
+              {[0, 1, 2].map((index) => (
                 <div key={index} className="skeleton h-[7.5rem]" />
               ))}
             </div>
@@ -453,30 +450,23 @@ export default function WholesaleRegionView() {
 
         {data && (
           <div className={loading ? "ms-busy" : ""}>
-            {/* The month, region by region — which block is behind is the first
+            {/* The month, block by block — which side is behind is the first
                 question asked of this sheet, and it should not need a scroll. */}
             {monthSection && (
               <section className="ms-kpis ws-kpis">
-                {renderTile(
-                  "total",
-                  t("wholesaleRegion.total"),
-                  shortLabel(monthSection),
-                  monthSection.total,
-                  true,
-                )}
-                {data.regions.map((region) =>
+                {data.blocks.map((block) =>
                   renderTile(
-                    region.key,
-                    region.label,
-                    "ACT",
-                    monthSection.region_totals[region.key] || {
+                    block.key,
+                    block.key === "total" ? t("wholesaleRegion.total") : block.label,
+                    block.key === "total" ? shortLabel(monthSection) : "ACT",
+                    monthSection.block_totals[block.key] || {
                       target: 0,
                       value: 0,
                       pct: 0,
                       last_year: 0,
                       growth: 0,
                     },
-                    false,
+                    block.key === "total",
                   ),
                 )}
               </section>
@@ -514,13 +504,13 @@ export default function WholesaleRegionView() {
                       <th className="ms-c2" rowSpan={2}>
                         {t("wholesaleRegion.total")}
                       </th>
-                      {regionSpans.map((region) => (
+                      {blockSpans.map((block) => (
                         <th
-                          key={region.key}
-                          colSpan={region.span}
-                          className={`ms-group g-${region.key} is-gstart`}
+                          key={block.key}
+                          colSpan={block.span}
+                          className={`ms-group g-${block.key} is-gstart`}
                         >
-                          {region.label}
+                          {block.label}
                         </th>
                       ))}
                     </tr>
@@ -528,7 +518,7 @@ export default function WholesaleRegionView() {
                       {data.columns.map((column, index) => (
                         <th
                           key={column.key}
-                          className={`ms-col g-${column.region} ${regionStart(index) ? "is-gstart" : ""}`}
+                          className={`ms-col g-${column.block} ${blockStart(index) ? "is-gstart" : ""}`}
                         >
                           {column.label}
                         </th>
@@ -542,15 +532,6 @@ export default function WholesaleRegionView() {
 
             <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
               {t("wholesaleRegion.note")}
-              {data.sections
-                .filter((section) => section.outside?.value || section.outside?.target)
-                .map(
-                  (section) =>
-                    ` · ${t("wholesaleRegion.outside")} ${shortLabel(section)} ACT ${fmt(
-                      section.outside.value,
-                    )} / ${t("kpi.target")} ${fmt(section.outside.target)}`,
-                )
-                .join("")}
             </p>
           </div>
         )}
