@@ -31,7 +31,7 @@ type Section = {
   total: Cell;
 };
 
-type Column = { key: string; block: string; product: string; label: string };
+type Column = { key: string; block: string; product: string; label: string; is_sum?: boolean };
 type Block = { key: string; label: string };
 
 type Payload = {
@@ -300,7 +300,9 @@ export default function WholesaleRegionView() {
             return (
               <td
                 key={column.key}
-                className={`g-${column.block} ${blockStart(index) ? "is-gstart" : ""}`}
+                className={`g-${column.block} ${blockStart(index) ? "is-gstart" : ""} ${
+                  column.is_sum ? "is-bsum" : ""
+                }`}
               >
                 {render(cell ? pick(cell) : 0)}
               </td>
@@ -518,7 +520,9 @@ export default function WholesaleRegionView() {
                       {data.columns.map((column, index) => (
                         <th
                           key={column.key}
-                          className={`ms-col g-${column.block} ${blockStart(index) ? "is-gstart" : ""}`}
+                          className={`ms-col g-${column.block} ${blockStart(index) ? "is-gstart" : ""} ${
+                            column.is_sum ? "is-bsum" : ""
+                          }`}
                         >
                           {column.label}
                         </th>

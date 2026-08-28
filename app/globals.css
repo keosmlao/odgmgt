@@ -1733,6 +1733,14 @@ button.rule-link {
 .ms-sheet .g-hq { --g: var(--accent); }
 .ms-sheet .g-south { --g: var(--pos); }
 
+/* A block's own sum, the column it opens with — tinted in the block's accent so
+   it reads as that block's headline and not as one more product. */
+.ms-sheet tbody td.is-bsum {
+  font-weight: 650;
+  background: color-mix(in srgb, var(--g) 8%, var(--surface));
+}
+.ms-sheet thead th.is-bsum { background: color-mix(in srgb, var(--g) 12%, var(--surface-2)); }
+
 /* Two header rows, both pinned. Fixed heights, because the second row can only
    be told where to stop once the first row's height is a known number. */
 .ms-sheet thead th {

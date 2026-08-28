@@ -219,14 +219,29 @@ export async function GET(request) {
     const actualLy = buildActualMap(actualRows, lastYear);
     const target = buildTargetMap(targetNow);
 
-    const columns = BLOCKS.flatMap((block) =>
-      PRODUCTS.map((product) => ({
+    // Each side opens with its own sum, the way ລວມຂາຍສົ່ງ opens the sheet: the
+    // question "how is HQ doing" is asked before "how is HQ's PIPE doing", and
+    // the answer should not be four columns added up by eye. The Total block
+    // needs none — the frozen column on the left is already its sum.
+    const columns = BLOCKS.flatMap((block) => [
+      ...(block.key === "total"
+        ? []
+        : [
+            {
+              key: `${block.key}_total`,
+              block: block.key,
+              product: "total",
+              label: "Total",
+              is_sum: true,
+            },
+          ]),
+      ...PRODUCTS.map((product) => ({
         key: `${block.key}_${product.key}`,
         block: block.key,
         product: product.key,
         label: product.label,
       })),
-    );
+    ]);
 
     /** One report block: Target, ACT, %, last year and the year-on-year ratio. */
     const buildSection = (key, label, months) => {
@@ -256,6 +271,7 @@ export async function GET(request) {
           running = accumulate(running, cell);
         }
         blockTotals[block.key] = withRatios(running);
+        if (block.key !== "total") cells[`${block.key}_total`] = blockTotals[block.key];
       }
 
       return {
