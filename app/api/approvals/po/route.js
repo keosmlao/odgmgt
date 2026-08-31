@@ -9,6 +9,7 @@ import {
   readFilter,
   readReason,
   readScope,
+  recordVerdict,
   requireUser,
   textStatusWhere,
 } from "@/lib/approvals";
@@ -81,23 +82,18 @@ export async function POST(request) {
     const status = action === "approve" ? "approved" : "rejected";
     const reason = action === "approve" ? null : readReason(body);
 
-    const result = await query(
-      `
-      INSERT INTO public.odg_pm_po_approval
-        (doc_no, status, approved_by, approved_at, reject_reason, created_by, created_at, updated_at)
-      VALUES (%s, %s, %s, now(), %s, %s, now(), now())
-      ON CONFLICT (doc_no) DO UPDATE
-        SET status = EXCLUDED.status,
-            approved_by = EXCLUDED.approved_by,
-            approved_at = now(),
-            reject_reason = EXCLUDED.reject_reason,
-            updated_at = now()
-        WHERE lower(coalesce(public.odg_pm_po_approval.status, '')) NOT IN ('approved','rejected','cancelled','canceled','closed')
-      `,
-      [docNo, status, auth.code, reason, auth.code],
-    );
+    // ອະນຸມັດຢູ່ນີ້ = ອະນຸມັດຢູ່ ERP: the trail row and ic_trans.approve_status
+    // are written together or not at all. See recordVerdict.
+    const verdict = await recordVerdict({
+      trailTable: "public.odg_pm_po_approval",
+      docNo,
+      transFlag: 6,
+      action,
+      reason,
+      code: auth.code,
+    });
 
-    if (!result.rowCount) {
+    if (verdict.alreadyHandled) {
       return NextResponse.json({ success: false, message: "already handled" }, { status: 409 });
     }
 
