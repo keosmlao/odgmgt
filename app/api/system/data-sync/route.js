@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { one } from "@/lib/db";
 import { getCurrentUser } from "@/lib/route-auth";
 import { swrCache } from "@/lib/cache";
+import { LIVE_MAX_DOC_DATE_SQL } from "@/lib/sale-detail-view";
 
 /**
  * Data-source freshness: the newest record date in each source table so an
@@ -21,7 +22,11 @@ export async function GET(request) {
       { ttl: 300_000, staleTtl: 24 * 3_600_000, bypass: sp.get("nocache") === "1" },
       async () => {
         const [sales, monthly, ar, targets] = await Promise.all([
-          one(`SELECT MAX(doc_date)::text AS latest, COUNT(*)::int AS rows FROM public.odg_sale_detail`).catch(() => null),
+          // The reports read the copy AND the bills written since it was last
+          // filled, so freshness is the later of the two dates.
+          one(`SELECT GREATEST(MAX(doc_date), ${LIVE_MAX_DOC_DATE_SQL})::text AS latest,
+                      COUNT(*)::int AS rows
+               FROM public.odg_sale_detail`).catch(() => null),
           one(`SELECT yeardoc AS yr, monthdoc AS mo FROM public.odg_sale_monthly ORDER BY yeardoc DESC, monthdoc DESC LIMIT 1`).catch(() => null),
           one(`SELECT COUNT(*)::int AS rows, COALESCE(SUM(balance_amount),0)::float AS balance FROM public.odg_ar_aging`).catch(() => null),
           one(`SELECT MAX(target_year)::int AS latest FROM public.odg_sales_target`).catch(() => null),

@@ -4,7 +4,9 @@ import { getCurrentUser } from "@/lib/route-auth";
 import { buildFilters } from "@/lib/filters";
 import { parseIntSafe, safeDiv, monthName, formatDate, monthRange, CHANNEL_EXPR } from "@/lib/helpers";
 import { ensureSalesAssignmentTable } from "@/lib/migrations";
-import { SALE_DETAIL_REPORTED, ensureReportedView } from "@/lib/sale-detail-view";
+import {
+  LIVE_MAX_DOC_DATE_SQL, SALE_DETAIL_REPORTED, ensureReportedView,
+} from "@/lib/sale-detail-view";
 import { CHANNEL_CODE_SQL } from "@/lib/sale-monthly-sql.mjs";
 import { sellerTargetSql } from "@/lib/sale-seller-target.mjs";
 import { ensureFreshRollup } from "@/lib/sale-rollup";
@@ -319,7 +321,7 @@ export async function GET(request) {
       // How far the sale data itself reaches. A month with no bills in it is
       // either a month that has not happened yet or a sync that has stopped,
       // and a page showing nothing should be able to say which.
-      rows(`SELECT to_char(MAX(doc_date), 'YYYY-MM-DD') AS data_through
+      rows(`SELECT to_char(GREATEST(MAX(doc_date), ${LIVE_MAX_DOC_DATE_SQL}), 'YYYY-MM-DD') AS data_through
             FROM public.odg_sale_detail WHERE yeardoc = ANY(%s::int[])`,
            [[yearVal, yearVal - 1]]),
     ]);

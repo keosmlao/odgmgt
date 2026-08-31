@@ -3,6 +3,9 @@ import { one, rows } from "@/lib/db";
 import { parseIntSafe, safeDiv } from "@/lib/helpers";
 import { OVERRIDE_JOIN, REPORT_DATE } from "@/lib/sale-month-override";
 import { channelCodeSql } from "@/lib/sale-monthly-sql.mjs";
+import {
+  LIVE_BILL_STAMP_SQL, LIVE_MAX_DOC_DATE_SQL, SALE_DETAIL_LIVE, ensureLiveView,
+} from "@/lib/sale-detail-view";
 
 /**
  * ຂາຍສົ່ງ ແຍກຕາມພາກ — the wholesale sheet of the monthly Excel report:
@@ -90,17 +93,18 @@ function normalizeTargetChannel(value) {
  */
 async function readSourceStamp(years) {
   const row = await one(
-    `SELECT to_char(MAX(d.doc_date), 'YYYY-MM-DD') AS data_through,
+    `SELECT to_char(GREATEST(MAX(d.doc_date), ${LIVE_MAX_DOC_DATE_SQL}), 'YYYY-MM-DD') AS data_through,
             COUNT(*)::text AS source_rows,
+            ${LIVE_BILL_STAMP_SQL} AS live_stamp,
             (SELECT COUNT(*)::text || '@' || COALESCE(MAX(created_at)::text, '-')
                FROM public.app_sale_month_override) AS override_stamp
-     FROM public.odg_sale_detail d
+     FROM ${SALE_DETAIL_LIVE} d
      WHERE d.yeardoc = ANY(%s::int[])`,
     [years],
   );
   return {
     data_through: row?.data_through ?? null,
-    stamp: `${row?.source_rows ?? "0"}|${row?.data_through ?? "-"}|${row?.override_stamp ?? "-"}`,
+    stamp: `${row?.source_rows ?? "0"}|${row?.data_through ?? "-"}|${row?.live_stamp ?? "-"}|${row?.override_stamp ?? "-"}`,
   };
 }
 
@@ -173,6 +177,8 @@ const range = (from, to) => {
 };
 
 export async function GET(request) {
+  // The live view has to exist before anything selects from it.
+  await ensureLiveView();
   try {
     const sp = request.nextUrl.searchParams;
     const now = new Date();
@@ -221,7 +227,7 @@ export async function GET(request) {
              ${channelCodeSql("d.doc_no")} AS channel_code,
              ${sideSql("d.province")} AS side,
              COALESCE(SUM(d.sum_amount), 0)::float AS amount
-      FROM public.odg_sale_detail d
+      FROM ${SALE_DETAIL_LIVE} d
       ${OVERRIDE_JOIN}
       WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])${cutSql}
       GROUP BY 1, 2, 3, 4, 5`;
