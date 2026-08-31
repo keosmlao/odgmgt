@@ -17,6 +17,7 @@ import {
 import { useDashboard, currency, readSessionCache, writeSessionCache } from "@/hooks/useDashboard";
 import { useTheme } from "@/context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 import { fmtDate, fmtDayMonth } from "@/components/ui";
 import { downloadCsv } from "@/lib/csv";
 
@@ -1168,7 +1169,9 @@ export default function Dashboard() {
               <h1 className="sf-ph-title truncate">{t("app.title")}</h1>
               <p className="sf-ph-meta">
                 {t("app.subtitle")} · FY {d.year} · {t("dash.currencyUnit")}
-                {d.updatedAt && <> · {t("dash.updatedAt")} {d.updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>}
+                {d.updatedAt && <> · {t("dash.updatedAt")} {d.updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>}{" "}
+                {/* ເວລາທີ່ຂໍ້ມູນຂາຍອັບເດດ — ຄົນລະຢ່າງກັບເວລາທີ່ໜ້ານີ້ດຶງ. */}
+                <SaleSyncBadge />
               </p>
             </div>
           </div>

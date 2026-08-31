@@ -8,6 +8,7 @@ import {
 import api from "@/service/api";
 import { downloadCsv } from "@/lib/csv";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 
 const C = { blue: "#2b70b5", emerald: "#17876d", amber: "#f5911f", rose: "#d0453f" };
 const num = (v: any) => Number(v || 0);
@@ -126,8 +127,10 @@ export default function SalesSummary() {
           <div>
             <p className="eyebrow">Performance report</p>
             <h1 className="page-title">Sales Summary</h1>
-            <p className="page-sub">
+            <p className="page-sub flex flex-wrap items-center gap-1.5">
               {data?.meta ? `${data.meta.month_label} ${year} — ${data.meta.date_range}` : t("app.loading")}
+              {/* ເວລາອັບເດດ ແລະ ນັບຖອຍຫຼັງ — ໜ້ານີ້ອ່ານສຳເນົາຂອງ ERP ຄືກັນ. */}
+              <SaleSyncBadge onUpdated={load} />
             </p>
           </div>
           <div className="flex gap-2">

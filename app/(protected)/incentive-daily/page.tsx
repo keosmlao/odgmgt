@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import api from "@/service/api";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 
 type Rule = { category_code: string | null; brand_code: string | null; design_token: string; size_token: string };
 
@@ -146,7 +147,11 @@ export default function IncentiveDailyPage() {
           <div>
             <p className="eyebrow">{t("daily.eyebrow")}</p>
             <h1 className="page-title">{t("daily.title")}</h1>
-            <p className="page-sub">{t("daily.subtitle")}</p>
+            <p className="page-sub flex flex-wrap items-center gap-1.5">
+              {t("daily.subtitle")}
+              {/* ຄະແນນມາຈາກສຳເນົາຂອງ ERP ຄືກັນ — ບອກໄວ້ວ່າອັບເດດເມື່ອໃດ. */}
+              <SaleSyncBadge onUpdated={() => load(true)} />
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

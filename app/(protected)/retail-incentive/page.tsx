@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Award, CheckCircle2, ChevronRight, Coins, Gift, Lock, Package, RefreshCw, RotateCcw, Target, TriangleAlert, X } from "lucide-react";
 import api from "@/service/api";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 
 type Brand = { group: string; brand: string; qty: number; amount: number; target: number };
 type PointLine = {
@@ -775,10 +776,12 @@ export default function RetailIncentivePage() {
         <div className="min-w-0">
           <p className="eyebrow">{t("incentive.eyebrow")}</p>
           <h1 className="page-title">{t("incentive.title")}</h1>
-          <p className="page-sub">
+          <p className="page-sub flex flex-wrap items-center gap-1.5">
             {data
               ? `${months[data.meta.month - 1]} ${data.meta.year} · ${t("incentive.branch")} ${data.meta.branch} · ${data.meta.people_count} ${t("incentive.people")}`
               : t("app.loading")}
+            {/* ຄະແນນນັບຈາກສຳເນົາຂອງ ERP — ບອກໄວ້ວ່າອັບເດດເມື່ອໃດ. */}
+            <SaleSyncBadge />
           </p>
         </div>
         <div className="flex items-end gap-2">

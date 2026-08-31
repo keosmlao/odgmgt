@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { currency, readSessionCache, writeSessionCache } from "@/hooks/useDashboard";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 import { fmtDate } from "@/components/ui";
 
 const C = { blue: "#2b70b5", emerald: "#17876d", amber: "#f5911f", rose: "#d0453f", violet: "#003361", slate: "#8ba6bd" };
@@ -270,7 +271,11 @@ export default function AnalyticsPage() {
         <div>
           <p className="eyebrow">Business intelligence</p>
           <h1 className="page-title">{t("sidebar.analytics")}</h1>
-          <p className="page-sub">{t("an.subtitle")}</p>
+          <p className="page-sub flex flex-wrap items-center gap-1.5">
+            {t("an.subtitle")}
+            {/* ເວລາອັບເດດ ແລະ ນັບຖອຍຫຼັງຮອບຕໍ່ໄປ. */}
+            <SaleSyncBadge />
+          </p>
         </div>
         {tab !== "ar" && (
           <div className="flex flex-wrap items-end gap-2">

@@ -24,6 +24,7 @@
  * Cron:  20 * * * * — twenty past, clear of the ERP job's own :00 and :30.
  */
 import pg from "pg";
+import { ensureFreshRollup } from "../lib/sale-rollup.js";
 
 const TARGET = "public.odg_sale_detail";
 const SOURCE = "public.sale_detail_2022";
@@ -97,6 +98,24 @@ try {
      FROM ${TARGET}`,
   );
   say(`ຂໍ້ມູນຮອດ ${check.rows[0].latest} · ບິນມື້ນີ້ ${check.rows[0].today} ແຖວ`);
+
+  /**
+   * ຕາຕະລາງສະຫຼຸບ (odg_sale_monthly ແລະ ພີ່ນ້ອງຂອງມັນ) ອ່ານມາຈາກຕາຕະລາງນີ້.
+   *
+   * They rebuild themselves when the source moves, but on the first page load
+   * after a reload — fifteen seconds a reader would otherwise sit through,
+   * every hour, for work that has just been done here anyway.
+   */
+  if (!/^(1|true)$/i.test(String(process.env.SALE_DETAIL_SKIP_ROLLUP || ""))) {
+    const rollupStarted = Date.now();
+    const thisYear = new Date().getFullYear();
+    const result = await ensureFreshRollup([thisYear, thisYear - 1]);
+    say(
+      result.refreshed
+        ? `ສະຫຼຸບເດືອນ ສ້າງໃໝ່ · ${((Date.now() - rollupStarted) / 1000).toFixed(1)}s`
+        : "ສະຫຼຸບເດືອນ ຍັງທັນສະໄໝ ບໍ່ຕ້ອງສ້າງໃໝ່",
+    );
+  }
 } catch (error) {
   failed = true;
   await client.query("ROLLBACK").catch(() => {});
