@@ -1201,6 +1201,11 @@ const dict: Record<string, Record<Locale, string>> = {
     th: "ภาคใต้ + สะหวันนะเขต",
     en: "South + Savannakhet",
   },
+  // ── ເວລາອັບເດດຂໍ້ມູນຂາຍ ──
+  "sync.last": { lo: "ອັບເດດ", th: "อัปเดต", en: "Updated" },
+  "sync.next": { lo: "ຮອບໜ້າ", th: "รอบหน้า", en: "Next" },
+  "sync.running": { lo: "ກຳລັງອັບເດດ…", th: "กำลังอัปเดต…", en: "Updating…" },
+
   // ── ຄາດການຍອດຂາຍ ──
   "salesForecast.title": { lo: "ຄາດການຍອດຂາຍ", th: "คาดการณ์ยอดขาย", en: "Sales forecast" },
   "salesForecast.sold": { lo: "ຂາຍແລ້ວ", th: "ขายแล้ว", en: "Sold" },

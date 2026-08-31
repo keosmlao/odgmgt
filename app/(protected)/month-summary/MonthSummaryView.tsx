@@ -12,6 +12,7 @@ import {
 import api from "@/service/api";
 import { downloadCsv } from "@/lib/csv";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 
 type Cell = {
   target: number;
@@ -398,6 +399,9 @@ export default function MonthSummaryView({ region = "all" }: { region?: Region }
                     <Clock3 size={10} /> {t("monthSummary.dataThrough")} {data.meta.data_through}
                   </span>
                 )}
+                {/* ເວລາອັບເດດ ແລະ ນັບຖອຍຫຼັງ — ໜ້ານີ້ອ່ານສຳເນົາຂອງ ERP, ຜູ້ອ່ານ
+                    ຄວນຮູ້ວ່າຕົວເລກນີ້ຈິງເມື່ອໃດ ແລະ ຈະຂະຫຍັບເມື່ອໃດ. */}
+                <SaleSyncBadge onUpdated={() => load(true)} />
               </>
             ) : (
               t("app.loading")

@@ -12,6 +12,7 @@ import {
 import api from "@/service/api";
 import { downloadCsv } from "@/lib/csv";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 
 type Cell = {
   target: number;
@@ -369,6 +370,8 @@ export default function WholesaleRegionView() {
                     <Clock3 size={10} /> {t("monthSummary.dataThrough")} {data.meta.data_through}
                   </span>
                 )}
+                {/* ເວລາອັບເດດ ແລະ ນັບຖອຍຫຼັງຮອບຕໍ່ໄປ. */}
+                <SaleSyncBadge onUpdated={() => load(true)} />
               </>
             ) : (
               t("app.loading")

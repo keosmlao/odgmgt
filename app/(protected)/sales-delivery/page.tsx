@@ -5,6 +5,7 @@ import { Loader2, RefreshCw, ChevronDown, ChevronRight, Download } from "lucide-
 import api from "@/service/api";
 import { downloadCsv } from "@/lib/csv";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 import { PROJECT_BU_CODE, PROJECT_BU_NAME, projectBuSplitApplies } from "@/lib/project-bu.mjs";
 
 /**
@@ -313,8 +314,10 @@ export default function SalesDeliveryCompare() {
           <div>
             <p className="eyebrow">Performance report</p>
             <h1 className="page-title">ສົມທຽບຍອດຂາຍ ແລະ ການຈັດສົ່ງ</h1>
-            <p className="page-sub">
+            <p className="page-sub flex flex-wrap items-center gap-1.5">
               {data?.meta ? `${data.meta.month_label} ${year} — ${data.meta.date_range}` : t("app.loading")}
+              {/* ເວລາອັບເດດ ແລະ ນັບຖອຍຫຼັງຮອບຕໍ່ໄປ. */}
+              <SaleSyncBadge onUpdated={load} />
             </p>
           </div>
           <div className="flex gap-2">

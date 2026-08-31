@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Clock3, Download, Loader2, RefreshCw } from 
 import api from "@/service/api";
 import { downloadCsv } from "@/lib/csv";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 
 /**
  * ຄາດການຍອດຂາຍ — the month read forward instead of backward.
@@ -280,6 +281,8 @@ export default function SalesForecastPage() {
                     <Clock3 size={10} /> {t("monthSummary.dataThrough")} {asLaoDate(meta.data_through)}
                   </span>
                 )}
+                {/* ເວລາອັບເດດ ແລະ ນັບຖອຍຫຼັງຮອບຕໍ່ໄປ. */}
+                <SaleSyncBadge onUpdated={() => load(true)} />
                 <span className="pill pill-muted">
                   {t("salesForecast.sellingDays")} {meta.selling_days.elapsed}/{meta.selling_days.total}
                   {meta.selling_days.remaining

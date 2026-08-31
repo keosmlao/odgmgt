@@ -26,6 +26,7 @@ import {
 import api from "@/service/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import SaleSyncBadge from "@/components/SaleSyncBadge";
 import { REGIONS, regionLabel } from "@/lib/sales-regions.mjs";
 import { isExecutive } from "@/lib/home-route";
 
@@ -517,7 +518,9 @@ export default function SalesOverview() {
                     {" "}
                     · <Clock3 size={10} className="inline" /> ຂໍ້ມູນ {data.meta.data_through}
                   </>
-                )}
+                )}{" "}
+                {/* ເວລາອັບເດດ ແລະ ນັບຖອຍຫຼັງຮອບຕໍ່ໄປ. */}
+                <SaleSyncBadge onUpdated={() => load(true)} />
               </p>
             </div>
           </div>
