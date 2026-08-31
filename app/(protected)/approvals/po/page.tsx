@@ -75,7 +75,16 @@ export default function ApprovePoPage() {
       ) : (
         <Card className="approval-card" title={t("approve.pending")} flush>
           {docs.length === 0 ? (
-            <Empty text={t("approve.empty")} />
+            /* ວ່າງເພາະ "ຂອງຂ້ອຍ" ກັ່ນອອກ ບໍ່ແມ່ນວ່າບໍ່ມີໃບລໍຖ້າ — ຜູ້ອະນຸມັດ
+               ສ່ວນຫຼາຍບໍ່ແມ່ນຄົນຂຽນໃບ ຈຶ່ງບອກທາງອອກໄວ້ໃຫ້ເລີຍ. */
+            <div className="py-2 text-center">
+              <Empty text={t("approve.empty")} />
+              {queue.scope === "mine" && (
+                <button type="button" className="btn mt-2" onClick={() => queue.setScope("all")}>
+                  {t("approve.seeAll")}
+                </button>
+              )}
+            </div>
           ) : (
             <Table
               minWidth={1020}

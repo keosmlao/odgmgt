@@ -1202,6 +1202,12 @@ const dict: Record<string, Record<Locale, string>> = {
     en: "South + Savannakhet",
   },
   // ── ເວລາອັບເດດຂໍ້ມູນຂາຍ ──
+  "approve.seeAll": {
+    lo: "ເບິ່ງທັງໝົດ (ບໍ່ສະເພາະຂອງຂ້ອຍ)",
+    th: "ดูทั้งหมด (ไม่เฉพาะของฉัน)",
+    en: "See all, not only mine",
+  },
+
   "sync.last": { lo: "ອັບເດດ", th: "อัปเดต", en: "Updated" },
   "sync.next": { lo: "ຮອບໜ້າ", th: "รอบหน้า", en: "Next" },
   "sync.running": { lo: "ກຳລັງອັບເດດ…", th: "กำลังอัปเดต…", en: "Updating…" },

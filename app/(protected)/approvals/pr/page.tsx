@@ -16,8 +16,8 @@ import { ApprovalHeader, RowActions, StatusPill, useApprovalQueue } from "@/comp
 import { useLanguage } from "@/context/LanguageContext";
 
 type Pr = {
-  id: number;
-  pr_no: string | null;
+  /** ເລກໃບຂໍຊື້ — ERP doc_no, which is what a verdict is keyed on. */
+  doc_no: string;
   doc_date: string | null;
   department_code: string | null;
   requester_code: string | null;
@@ -34,7 +34,7 @@ type Pr = {
 };
 
 type Line = {
-  pr_id: number;
+  doc_no: string;
   line_no: number | null;
   item_code: string | null;
   item_name: string | null;
@@ -47,7 +47,7 @@ type Line = {
 export default function ApprovePrPage() {
   const { t } = useLanguage();
   const queue = useApprovalQueue<{ docs: Pr[]; lines: Line[] }>("/approvals/pr");
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const docs = queue.data?.docs || [];
 
@@ -72,7 +72,16 @@ export default function ApprovePrPage() {
       ) : (
         <Card className="approval-card" title={t("approve.pending")} flush>
           {docs.length === 0 ? (
-            <Empty text={t("approve.empty")} />
+            /* ວ່າງເພາະ "ຂອງຂ້ອຍ" ກັ່ນອອກ ບໍ່ແມ່ນວ່າບໍ່ມີໃບລໍຖ້າ — ຜູ້ອະນຸມັດ
+               ສ່ວນຫຼາຍບໍ່ແມ່ນຄົນຂຽນໃບ ຈຶ່ງບອກທາງອອກໄວ້ໃຫ້ເລີຍ. */
+            <div className="py-2 text-center">
+              <Empty text={t("approve.empty")} />
+              {queue.scope === "mine" && (
+                <button type="button" className="btn mt-2" onClick={() => queue.setScope("all")}>
+                  {t("approve.seeAll")}
+                </button>
+              )}
+            </div>
           ) : (
             <Table
               minWidth={1020}
@@ -90,21 +99,21 @@ export default function ApprovePrPage() {
               ]}
             >
               {docs.map((doc) => {
-                const open = expanded === doc.id;
-                const lines = (queue.data?.lines || []).filter((line) => line.pr_id === doc.id);
+                const open = expanded === doc.doc_no;
+                const lines = (queue.data?.lines || []).filter((line) => line.doc_no === doc.doc_no);
                 return [
-                  <tr key={doc.id}>
+                  <tr key={doc.doc_no}>
                     <td>
                       <button
                         type="button"
-                        onClick={() => setExpanded(open ? null : doc.id)}
+                        onClick={() => setExpanded(open ? null : doc.doc_no)}
                         className="flex h-6 w-6 items-center justify-center rounded-[var(--r-xs)] text-[var(--muted)] hover:bg-[var(--surface-2)]"
                         aria-label={t("approve.details")}
                       >
                         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </button>
                     </td>
-                    <td className="num font-semibold">{doc.pr_no || doc.id}</td>
+                    <td className="num font-semibold">{doc.doc_no}</td>
                     <td>{fmtDate(doc.doc_date)}</td>
                     <td>{doc.department_code || "-"}</td>
                     <td>{doc.requester_name || doc.requester_code || "-"}</td>
@@ -118,13 +127,13 @@ export default function ApprovePrPage() {
                       <RowActions
                         status={doc.status}
                         busy={queue.busy}
-                        onApprove={() => queue.decide("approve", { key: doc.id })}
-                        onReject={() => queue.decide("reject", { key: doc.id })}
+                        onApprove={() => queue.decide("approve", { key: doc.doc_no })}
+                        onReject={() => queue.decide("reject", { key: doc.doc_no })}
                       />
                     </td>
                   </tr>,
                   open && (
-                    <tr key={`${doc.id}-detail`}>
+                    <tr key={`${doc.doc_no}-detail`}>
                       <td colSpan={10} className="bg-[var(--surface-2)]">
                         <div className="space-y-1.5 px-2 py-2 text-[11.5px]">
                           {doc.note && (
@@ -146,7 +155,7 @@ export default function ApprovePrPage() {
                             <p className="muted">{t("approve.empty")}</p>
                           ) : (
                             lines.map((line) => (
-                              <p key={`${line.pr_id}-${line.line_no}-${line.item_code}`}>
+                              <p key={`${line.doc_no}-${line.line_no}-${line.item_code}`}>
                                 <span className="num">{line.item_code}</span> {line.item_name} ·{" "}
                                 {t("approve.pr.qty")} <span className="num">{fmtNum(line.qty)}</span> {line.unit || ""} ·{" "}
                                 {t("approve.pr.price")} <span className="num">{fmtNum(line.est_price)}</span>

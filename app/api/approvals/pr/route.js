@@ -1,9 +1,26 @@
 import { NextResponse } from "next/server";
-import { rows, query } from "@/lib/db";
+import { rows, one, query } from "@/lib/db";
 import { auditLog, requestIp } from "@/lib/audit";
-import { mineWhere, readAction, readFilter, readReason, readScope, requireUser, textStatusWhere } from "@/lib/approvals";
+import { ensurePrApprovalTable } from "@/lib/migrations";
+import {
+  PR_BASE,
+  PR_LINES,
+  mineWhere,
+  readAction,
+  readFilter,
+  readReason,
+  readScope,
+  requireUser,
+  textStatusWhere,
+} from "@/lib/approvals";
 
-/** Purchase requisitions — odg_pm_pr with its lines in odg_pm_pr_line. */
+/**
+ * ໃບຂໍຊື້ — ERP requisitions (ic_trans, trans_flag 2) with this system's own
+ * approval trail on top, and the PM module's own requisitions alongside.
+ *
+ * The queue used to read odg_pm_pr alone, a table nothing writes to, so it was
+ * empty while the ERP held 35 requisitions waiting for someone. See PR_BASE.
+ */
 export async function GET(request) {
   const auth = requireUser(request);
   if (!auth.ok) {
@@ -11,46 +28,31 @@ export async function GET(request) {
   }
 
   try {
+    await ensurePrApprovalTable();
+
     const filter = readFilter(request);
     const scope = readScope(request);
     const params = [];
-    const mine = mineWhere(scope, ["p.requester_code", "p.created_by", "p.approved_by"], auth.code, params);
+    // Whoever raised it in the ERP, entered it, or has already ruled on it.
+    const mine = mineWhere(
+      scope,
+      ["pr.requester_code", "pr.erp_creator_code", "pr.created_by", "pr.approved_by"],
+      auth.code,
+      params,
+    );
 
     const docs = await rows(
       `
-      SELECT p.id, p.pr_no, p.doc_date, p.department_code, p.requester_code, p.need_date, p.note,
-             p.status, p.reject_reason, p.approved_by, p.approved_at, p.po_no, p.created_by, p.created_at,
-             coalesce(l.line_count, 0) AS line_count,
-             coalesce(l.est_total, 0) AS est_total,
-             re.fullname_lo AS requester_name,
-             ae.fullname_lo AS approver_name
-      FROM public.odg_pm_pr p
-      LEFT JOIN (
-        SELECT pr_id, count(*)::int AS line_count, sum(coalesce(qty, 0) * coalesce(est_price, 0)) AS est_total
-        FROM public.odg_pm_pr_line
-        GROUP BY pr_id
-      ) l ON l.pr_id = p.id
-      LEFT JOIN public.odg_employee re ON re.employee_code = p.requester_code
-      LEFT JOIN public.odg_employee ae ON ae.employee_code = p.approved_by
-      WHERE ${textStatusWhere(filter, "p.status")} AND ${mine}
-      ORDER BY p.id DESC
+      SELECT * FROM (${PR_BASE}) pr
+      WHERE ${textStatusWhere(filter, "pr.status")} AND ${mine}
+      ORDER BY pr.doc_date DESC NULLS LAST, pr.doc_no DESC
       LIMIT 200
       `,
       params,
     );
 
-    const ids = docs.map((doc) => doc.id).filter((id) => id != null);
-    const lines = ids.length
-      ? await rows(
-          `
-          SELECT pr_id, line_no, item_code, item_name, unit, qty, est_price, note
-          FROM public.odg_pm_pr_line
-          WHERE pr_id = ANY(%s::bigint[])
-          ORDER BY pr_id, line_no
-          `,
-          [ids],
-        )
-      : [];
+    const docNos = docs.map((doc) => doc.doc_no).filter(Boolean);
+    const lines = docNos.length ? await rows(PR_LINES, [docNos, docNos]) : [];
 
     return NextResponse.json({ success: true, data: { docs, lines } });
   } catch (error) {
@@ -58,7 +60,11 @@ export async function GET(request) {
   }
 }
 
-/** Approves or rejects one requisition. Already-settled rows are left alone. */
+/**
+ * Approves or rejects one requisition. The verdict goes to this system's trail
+ * — the ERP's own approve_status belongs to the ERP's approval screen and is
+ * not written from here, exactly as the PO queue leaves it alone.
+ */
 export async function POST(request) {
   const auth = requireUser(request);
   if (!auth.ok) {
@@ -66,37 +72,67 @@ export async function POST(request) {
   }
 
   try {
+    await ensurePrApprovalTable();
+
     const body = await request.json();
     const action = readAction(body);
-    const id = Number(body?.key);
-    if (!action || !Number.isFinite(id)) {
+    const docNo = String(body?.key || "").trim();
+    if (!action || !docNo) {
       return NextResponse.json({ success: false, message: "invalid request" }, { status: 400 });
     }
 
+    const known = await one(
+      `
+      SELECT 1 AS ok
+      FROM public.ic_trans t
+      WHERE t.doc_no = %s AND t.trans_flag = 2
+      UNION ALL
+      SELECT 1 FROM public.odg_pm_pr p WHERE p.pr_no = %s
+      LIMIT 1
+      `,
+      [docNo, docNo],
+    );
+    if (!known) {
+      return NextResponse.json({ success: false, message: "pr not found" }, { status: 404 });
+    }
+
+    const status = action === "approve" ? "approved" : "rejected";
+    const reason = action === "approve" ? null : readReason(body);
+
     const result = await query(
       `
-      UPDATE public.odg_pm_pr
-         SET status = %s,
-             reject_reason = %s,
-             approved_by = %s,
-             approved_at = now(),
-             updated_at = now()
-       WHERE id = %s
-         AND lower(coalesce(status, '')) NOT IN ('approved','rejected','cancelled','canceled','closed')
+      INSERT INTO public.odg_pm_pr_approval
+        (doc_no, status, approved_by, approved_at, reject_reason, created_by, created_at, updated_at)
+      VALUES (%s, %s, %s, now(), %s, %s, now(), now())
+      ON CONFLICT (doc_no) DO UPDATE
+        SET status = EXCLUDED.status,
+            approved_by = EXCLUDED.approved_by,
+            approved_at = now(),
+            reject_reason = EXCLUDED.reject_reason,
+            updated_at = now()
+        WHERE lower(coalesce(public.odg_pm_pr_approval.status, '')) NOT IN ('approved','rejected','cancelled','canceled','closed')
       `,
-      [
-        action === "approve" ? "approved" : "rejected",
-        action === "approve" ? null : readReason(body),
-        auth.code,
-        id,
-      ],
+      [docNo, status, auth.code, reason, auth.code],
     );
 
     if (!result.rowCount) {
       return NextResponse.json({ success: false, message: "already handled" }, { status: 409 });
     }
-    const reason = action === "approve" ? null : readReason(body);
-    auditLog(auth.code, action === "approve" ? "pr_approved" : "pr_rejected", `PR #${id}${reason ? ` · ${reason}` : ""}`, requestIp(request));
+
+    // Keep the module's own row in step when the requisition also lives there.
+    await query(
+      `UPDATE public.odg_pm_pr
+          SET status = %s, reject_reason = %s, approved_by = %s, approved_at = now(), updated_at = now()
+        WHERE pr_no = %s`,
+      [status, reason, auth.code, docNo],
+    );
+
+    auditLog(
+      auth.code,
+      action === "approve" ? "pr_approved" : "pr_rejected",
+      `${docNo}${reason ? ` · ${reason}` : ""}`,
+      requestIp(request),
+    );
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
