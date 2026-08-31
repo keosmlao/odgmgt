@@ -40,6 +40,8 @@ type Payload = {
     month: number;
     last_year: number;
     data_through?: string | null;
+    /** Day both years are cut at while the month is still running. */
+    cut_day?: number | null;
   };
   blocks: Block[];
   products: { key: string; label: string }[];
@@ -183,8 +185,9 @@ export default function WholesaleRegionView() {
   /** Short titles for the screen; the API keeps the spreadsheet's own wording. */
   const shortLabel = (section: Section) => {
     if (!data) return section.label;
-    const { month: m, year: y } = data.meta;
-    return section.key === "month" ? `${MONTHS[m - 1]} ${y}` : `YTD 1–${m}`;
+    const { month: m, year: y, cut_day: cut } = data.meta;
+    if (section.key === "month") return cut ? `${MONTHS[m - 1]} 1–${cut}` : `${MONTHS[m - 1]} ${y}`;
+    return cut ? `YTD 1–${cut}/${m}` : `YTD 1–${m}`;
   };
 
   /** The sheet as it stands: one row per section × metric, columns spread wide. */
@@ -357,7 +360,9 @@ export default function WholesaleRegionView() {
             {data ? (
               <>
                 <span>
-                  {MONTHS[data.meta.month - 1]} {data.meta.year} · vs {data.meta.last_year}
+                  {MONTHS[data.meta.month - 1]} {data.meta.year}
+                  {data.meta.cut_day ? ` (1–${data.meta.cut_day})` : ""} · vs {data.meta.last_year}
+                  {data.meta.cut_day ? ` (1–${data.meta.cut_day})` : ""}
                 </span>
                 {data.meta.data_through && (
                   <span className="pill pill-muted">
@@ -535,6 +540,9 @@ export default function WholesaleRegionView() {
             </div>
 
             <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">
+              {data.meta.cut_day
+                ? `${t("wholesaleRegion.cut")} 1–${data.meta.cut_day}/${data.meta.month} · `
+                : ""}
               {t("wholesaleRegion.note")}
             </p>
           </div>

@@ -185,6 +185,22 @@ export async function GET(request) {
     const force = /^(1|true|force)$/i.test(String(sp.get("refresh") || ""));
     const source = await readSourceStamp([year, lastYear]);
 
+    /**
+     * ທຽບຮອດວັນທີປະຈຸບັນ — a month still being sold cannot be read against a
+     * whole month of last year: on the 30th, ACT holds 30 days and ປີກ່ອນ holds
+     * 31, and the year-on-year line reports a fall that is only the calendar.
+     *
+     * When the month asked for is the one the data stops in, BOTH years are cut
+     * at that day of the month — this year's figure ends there anyway, so the
+     * cut only ever moves last year's. A completed month cuts nothing.
+     */
+    const through = source.data_through ? source.data_through.split("-").map(Number) : null;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const cutDay =
+      through && through[0] === year && through[1] === month && through[2] < daysInMonth
+        ? through[2]
+        : null;
+
     const cacheKey = `${year}|${month}|${source.stamp}`;
     const cached = cache.get(cacheKey);
     if (!force && cached) return NextResponse.json(cached);
@@ -192,6 +208,12 @@ export async function GET(request) {
     // Both years off one scan of odg_sale_detail: splitting them into a query
     // each reads the same 2.7 GB twice for the same answer. The month a sale
     // counts in is REPORT_DATE, not the ERP's monthdoc.
+    // Days after the cut, in the cut month, in either year. Written as NOT(…)
+    // so every other month passes through untouched.
+    const cutSql = cutDay
+      ? ` AND NOT (EXTRACT(MONTH FROM ${REPORT_DATE})::int = ${month}
+                   AND EXTRACT(DAY FROM ${REPORT_DATE})::int > ${cutDay})`
+      : "";
     const actualSql = `
       SELECT EXTRACT(YEAR FROM ${REPORT_DATE})::int AS year,
              EXTRACT(MONTH FROM ${REPORT_DATE})::int AS month,
@@ -201,7 +223,7 @@ export async function GET(request) {
              COALESCE(SUM(d.sum_amount), 0)::float AS amount
       FROM public.odg_sale_detail d
       ${OVERRIDE_JOIN}
-      WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])
+      WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])${cutSql}
       GROUP BY 1, 2, 3, 4, 5`;
     const targetSql = `
       SELECT bu_code, target_month AS month, sale_channel, province_code,
@@ -211,7 +233,8 @@ export async function GET(request) {
       GROUP BY bu_code, target_month, sale_channel, province_code`;
 
     const [actualRows, targetNow] = await Promise.all([
-      once(`${year}|${lastYear}|${source.stamp}`, () => rows(actualSql, [[year, lastYear]])),
+      once(`${year}|${lastYear}|${source.stamp}|${cutDay ? `${month}-${cutDay}` : "-"}`,
+           () => rows(actualSql, [[year, lastYear]])),
       rows(targetSql, [year]),
     ]);
 
@@ -296,13 +319,23 @@ export async function GET(request) {
           generated_at: new Date().toISOString(),
           /** Latest sale date behind these numbers. */
           data_through: source.data_through,
+          /** Day both years are cut at, null when the month is complete. */
+          cut_day: cutDay,
         },
         blocks: BLOCKS.map(({ key, label }) => ({ key, label })),
         products: PRODUCTS.map(({ key, label }) => ({ key, label })),
         columns,
         sections: [
-          buildSection("month", `PreviousMonth_${month}/${year}`, [month]),
-          buildSection("ytd", `YTD 1-${month}/${year}`, range(1, month)),
+          buildSection(
+            "month",
+            cutDay ? `1-${cutDay}/${month}/${year}` : `PreviousMonth_${month}/${year}`,
+            [month],
+          ),
+          buildSection(
+            "ytd",
+            cutDay ? `YTD 1-${cutDay}/${month}/${year}` : `YTD 1-${month}/${year}`,
+            range(1, month),
+          ),
         ],
       },
     };
