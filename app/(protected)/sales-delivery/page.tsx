@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, RefreshCw, ChevronDown, ChevronRight, Download } from "lucide-react";
 import api from "@/service/api";
 import { downloadCsv } from "@/lib/csv";
@@ -41,15 +41,24 @@ const deliveryTone = (share: number) => {
  * geometry, which is what lets a row of them be compared at a glance.
  */
 function Gauge({
-  share, caption, detail, size = "lg",
+  share, caption, detail, size = "lg", empty = false,
 }: {
   share: number;
   caption: string;
   detail?: string;
   size?: "lg" | "sm";
+  /** Nothing was sold, so there is no share to draw — 0/0 is not 100%. */
+  empty?: boolean;
 }) {
-  const clamped = Math.min(100, Math.max(0, share));
-  const { fill, track, label } = deliveryTone(share);
+  const clamped = empty ? 0 : Math.min(100, Math.max(0, share));
+  const { fill, track, label } = empty
+    ? {
+        fill: "transparent",
+        track: "color-mix(in srgb, var(--muted) 22%, var(--surface))",
+        label: "ບໍ່ມີຍອດຂາຍ",
+      }
+    : deliveryTone(share);
+  const reading = empty ? "–" : `${clamped.toFixed(1)}%`;
   // Semicircle of radius 80 — its length is what the dash array is cut from.
   const arc = Math.PI * 80;
   const path = "M 20 100 A 80 80 0 0 1 180 100";
@@ -60,9 +69,9 @@ function Gauge({
         viewBox="0 0 200 112"
         className={small ? "h-[70px] w-[125px]" : "h-[98px] w-[176px]"}
         role="img"
-        aria-label={`${caption} ${clamped.toFixed(1)}% — ${label}`}
+        aria-label={`${caption} ${reading} — ${label}`}
       >
-        <title>{`${caption} ${clamped.toFixed(1)}% (${label})${detail ? ` · ${detail}` : ""}`}</title>
+        <title>{`${caption} ${reading} (${label})${detail ? ` · ${detail}` : ""}`}</title>
         <path d={path} fill="none" stroke={track} strokeWidth={16} strokeLinecap="round" />
         <path
           d={path} fill="none" stroke={fill} strokeWidth={16} strokeLinecap="round"
@@ -73,8 +82,10 @@ function Gauge({
             with the rounded caps at the extremes, and 0-100 is the only range
             a half-circle meter ever has. */}
         <text x="100" y="94" textAnchor="middle"
-              className={`fill-[var(--ink)] font-bold ${small ? "text-[27px]" : "text-[31px]"}`}>
-          {clamped.toFixed(1)}%
+              className={`${empty ? "fill-[var(--muted)]" : "fill-[var(--ink)]"} font-bold ${
+                small ? "text-[27px]" : "text-[31px]"
+              }`}>
+          {reading}
         </text>
       </svg>
       <figcaption className="mt-1.5 text-center text-[11px] font-semibold leading-tight text-[var(--ink-soft)]">
@@ -114,7 +125,11 @@ type Row = {
 type Section = { rows: Row[]; total: Row };
 
 type ReportMeta = {
+  year: number;
+  month: number;
   month_label: string;
+  /** Latest bill date in the sale table, YYYY-MM-DD — null when there is none. */
+  data_through: string | null;
   date_range: string;
   self_pickup_transport: string[];
   project_bu_split: boolean;
@@ -198,6 +213,34 @@ export default function SalesDeliveryCompare() {
 
   /** Headline figures come from the channel split, which covers the company. */
   const head = (data?.by_channel as Section | undefined) ?? null;
+
+  /** No bill in the month at all — every ratio below is 0/0, not an achievement. */
+  const noSales = !!data && !num(head?.total?.actual);
+
+  /** dd-mm-yyyy, the way the header writes the month's own range. */
+  const asLaoDate = (iso: string) => iso.split("-").reverse().join("-");
+
+  /**
+   * The month picker starts from the browser's clock, which on the 1st — or on
+   * a machine whose date runs a day fast — asks for a month the ERP has no bill
+   * in yet, and the page reads as if sales had stopped. Fall back once to the
+   * month the data actually reaches, and say so; a month picked by hand after
+   * that is left alone, empty or not.
+   */
+  const settled = useRef(false);
+  const [fellBackFrom, setFellBackFrom] = useState("");
+  useEffect(() => {
+    if (settled.current || !data?.meta) return;
+    const through = data.meta.data_through;
+    if (!noSales || !through) { settled.current = true; return; }
+    const [dataYear, dataMonth] = through.split("-").map(Number);
+    settled.current = true;
+    if (Number(year) * 12 + Number(month) > dataYear * 12 + dataMonth) {
+      setFellBackFrom(`${months[Number(month) - 1]} ${year}`);
+      setYear(String(dataYear));
+      setMonth(String(dataMonth));
+    }
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * One card per BU. A BU with no plan and no sales this month is dropped —
@@ -336,6 +379,25 @@ export default function SalesDeliveryCompare() {
           </div>
         )}
 
+        {/* Why the page is empty, in the page rather than in the reader's head:
+            a month with no bill in it is either one that has not started or a
+            sync that has stopped, and the last bill date tells them apart. */}
+        {!loading && noSales && (
+          <div className="rounded-[var(--r-md)] border border-[var(--warn)]/40 bg-[var(--warn-bg)] px-4 py-3 text-[12px] leading-relaxed text-[var(--warn)]">
+            <span className="font-semibold">
+              ຍັງບໍ່ມີບິນຂາຍໃນ {data?.meta.month_label} {data?.meta.year}
+            </span>
+            {data?.meta.data_through && ` · ຂໍ້ມູນການຂາຍມີຮອດ ${asLaoDate(data.meta.data_through)}`}
+            {" · ເປົ້າໝາຍລຸ່ມນີ້ແມ່ນແຜນຂອງເດືອນ, ຍັງບໍ່ມີຍອດມາທຽບ"}
+          </div>
+        )}
+
+        {!loading && !!fellBackFrom && (
+          <div className="rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[12px] text-[var(--muted)]">
+            {fellBackFrom} ຍັງບໍ່ມີບິນຂາຍ — ສະແດງ {data?.meta.month_label} {data?.meta.year} ແທນ
+          </div>
+        )}
+
         {/* ══ Headline ══ */}
         {!loading && head?.total && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -374,6 +436,7 @@ export default function SalesDeliveryCompare() {
             <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
               <Gauge
                 share={100 - num(head.total.pending_share_pct)}
+                empty={noSales}
                 caption="ລວມທັງບໍລິສັດ"
               />
               <div className="min-w-[200px]">
@@ -390,7 +453,7 @@ export default function SalesDeliveryCompare() {
                 </p>
                 <p className="mt-0.5 text-[11px] text-[var(--muted)]">
                   ສະຖານະ: <span className="font-semibold text-[var(--ink-soft)]">
-                    {deliveryTone(100 - num(head.total.pending_share_pct)).label}
+                    {noSales ? "ບໍ່ມີຍອດຂາຍ" : deliveryTone(100 - num(head.total.pending_share_pct)).label}
                   </span>
                 </p>
               </div>
@@ -423,7 +486,7 @@ export default function SalesDeliveryCompare() {
                     </div>
 
                     <div className="mt-1 flex items-center gap-4">
-                      <Gauge size="sm" share={share} caption="ອັດຕາການຈັດສົ່ງ" />
+                      <Gauge size="sm" share={share} empty={!num(r.actual)} caption="ອັດຕາການຈັດສົ່ງ" />
                       <dl className="min-w-0 flex-1 space-y-1 text-[11px]">
                         <div className="flex items-baseline justify-between gap-2">
                           <dt className="text-[var(--muted)]">ເປົ້າໝາຍ</dt>

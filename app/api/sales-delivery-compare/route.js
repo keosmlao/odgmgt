@@ -293,7 +293,7 @@ export async function GET(request) {
       , // ensureFreshRollup — the seller plan split reads the seller rollup
       soldGrain, deliveredGrain,
       channelTarget, buTarget, areaTarget, sellerTarget,
-      assignments, buLookup,
+      assignments, buLookup, dataThrough,
     ] = await Promise.all([
       ensureSalesAssignmentTable(),
       ensureFreshRollup([yearVal, yearVal - 1]),
@@ -315,6 +315,13 @@ export async function GET(request) {
             FROM public.odg_sales_assignment a ${assignWhere}`, assignParams),
 
       rows(`SELECT code, name_1 FROM public.odg_bu ORDER BY code`),
+
+      // How far the sale data itself reaches. A month with no bills in it is
+      // either a month that has not happened yet or a sync that has stopped,
+      // and a page showing nothing should be able to say which.
+      rows(`SELECT to_char(MAX(doc_date), 'YYYY-MM-DD') AS data_through
+            FROM public.odg_sale_detail WHERE yeardoc = ANY(%s::int[])`,
+           [[yearVal, yearVal - 1]]),
     ]);
 
     const buName = {};
@@ -548,6 +555,8 @@ export async function GET(request) {
           month: monthVal,
           month_label: monthName(monthVal),
           date_range: `${formatDate(startDate)} - ${formatDate(endDate)}`,
+          /** Latest bill date in the sale table, YYYY-MM-DD. */
+          data_through: dataThrough?.[0]?.data_through ?? null,
           self_pickup_transport: SELF_PICKUP_TRANSPORT,
           project_bu_split: projectSplit,
           project_bu_name: PROJECT_BU_NAME,
