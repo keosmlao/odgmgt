@@ -106,7 +106,7 @@ export async function POST(request) {
     const verdict = await recordVerdict({
       trailTable: "public.odg_pm_pr_approval",
       docNo,
-      transFlag: 2,
+      kind: "pr",
       action,
       reason,
       code: auth.code,

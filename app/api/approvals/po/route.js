@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { rows, one, query } from "@/lib/db";
 import { auditLog, requestIp } from "@/lib/audit";
+import { ensurePrApprovalTable } from "@/lib/migrations";
 import {
   PO_BASE,
   PO_ITEMS,
@@ -58,6 +59,9 @@ export async function POST(request) {
   }
 
   try {
+    // Same call for both queues: it is what adds approval_no to this trail too.
+    await ensurePrApprovalTable();
+
     const body = await request.json();
     const action = readAction(body);
     const docNo = String(body?.key || "").trim();
@@ -87,7 +91,7 @@ export async function POST(request) {
     const verdict = await recordVerdict({
       trailTable: "public.odg_pm_po_approval",
       docNo,
-      transFlag: 6,
+      kind: "po",
       action,
       reason,
       code: auth.code,
