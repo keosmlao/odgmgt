@@ -740,6 +740,17 @@ body {
   .approval-card .card-hd { min-height: 3rem; padding: 0.7rem 0.85rem; }
   .approval-card .card-title { font-size: 12px; }
   .approval-card-hint { max-width: 34rem; color: var(--muted); font-size: 10.5px; text-align: right; }
+  /* ຫົວກຸ່ມພະແນກ ໃນຄິວອະນຸມັດ — a band the eye can stop at, not another row:
+     shorter than a document row and tinted, so the list reads as departments
+     with documents under them rather than as one long ledger. */
+  .approval-card .tbl tr.approval-group td {
+    height: 2.2rem;
+    background: color-mix(in srgb, var(--brand) 7%, var(--surface));
+    border-top: 1px solid var(--line);
+    font-size: 11.5px;
+    color: var(--ink);
+  }
+
   .approval-card .tbl thead th { height: 2.6rem; padding-inline: 0.75rem; background: var(--surface-2); }
   .approval-card .tbl td { height: 3.15rem; padding-inline: 0.75rem; }
   .approval-card .tbl tbody tr { transition: background 150ms ease; }

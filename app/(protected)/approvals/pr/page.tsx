@@ -20,6 +20,7 @@ type Pr = {
   doc_no: string;
   doc_date: string | null;
   department_code: string | null;
+  department_name: string | null;
   requester_code: string | null;
   requester_name: string | null;
   need_date: string | null;
@@ -50,6 +51,25 @@ export default function ApprovePrPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const docs = queue.data?.docs || [];
+
+  /**
+   * ຈັດກຸ່ມຕາມພະແນກ — a requisition is approved on behalf of a department, and
+   * a flat list of PR numbers makes the reader sort them in their head. Order
+   * of first appearance keeps the newest department at the top, the way the
+   * rows are already sorted; documents with no department land last, together.
+   */
+  const groups = (() => {
+    const byDepartment = new Map<string, { label: string; rows: Pr[] }>();
+    for (const doc of docs) {
+      const key = doc.department_name || doc.department_code || "";
+      const label = doc.department_name || doc.department_code || t("approve.pr.noDepartment");
+      if (!byDepartment.has(key)) byDepartment.set(key, { label, rows: [] });
+      byDepartment.get(key)!.rows.push(doc);
+    }
+    const list = [...byDepartment.entries()];
+    list.sort((a, b) => (a[0] === "" ? 1 : b[0] === "" ? -1 : 0));
+    return list.map(([, group]) => group);
+  })();
 
   return (
     <Page>
@@ -98,7 +118,15 @@ export default function ApprovePrPage() {
                 <span key="a" className="block text-right">{t("approve.actions")}</span>,
               ]}
             >
-              {docs.map((doc) => {
+              {groups.flatMap((group) => [
+                /* ຫົວກຸ່ມພະແນກ — one band per department, with how many sit under it. */
+                <tr key={`group-${group.label}`} className="approval-group">
+                  <td colSpan={10}>
+                    <span className="font-semibold">{group.label}</span>{" "}
+                    <span className="muted">· {fmtNum(group.rows.length)}</span>
+                  </td>
+                </tr>,
+                ...group.rows.map((doc) => {
                 const open = expanded === doc.doc_no;
                 const lines = (queue.data?.lines || []).filter((line) => line.doc_no === doc.doc_no);
                 return [
@@ -115,7 +143,7 @@ export default function ApprovePrPage() {
                     </td>
                     <td className="num font-semibold">{doc.doc_no}</td>
                     <td>{fmtDate(doc.doc_date)}</td>
-                    <td>{doc.department_code || "-"}</td>
+                    <td>{doc.department_name || doc.department_code || "-"}</td>
                     <td>{doc.requester_name || doc.requester_code || "-"}</td>
                     <td>{fmtDate(doc.need_date)}</td>
                     <td className="num text-right">{fmtNum(doc.line_count)}</td>
@@ -167,7 +195,8 @@ export default function ApprovePrPage() {
                     </tr>
                   ),
                 ];
-              })}
+                }).flat(),
+              ])}
             </Table>
           )}
         </Card>

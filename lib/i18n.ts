@@ -1202,6 +1202,7 @@ const dict: Record<string, Record<Locale, string>> = {
     en: "South + Savannakhet",
   },
   // ── ເວລາອັບເດດຂໍ້ມູນຂາຍ ──
+  "approve.pr.noDepartment": { lo: "ບໍ່ລະບຸພະແນກ", th: "ไม่ระบุแผนก", en: "No department" },
   "approve.seeAll": {
     lo: "ເບິ່ງທັງໝົດ (ບໍ່ສະເພາະຂອງຂ້ອຍ)",
     th: "ดูทั้งหมด (ไม่เฉพาะของฉัน)",
