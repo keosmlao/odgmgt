@@ -12,9 +12,6 @@ import {
   REGIONS,
   regionOf,
 } from "@/lib/sales-regions.mjs";
-import {
-  LIVE_BILL_STAMP_SQL, LIVE_MAX_DOC_DATE_SQL, SALE_DETAIL_LIVE, ensureLiveView,
-} from "@/lib/sale-detail-view";
 
 /** ທຸກລະຫັດແຂວງທີ່ຮູ້ຈັກ — ໃຊ້ພິສູດ "ບໍ່ລະບຸພື້ນທີ່" ດ້ວຍການປະຕິເສດ. */
 const KNOWN_PROVINCES = REGIONS.flatMap((region) => region.provinces);
@@ -118,18 +115,17 @@ function monthsBack(year, month, count) {
  */
 async function readSourceStamp(years) {
   const row = await one(
-    `SELECT to_char(GREATEST(MAX(d.doc_date), ${LIVE_MAX_DOC_DATE_SQL}), 'YYYY-MM-DD') AS data_through,
+    `SELECT to_char(MAX(d.doc_date), 'YYYY-MM-DD') AS data_through,
             COUNT(*)::text AS source_rows,
-            ${LIVE_BILL_STAMP_SQL} AS live_stamp,
             (SELECT COUNT(*)::text || '@' || COALESCE(MAX(created_at)::text, '-')
                FROM public.app_sale_month_override) AS override_stamp
-     FROM ${SALE_DETAIL_LIVE} d
+     FROM public.odg_sale_detail d
      WHERE d.yeardoc = ANY(%s::int[])`,
     [years],
   );
   return {
     data_through: row?.data_through ?? null,
-    stamp: `${row?.source_rows ?? "0"}|${row?.data_through ?? "-"}|${row?.live_stamp ?? "-"}|${row?.override_stamp ?? "-"}`,
+    stamp: `${row?.source_rows ?? "0"}|${row?.data_through ?? "-"}|${row?.override_stamp ?? "-"}`,
   };
 }
 
@@ -164,7 +160,7 @@ function loadBuckets(years, cutDay, stamp) {
            COALESCE(NULLIF(d.province, ''), '-') AS province,
            (EXTRACT(DAY FROM ${REPORT_DATE})::int <= %s) AS before_cut,
            COALESCE(SUM(d.sum_amount), 0)::float AS amount
-    FROM ${SALE_DETAIL_LIVE} d
+    FROM public.odg_sale_detail d
     ${OVERRIDE_JOIN}
     WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])
     GROUP BY 1, 2, 3, 4, 5, 6`;
@@ -203,7 +199,7 @@ function scopeDetailSql(whereExtra) {
              -- ແມ່ນຫົວໜ່ວຍດຽວກັບ sum_amount.
              COALESCE(d.discount_amount_2, 0)::float AS discount,
              COALESCE(d.profit, 0)::float AS profit
-      FROM ${SALE_DETAIL_LIVE} d
+      FROM public.odg_sale_detail d
       ${OVERRIDE_JOIN}
       WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = %s
         AND EXTRACT(MONTH FROM ${REPORT_DATE})::int BETWEEN %s AND %s
@@ -453,7 +449,7 @@ const SELLER_VISIT_SQL = `
     SELECT o.sale_id,
            COALESCE(SUM(d.sum_amount), 0)::float AS amount,
            COUNT(DISTINCT d.doc_no)::int AS bills
-    FROM ${SALE_DETAIL_LIVE} d
+    FROM public.odg_sale_detail d
     JOIN public.odg_sale_owner o ON o.doc_no = d.doc_no
     WHERE d.yeardoc = %s AND d.monthdoc BETWEEN %s AND %s
     GROUP BY 1
@@ -589,8 +585,6 @@ function ranked(map, names) {
 }
 
 export async function GET(request) {
-  // The live view has to exist before anything selects from it.
-  await ensureLiveView();
   const user = getCurrentUser(request);
   if (!user) {
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
@@ -672,7 +666,7 @@ export async function GET(request) {
                COALESCE(NULLIF(d.bu_code, ''), '-') AS bu_code,
                ${channelCodeSql("d.doc_no")} AS channel_code,
                COALESCE(NULLIF(d.province, ''), '-') AS province
-        FROM ${SALE_DETAIL_LIVE} d
+        FROM public.odg_sale_detail d
         ${OVERRIDE_JOIN}
         WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = %s
           AND EXTRACT(MONTH FROM ${REPORT_DATE})::int = %s

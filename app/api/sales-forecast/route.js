@@ -3,9 +3,6 @@ import { one, rows } from "@/lib/db";
 import { parseIntSafe, safeDiv } from "@/lib/helpers";
 import { OVERRIDE_JOIN, REPORT_DATE } from "@/lib/sale-month-override";
 import { channelCodeSql } from "@/lib/sale-monthly-sql.mjs";
-import {
-  LIVE_BILL_STAMP_SQL, LIVE_MAX_DOC_DATE_SQL, SALE_DETAIL_LIVE, ensureLiveView,
-} from "@/lib/sale-detail-view";
 
 /**
  * ຄາດການຍອດຂາຍ — where the month lands if it keeps selling the way it has.
@@ -77,18 +74,17 @@ const ALL_CHANNEL_LABEL = "ລວມທຸກຊ່ອງທາງ";
 
 async function readSourceStamp(years) {
   const row = await one(
-    `SELECT to_char(GREATEST(MAX(d.doc_date), ${LIVE_MAX_DOC_DATE_SQL}), 'YYYY-MM-DD') AS data_through,
+    `SELECT to_char(MAX(d.doc_date), 'YYYY-MM-DD') AS data_through,
             COUNT(*)::text AS source_rows,
-            ${LIVE_BILL_STAMP_SQL} AS live_stamp,
             (SELECT COUNT(*)::text || '@' || COALESCE(MAX(created_at)::text, '-')
                FROM public.app_sale_month_override) AS override_stamp
-     FROM ${SALE_DETAIL_LIVE} d
+     FROM public.odg_sale_detail d
      WHERE d.yeardoc = ANY(%s::int[])`,
     [years],
   );
   return {
     data_through: row?.data_through ?? null,
-    stamp: `${row?.source_rows ?? "0"}|${row?.data_through ?? "-"}|${row?.live_stamp ?? "-"}|${row?.override_stamp ?? "-"}`,
+    stamp: `${row?.source_rows ?? "0"}|${row?.data_through ?? "-"}|${row?.override_stamp ?? "-"}`,
   };
 }
 
@@ -96,8 +92,6 @@ const cache = new Map();
 const CACHE_MAX = 24;
 
 export async function GET(request) {
-  // The live view has to exist before anything selects from it.
-  await ensureLiveView();
   try {
     const sp = request.nextUrl.searchParams;
     const now = new Date();
@@ -134,7 +128,7 @@ export async function GET(request) {
              COALESCE(NULLIF(d.bu_code, ''), '-') AS bu_code,
              ${channelCodeSql("d.doc_no")} AS channel_code,
              COALESCE(SUM(d.sum_amount), 0)::float AS amount
-      FROM ${SALE_DETAIL_LIVE} d
+      FROM public.odg_sale_detail d
       ${OVERRIDE_JOIN}
       WHERE EXTRACT(YEAR FROM ${REPORT_DATE})::int = ANY(%s::int[])
       GROUP BY 1, 2, 3, 4, 5`;
